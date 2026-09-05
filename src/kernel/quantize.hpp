@@ -21,6 +21,16 @@ struct IVec3 {
 	bool operator!=(const IVec3 &p_o) const {
 		return !(*this == p_o);
 	}
+
+	bool operator<(const IVec3 &p_o) const {
+		if (x != p_o.x) {
+			return x < p_o.x;
+		}
+		if (y != p_o.y) {
+			return y < p_o.y;
+		}
+		return z < p_o.z;
+	}
 };
 
 bool quantize(const godot::Vector3 &p_p, IVec3 &r_out);

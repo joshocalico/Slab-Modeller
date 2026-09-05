@@ -48,8 +48,8 @@ export default function Home() {
         <div>
           <h2 className="text-lg font-semibold">Stay watertight</h2>
           <p className="mt-2 text-slab-muted">
-            A wall is a thin closed box. Subtract punches a cavity only when the
-            cutter sits wholly inside.
+            A wall is a thin closed box. Subtract punches a cavity when the
+            cutter sits inside, or a doorway when it crosses a wall.
           </p>
         </div>
       </section>

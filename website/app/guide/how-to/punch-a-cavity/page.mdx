@@ -28,8 +28,8 @@ The shot shows the two volumes side by side so you can tell them apart. For a ca
 
 The cutter is removed from the host. The result should still be watertight. You can hide or delete the cutter node afterward.
 
-If Slab refuses the op, the cutter overlaps the host surface. Move it fully inside and try again. Overlapping clip is not supported yet.
+If Slab refuses the op, the cutter may be disjoint from the host. Move it so the volumes overlap and try again.
 
 ## Doors
 
-Do not subtract a hole through a wall to make a door. Place a `SlabSocket` for an opening. See [Closed solids](/guide/explanation/closed-solids).
+To open a doorway, push the cutter through the wall so it sticks out on both sides, then subtract. See [Block out a room](/guide/tutorials/block-out-a-room). A `SlabSocket` is still the opening on a `SlabModule`. See [Closed solids](/guide/explanation/closed-solids).

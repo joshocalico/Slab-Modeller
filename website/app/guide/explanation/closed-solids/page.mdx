@@ -8,7 +8,7 @@ That choice keeps later ops legal. Extrude, inset, boolean, and bake all assume 
 
 ## Openings
 
-A door is a `SlabSocket` on a `SlabModule`, not a boolean cut through a wall. Subtract is for a cavity that stays enclosed, such as a room inside a block. If the cutter crosses the host surface, the kernel refuses the edit rather than emit a hole it cannot close.
+A door can be a Subtract through a wall. Push a second solid through the wall so it sticks out on both sides, then subtract. The kernel knifes both faces and joins the opening. A `SlabSocket` on a `SlabModule` is still the named opening between modules.
 
 ## Why the view grab stays on one solid
 

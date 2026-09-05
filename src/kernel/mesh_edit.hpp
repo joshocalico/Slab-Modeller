@@ -24,6 +24,7 @@ public:
 	MeshFault collapse_edge(EdgeId p_edge);
 	MeshFault append(const Mesh &p_other, bool p_flip);
 	MeshFault replace_with(const Mesh &p_mesh);
+	MeshFault assemble(const std::vector<std::vector<IVec3>> &p_loops);
 	MeshFault flip_face(FaceId p_face);
 	MeshFault flip_all();
 

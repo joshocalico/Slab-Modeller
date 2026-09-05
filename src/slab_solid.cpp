@@ -676,8 +676,27 @@ int SlabSolid::boolean_with(SlabSolid *p_other, int p_mode) {
 	if (p_other == nullptr) {
 		return int(slab::MeshError::STALE_HANDLE);
 	}
+	slab::Mesh cutter = p_other->live_mesh;
+	const Transform3D to_host = get_global_transform().affine_inverse() * p_other->get_global_transform();
+	const bool moved = to_host.origin != Vector3() || to_host.basis != Basis();
+	if (moved) {
+		slab::MeshEdit xf(cutter);
+		std::vector<slab::VertexId> verts;
+		cutter.all_vertices(verts);
+		for (const slab::VertexId id : verts) {
+			slab::IVec3 q;
+			if (!slab::quantize(to_host.xform(cutter.position(id)), q)) {
+				return int(slab::MeshError::COORD_OUT_OF_RANGE);
+			}
+			xf.move_vertex(id, q);
+		}
+		const slab::MeshFault baked = std::move(xf).commit(cutter);
+		if (!baked.ok()) {
+			return int(baked.code);
+		}
+	}
 	slab::MeshEdit edit(live_mesh);
-	const slab::MeshFault fault = slab::ops::boolean(edit, p_other->live_mesh, p_mode);
+	const slab::MeshFault fault = slab::ops::boolean(edit, cutter, p_mode);
 	if (!fault.ok()) {
 		return int(fault.code);
 	}

@@ -59,11 +59,21 @@ If you hold Shift and drag, Slab extrudes a new loop first, then moves the new c
   caption="Inset, then an inward drag. Open top. No roof."
 />
 
-## Door and arch
+## Cut a door
 
-Do not subtract a second box through a side wall. Subtract only commits when the cutter sits wholly inside the host. A cut that crosses the wall is refused. The mesh does not change.
+1. Press <kbd>1</kbd>.
+2. Click **Box** to make a cutter.
+3. Move the cutter so it pokes through one wall. It should stick out on both sides of the wall thickness.
+4. Click the room solid first, then Shift-click the cutter.
+5. Click **Subtract**.
 
-A door is a `SlabSocket` on a `SlabModule`. See [Closed solids](/guide/explanation/closed-solids) and [Punch a cavity](/guide/how-to/punch-a-cavity).
+Slab knifes both wall faces and joins the hole with the cutter's sides. Delete or hide the cutter node afterward.
+
+<Figure
+  src="/img/solid-door.png"
+  alt="The hollow room with a doorway cut through one wall."
+  caption="Subtract through a wall. The opening stays a closed solid."
+/>
 
 If you want a softer top corner, switch to Edge mode and bevel those edges before you inset. Bevel is one chamfer. It does not add arch segments. After the volume is hollow, bevel on those rim edges is often refused. For an arch, click **Arch** on the panel instead.
 

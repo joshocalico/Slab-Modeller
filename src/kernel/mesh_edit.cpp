@@ -1,5 +1,7 @@
 #include "mesh_edit.hpp"
 
+#include <cstdint>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -736,6 +738,99 @@ MeshFault MeshEdit::append(const Mesh &p_other, bool p_flip) {
 				return flipped;
 			}
 		}
+	}
+	return fault;
+}
+
+MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
+	fault = MeshFault{};
+	work = Mesh();
+	if (p_loops.empty()) {
+		fault.code = MeshError::RESULT_EMPTY;
+		return fault;
+	}
+
+	std::map<IVec3, VertexIdx> verts;
+	std::unordered_map<uint64_t, HalfEdgeIdx> directed;
+	auto key = [](uint32_t p_a, uint32_t p_b) -> uint64_t {
+		return (uint64_t(p_a) << 32) | uint64_t(p_b);
+	};
+
+	for (const std::vector<IVec3> &raw : p_loops) {
+		std::vector<IVec3> loop;
+		loop.reserve(raw.size());
+		for (const IVec3 &p : raw) {
+			if (loop.empty() || loop.back() != p) {
+				loop.push_back(p);
+			}
+		}
+		if (loop.size() >= 2 && loop.front() == loop.back()) {
+			loop.pop_back();
+		}
+		if (loop.size() < 3) {
+			continue;
+		}
+		bool dup = false;
+		for (size_t i = 0; i < loop.size() && !dup; i++) {
+			for (size_t j = i + 1; j < loop.size(); j++) {
+				if (loop[i] == loop[j]) {
+					dup = true;
+					break;
+				}
+			}
+		}
+		if (dup) {
+			continue;
+		}
+
+		std::vector<VertexIdx> vs(loop.size());
+		for (size_t i = 0; i < loop.size(); i++) {
+			const auto found = verts.find(loop[i]);
+			if (found != verts.end()) {
+				vs[i] = found->second;
+			} else {
+				vs[i] = _alloc_vertex(loop[i]);
+				verts[loop[i]] = vs[i];
+			}
+		}
+
+		std::vector<HalfEdgeIdx> hes(loop.size());
+		const FaceIdx face = _alloc_face();
+		for (size_t i = 0; i < loop.size(); i++) {
+			hes[i] = _alloc_half_edge();
+		}
+		work.faces[face.i].he = hes[0];
+		for (size_t i = 0; i < loop.size(); i++) {
+			const size_t n = (i + 1) % loop.size();
+			HalfEdge &he = work.half_edges[hes[i].i];
+			he.origin = vs[i];
+			he.next = hes[n];
+			he.twin = HalfEdgeIdx{ INVALID_IDX };
+			he.face = face;
+			work.vertices[vs[i].i].out = hes[i];
+			const uint64_t k = key(vs[i].i, vs[n].i);
+			if (directed.find(k) != directed.end()) {
+				fault.code = MeshError::NON_MANIFOLD_VERTEX;
+				return fault;
+			}
+			directed[k] = hes[i];
+		}
+	}
+
+	if (work.face_count() < 1) {
+		fault.code = MeshError::RESULT_EMPTY;
+		return fault;
+	}
+
+	for (const auto &kv : directed) {
+		const uint32_t a = uint32_t(kv.first >> 32);
+		const uint32_t b = uint32_t(kv.first);
+		const auto twin = directed.find(key(b, a));
+		if (twin == directed.end()) {
+			fault.code = MeshError::NOT_CLOSED;
+			return fault;
+		}
+		work.half_edges[kv.second.i].twin = twin->second;
 	}
 	return fault;
 }

@@ -7,6 +7,7 @@ SLAB_DOCS_ASSETS="${out}" "${root}/scripts/godot" --path "${root}/project" --res
 test -f "${out}/solid-box.png"
 test -f "${out}/solid-inset.png"
 test -f "${out}/solid-room.png"
+test -f "${out}/solid-door.png"
 test -f "${out}/solid-extrude.png"
 test -f "${out}/solid-pair.png"
 test -f "${out}/panel.png"

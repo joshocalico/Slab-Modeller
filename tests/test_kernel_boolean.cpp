@@ -3,6 +3,8 @@
 #include "kernel/mesh_edit.hpp"
 #include "kernel/ops/boolean.hpp"
 #include "kernel/ops/edit.hpp"
+#include "kernel/ops/inset.hpp"
+#include "kernel/ops/offset_loop.hpp"
 #include "kernel/ops/primitives.hpp"
 
 #include <vector>
@@ -72,7 +74,7 @@ SLAB_TEST(boolean_union_of_disjoint_boxes_concatenates) {
 	expect_eq(euler(out), 4, "two shells have euler 4");
 }
 
-SLAB_TEST(boolean_overlapping_boxes_are_refused) {
+SLAB_TEST(boolean_subtract_of_overlapping_boxes_cuts_a_notch) {
 	const Mesh a = unit_box();
 	MeshEdit b_edit = MeshEdit::empty();
 	ops::box(b_edit, godot::Vector3(2, 3, 2));
@@ -85,8 +87,107 @@ SLAB_TEST(boolean_overlapping_boxes_are_refused) {
 	std::move(shifted).commit(b);
 
 	MeshEdit cut(a);
-	expect_eq(int(ops::boolean(cut, b, 1).code), int(MeshError::NO_INTERSECTION), "overlapping subtract is not a cavity");
-	expect_eq(cut.scratch().face_count(), 6, "refused boolean leaves A alone");
+	expect(ops::boolean(cut, b, 1).ok(), "overlapping subtract");
+	Mesh out;
+	expect(std::move(cut).commit(out).ok(), "overlapping subtract commit");
+	expect(validate(out).ok(), "notch is watertight");
+	expect(out.signed_volume() > 0.0, "notch volume stays positive");
+	expect_near(out.signed_volume(), 6.0, 0.05, "half the host remains");
+}
+
+SLAB_TEST(boolean_subtract_through_a_box_is_a_door) {
+	MeshEdit host_edit = MeshEdit::empty();
+	ops::box(host_edit, godot::Vector3(2, 2, 2));
+	Mesh host;
+	expect(std::move(host_edit).commit(host).ok(), "host box");
+
+	MeshEdit door_edit = MeshEdit::empty();
+	ops::box(door_edit, godot::Vector3(0.8f, 1.2f, 2.4f));
+	Mesh door;
+	expect(std::move(door_edit).commit(door).ok(), "door box");
+	std::vector<VertexId> verts;
+	door.all_vertices(verts);
+	MeshEdit shifted(door);
+	expect(ops::move_vertices(shifted, verts, godot::Vector3(0.6f, 0.4f, -0.2f)).ok(), "shift door through Z");
+	expect(std::move(shifted).commit(door).ok(), "shifted door");
+
+	MeshEdit cut(host);
+	expect(ops::boolean(cut, door, 1).ok(), "through subtract");
+	Mesh out;
+	expect(std::move(cut).commit(out).ok(), "door commit");
+	expect(validate(out).ok(), "door is watertight");
+	expect(out.signed_volume() > 0.0, "door volume stays positive");
+	expect(out.signed_volume() < host.signed_volume() - 0.5, "door removes volume");
+	expect(out.face_count() > 6, "door adds tunnel faces");
+}
+
+SLAB_TEST(boolean_subtract_through_a_thin_wall_is_a_doorway) {
+	MeshEdit wall_edit = MeshEdit::empty();
+	ops::box(wall_edit, godot::Vector3(4, 3, 0.4f));
+	Mesh wall;
+	expect(std::move(wall_edit).commit(wall).ok(), "wall box");
+
+	MeshEdit door_edit = MeshEdit::empty();
+	ops::box(door_edit, godot::Vector3(1.2f, 2.0f, 0.8f));
+	Mesh door;
+	expect(std::move(door_edit).commit(door).ok(), "door cutter");
+	std::vector<VertexId> verts;
+	door.all_vertices(verts);
+	MeshEdit shifted(door);
+	expect(ops::move_vertices(shifted, verts, godot::Vector3(1.4f, 0.2f, -0.2f)).ok(), "shift door through the wall");
+	expect(std::move(shifted).commit(door).ok(), "shifted door");
+
+	const double before = wall.signed_volume();
+	MeshEdit cut(wall);
+	expect(ops::boolean(cut, door, 1).ok(), "wall subtract");
+	Mesh out;
+	expect(std::move(cut).commit(out).ok(), "wall door commit");
+	expect(validate(out).ok(), "doorway is watertight");
+	expect(out.signed_volume() > 0.0, "doorway volume stays positive");
+	expect(out.signed_volume() < before, "doorway removes wall volume");
+	expect(out.face_count() > 6, "doorway adds tunnel faces");
+}
+
+SLAB_TEST(boolean_subtract_cuts_a_door_in_a_hollow_room) {
+	MeshEdit room_edit = MeshEdit::empty();
+	ops::box(room_edit, godot::Vector3(4, 3, 4));
+	Mesh room;
+	expect(std::move(room_edit).commit(room).ok(), "room box");
+	std::vector<FaceId> faces;
+	room.all_faces(faces);
+	FaceId top;
+	float up = -2.0f;
+	for (const FaceId id : faces) {
+		const float y = room.face_normal(id).y;
+		if (y > up) {
+			up = y;
+			top = id;
+		}
+	}
+	MeshEdit hollow(room);
+	expect(ops::inset(hollow, { top }, 0.45f).ok(), "inset top");
+	expect(ops::extrude(hollow, { top }, -2.4f).ok(), "pull inner cap down");
+	expect(std::move(hollow).commit(room).ok(), "hollow commit");
+
+	MeshEdit door_edit = MeshEdit::empty();
+	ops::box(door_edit, godot::Vector3(0.7f, 1.6f, 1.2f));
+	Mesh door;
+	expect(std::move(door_edit).commit(door).ok(), "door cutter");
+	std::vector<VertexId> verts;
+	door.all_vertices(verts);
+	MeshEdit shifted(door);
+	expect(ops::move_vertices(shifted, verts, godot::Vector3(-0.15f, 0.7f, 1.4f)).ok(), "shift door through +X wall");
+	expect(std::move(shifted).commit(door).ok(), "shifted door");
+
+	const double before = room.signed_volume();
+	MeshEdit cut(room);
+	const MeshFault cut_fault = ops::boolean(cut, door, 1);
+	expect(cut_fault.ok(), "room door subtract");
+	Mesh out;
+	expect(std::move(cut).commit(out).ok(), "room door commit");
+	expect(validate(out).ok(), "room doorway is watertight");
+	expect(out.signed_volume() > 0.0, "room doorway volume stays positive");
+	expect(out.signed_volume() < before, "room doorway removes wall volume");
 }
 
 SLAB_TEST(mirror_x_keeps_volume_and_euler) {

@@ -53,23 +53,29 @@ func _process(_dt: float) -> bool:
 		return false
 	if _phase == 3:
 		_save("solid-room.png")
-		_stage_extrude_demo()
+		_cut_door()
 		_phase = 4
 		_wait = 0
 		return false
 	if _phase == 4:
-		_save("solid-extrude.png")
-		_stage_pair()
+		_save("solid-door.png")
+		_stage_extrude_demo()
 		_phase = 5
 		_wait = 0
 		return false
 	if _phase == 5:
-		_save("solid-pair.png")
-		_stage_panel()
+		_save("solid-extrude.png")
+		_stage_pair()
 		_phase = 6
 		_wait = 0
 		return false
 	if _phase == 6:
+		_save("solid-pair.png")
+		_stage_panel()
+		_phase = 7
+		_wait = 0
+		return false
+	if _phase == 7:
 		_save("panel.png")
 		print("docs_capture wrote ", _out)
 		quit(0)
@@ -103,6 +109,17 @@ func _extrude_in() -> void:
 	print("docs_capture floor ", _solid.call("face_centroid", _top_face(_solid)))
 	_clear_overlays()
 	_aim(Vector3(5.8, 5.2, 6.6), Vector3(2.0, 0.7, 2.0))
+	_overlay_wires(_solid)
+
+
+func _cut_door() -> void:
+	var door: Node3D = _make_solid(Vector3(0.7, 1.6, 1.2), Color(0.92, 0.55, 0.28))
+	door.position = Vector3(-0.15, 0.7, 1.4)
+	var err: int = _solid.call("boolean_with", door, 1)
+	print("docs_capture door ", err, " faces=", _solid.call("face_count"))
+	door.free()
+	_clear_overlays()
+	_aim(Vector3(-3.4, 4.4, 6.4), Vector3(0.3, 1.3, 2.0))
 	_overlay_wires(_solid)
 
 
