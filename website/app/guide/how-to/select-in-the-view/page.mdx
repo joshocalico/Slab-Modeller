@@ -31,6 +31,7 @@ Click without moving the mouse still selects. Motion under 6 pixels is still a c
 - A vertex or edge moves in the camera plane.
 - A face moves along its normal.
 - Shift-drag on a face extrudes first, then moves the new cap.
+- Shift-drag on an edge bevels it. The drag distance is the chamfer amount.
 
 Release ends the grab. The next drag starts from the new positions. Escape during a drag restores the mesh and keeps the mode.
 
@@ -38,6 +39,6 @@ Release ends the grab. The next drag starts from the new positions. Escape durin
 
 A plain click replaces the element set with the item under the cursor. Shift-click to add faces, then Shift-drag if you want to keep that set. Shift-drag on faces also extrudes.
 
-Shift-drag on vertices or edges moves the whole set. Shift does not change those move plans.
+Shift-drag on vertices moves the whole set. Shift-drag on edges bevels the set. To translate edges, drag without Shift.
 
 Element selection stays on one solid. Object mode can add solids to the editor selection with Shift click.

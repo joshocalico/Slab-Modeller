@@ -10,7 +10,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | --- | --- | --- |
 | <kbd>1</kbd> | Object | Focus a `SlabSolid`. Drag does not move vertices. |
 | <kbd>2</kbd> | Vertex | Pick a vertex. Drag moves it in the camera plane. |
-| <kbd>3</kbd> | Edge | Pick an edge. Drag moves both endpoints in the camera plane. Double-click selects the edge loop. |
+| <kbd>3</kbd> | Edge | Pick an edge. Drag moves both endpoints in the camera plane. Shift-drag bevels. Double-click selects the edge loop. |
 | <kbd>4</kbd> | Face | Pick a face. Drag moves it along the face normal. Shift-drag extrudes. |
 | <kbd>Escape</kbd> | Object | Leaves element mode. During a drag, Escape cancels the grab and does not change mode. |
 
@@ -19,7 +19,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | Input | Result |
 | --- | --- |
 | Click | Select. Shift, Ctrl, or Cmd toggles. |
-| Drag past 6 pixels | Move the grab. The view cannot orbit until release. |
+| Drag past 6 pixels | Move the grab. Shift-drag extrudes a face or bevels an edge. The view cannot orbit until release. |
 | Hover with no buttons | Pass. Orbit still works. |
 | Miss in element mode with a solid selected | Clear element ids. Keep the solid. |
 

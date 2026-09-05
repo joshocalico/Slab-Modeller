@@ -324,6 +324,35 @@ func case_drag_a_selected_edge_moves_both_endpoints_in_the_camera_plane() -> voi
 	expect(d0.is_equal_approx(d1), "both endpoints share one delta")
 	expect(d0.length() > 0.05, "the edge travelled")
 	expect(absf(d0.dot(_world.forward())) < 0.01, "the move stays in the camera plane")
+	expect(box.call("face_count") == 6, "a plain edge drag never bevels")
+
+
+func case_shift_drag_a_selected_edge_bevels_it() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	var edges: PackedInt64Array = box.call("face_edges", face)
+	var edge: int = edges[0]
+	var ends: PackedVector3Array = box.call("edge_endpoints", edge)
+	var faces: PackedInt64Array = box.call("edge_faces", edge)
+	var axis: Vector3 = (box.call("face_normal", faces[0]) + box.call("face_normal", faces[1])).normalized()
+	var mid: Vector3 = box.to_global((ends[0] + ends[1]) * 0.5)
+	_select(box, SlabSelection.Mode.EDGE)
+	var at: Vector2 = _world.along_edge_on_face(box, edge, 0.5, face)
+	_session.handle(_world.camera(), _world.click(at))
+	_session.handle(_world.camera(), _world.release(at))
+	var target: Vector2 = _world.toward(mid, axis, FAR)
+	var volume_before: float = box.call("volume")
+
+	_session.handle(_world.camera(), _world.click(at, true))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(target, true))
+	_session.handle(_world.camera(), _world.release(target, true))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "bevel drag motion is claimed")
+	expect(box.call("face_count") == 7 and box.call("vertex_count") == 10,
+		"one shift-drag bevels exactly once: one chamfer face and two split vertices, got %d faces %d vertices" % [box.call("face_count"), box.call("vertex_count")])
+	expect(box.call("edge_count") == 15, "bevel replaces one edge with the chamfer ring, got %d edges" % box.call("edge_count"))
+	expect(box.call("volume") < volume_before, "the chamfer takes material off the corner")
+	expect(_session.state().ids.is_empty(), "the retired edge is not kept selected, got %s" % _session.state().ids)
 
 
 func case_drag_a_selected_face_pulls_it_along_its_normal() -> void:

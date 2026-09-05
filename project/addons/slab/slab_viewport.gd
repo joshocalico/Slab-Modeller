@@ -11,6 +11,7 @@ enum Verdict { PASS, STOP }
 
 const DRAG_THRESHOLD_PX := 6.0
 const MIN_STEP := 0.0002
+const MIN_BEVEL := 0.002
 
 const LABELS: Dictionary = {
 	SlabSelection.Mode.VERTEX: "Slab Move Vertices",
@@ -18,11 +19,12 @@ const LABELS: Dictionary = {
 	SlabSelection.Mode.FACE: "Slab Move Faces",
 }
 const EXTRUDE_LABEL := "Slab Extrude Faces"
+const BEVEL_LABEL := "Slab Bevel Edges"
 
 
 class Grab:
 	enum Phase { IDLE, PRESSED, DRAGGING }
-	enum Plan { NONE, MOVE_IN_CAMERA_PLANE, MOVE_ALONG_NORMAL, EXTRUDE_ALONG_NORMAL }
+	enum Plan { NONE, MOVE_IN_CAMERA_PLANE, MOVE_ALONG_NORMAL, EXTRUDE_ALONG_NORMAL, BEVEL_EDGES }
 
 	var phase: int = Phase.IDLE
 	var solid: Node3D = null
@@ -37,6 +39,7 @@ class Grab:
 	var anchor_vertex: int = 0
 	var anchor_origin := Vector3.ZERO
 	var before := PackedByteArray()
+	var last_good := PackedByteArray()
 	var label := ""
 
 	static func idle() -> Grab:
@@ -216,7 +219,7 @@ func _start_drag(camera: Camera3D, event: InputEventMouseMotion) -> bool:
 		_grab = Grab.idle()
 		return false
 	g.plan = _plan_for(g.mode, event.shift_pressed)
-	g.label = EXTRUDE_LABEL if g.plan == Grab.Plan.EXTRUDE_ALONG_NORMAL else String(LABELS[g.mode])
+	g.label = _label_for(g.plan, g.mode)
 	g.ids = PackedInt64Array(_selection.ids)
 	if not g.ids.has(g.pressed_id):
 		g.ids.append(g.pressed_id)
@@ -228,6 +231,11 @@ func _start_drag(camera: Camera3D, event: InputEventMouseMotion) -> bool:
 			_grab = Grab.idle()
 			return false
 		g.plan = Grab.Plan.MOVE_ALONG_NORMAL
+	if g.plan == Grab.Plan.BEVEL_EDGES:
+		g.axis = _bevel_axis(g.solid, g.pressed_id)
+		if g.axis == Vector3.ZERO:
+			_grab = Grab.idle()
+			return false
 	g.vertices = _gather_vertices(g.solid, g.mode, g.ids)
 	if g.vertices.is_empty():
 		_grab = Grab.idle()
@@ -239,6 +247,9 @@ func _start_drag(camera: Camera3D, event: InputEventMouseMotion) -> bool:
 
 
 func _drag_to(camera: Camera3D, screen: Vector2) -> void:
+	if _grab.plan == Grab.Plan.BEVEL_EDGES:
+		_bevel_to(camera, screen)
+		return
 	var g := _grab
 	var wanted_world := Vector3.ZERO
 	if g.plan == Grab.Plan.MOVE_IN_CAMERA_PLANE:
@@ -258,12 +269,32 @@ func _drag_to(camera: Camera3D, screen: Vector2) -> void:
 	g.solid.move_vertices(g.vertices, step)
 
 
+func _bevel_to(camera: Camera3D, screen: Vector2) -> void:
+	var g := _grab
+	var travel: float = absf(
+		_axis_travel(camera, screen, g.anchor, g.axis) - _axis_travel(camera, g.press_screen, g.anchor, g.axis)
+	)
+	var wanted_local: Vector3 = g.solid.to_local(g.anchor + g.axis * travel) - g.solid.to_local(g.anchor)
+	var amount: float = wanted_local.length()
+	g.solid.set("data", g.before)
+	if amount < MIN_BEVEL:
+		return
+	var err: int = g.solid.bevel_edges(g.ids, amount)
+	if err != OK:
+		if not g.last_good.is_empty():
+			g.solid.set("data", g.last_good)
+		return
+	g.last_good = g.solid.get("data")
+
+
 func _finish() -> void:
 	var g := _grab
 	_grab = Grab.idle()
 	if not is_instance_valid(g.solid):
 		return
 	var after: PackedByteArray = g.solid.get("data")
+	if g.plan == Grab.Plan.BEVEL_EDGES and after != g.before:
+		_selection.set_ids(PackedInt64Array())
 	if after == g.before:
 		return
 	var undo: Object = _host.undo()
@@ -302,7 +333,27 @@ func _select_loop(solid: Node3D, edge: int, additive: bool) -> void:
 static func _plan_for(mode: int, shift: bool) -> int:
 	if mode == SlabSelection.Mode.FACE:
 		return Grab.Plan.EXTRUDE_ALONG_NORMAL if shift else Grab.Plan.MOVE_ALONG_NORMAL
+	if mode == SlabSelection.Mode.EDGE and shift:
+		return Grab.Plan.BEVEL_EDGES
 	return Grab.Plan.MOVE_IN_CAMERA_PLANE
+
+
+static func _label_for(plan: int, mode: int) -> String:
+	if plan == Grab.Plan.EXTRUDE_ALONG_NORMAL:
+		return EXTRUDE_LABEL
+	if plan == Grab.Plan.BEVEL_EDGES:
+		return BEVEL_LABEL
+	return String(LABELS[mode])
+
+
+static func _bevel_axis(solid: Node3D, edge: int) -> Vector3:
+	var faces: PackedInt64Array = solid.edge_faces(edge)
+	if faces.size() < 2:
+		return Vector3.ZERO
+	var axis: Vector3 = _world_normal(solid, faces[0]) + _world_normal(solid, faces[1])
+	if axis.length_squared() < 0.0001:
+		return _world_normal(solid, faces[0])
+	return axis.normalized()
 
 
 static func _gather_vertices(solid: Node3D, mode: int, ids: PackedInt64Array) -> PackedInt64Array:
