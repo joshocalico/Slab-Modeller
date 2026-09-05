@@ -2,6 +2,7 @@
 extends RefCounted
 
 signal changed
+signal hover_changed
 
 enum Mode { OBJECT, VERTEX, EDGE, FACE }
 
@@ -27,11 +28,17 @@ var mode: int = Mode.OBJECT:
 			return
 		mode = value
 		ids = PackedInt64Array()
+		hover_id = 0
 		changed.emit()
+		hover_changed.emit()
 
 var objects: Array[Node3D] = []
 
 var ids: PackedInt64Array = PackedInt64Array()
+
+var hover_solid: Node3D = null
+
+var hover_id: int = 0
 
 var solid: Node3D:
 	get:
@@ -90,6 +97,14 @@ func clear_ids() -> void:
 	set_ids(PackedInt64Array())
 
 
+func set_hover(next_solid: Node3D, next_id: int) -> void:
+	if hover_solid == next_solid and hover_id == next_id:
+		return
+	hover_solid = next_solid
+	hover_id = next_id
+	hover_changed.emit()
+
+
 func count() -> int:
 	return objects.size() if mode == Mode.OBJECT else ids.size()
 
@@ -106,7 +121,8 @@ func describe() -> String:
 			return "%s selected." % objects[0].name
 		return "%d solids selected." % objects.size()
 	var nouns: Array = MODE_NOUNS[mode]
+	var who: String = objects[0].name
 	if ids.is_empty():
-		return "No %s selected on %s." % [nouns[1], objects[0].name]
+		return "%s, %s mode, none selected." % [who, mode_label()]
 	var noun: String = nouns[0] if ids.size() == 1 else nouns[1]
-	return "%d %s of %s." % [ids.size(), noun, objects[0].name]
+	return "%s, %d %s." % [who, ids.size(), noun]

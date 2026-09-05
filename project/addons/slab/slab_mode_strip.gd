@@ -57,6 +57,7 @@ func refresh() -> void:
 
 
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
+	var scale: float = EditorInterface.get_editor_scale()
 	var button := Button.new()
 	button.icon = SlabIcons.texture(MODE_ICONS[mode])
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
@@ -64,6 +65,8 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.toggle_mode = true
 	button.button_group = group
 	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2((100.0 if with_label else 40.0) * scale, 36.0 * scale)
+	button.add_theme_font_size_override("font_size", maxi(14, int(round(15.0 * scale))))
 	button.pressed.connect(func() -> void: _selection.mode = mode)
 	_buttons[mode] = button
 	return button

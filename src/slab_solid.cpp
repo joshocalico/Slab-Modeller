@@ -751,7 +751,13 @@ void SlabSolid::_ensure_children() {
 		if (mesh_instance == nullptr) {
 			mesh_instance = memnew(MeshInstance3D);
 			mesh_instance->set_name("Mesh");
-			add_child(mesh_instance);
+			add_child(mesh_instance, false, Node::INTERNAL_MODE_BACK);
+		} else {
+			Node *parent = mesh_instance->get_parent();
+			if (parent == this) {
+				remove_child(mesh_instance);
+			}
+			add_child(mesh_instance, false, Node::INTERNAL_MODE_BACK);
 		}
 	}
 	if (body == nullptr) {

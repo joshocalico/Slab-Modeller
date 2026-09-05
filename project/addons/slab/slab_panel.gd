@@ -6,9 +6,9 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 
-const BUTTON_SIZE := Vector2(134.0, 30.0)
-const SPIN_WIDTH := 84.0
-const PANEL_HEIGHT := 320.0
+const BUTTON_SIZE := Vector2(156.0, 36.0)
+const SPIN_WIDTH := 104.0
+const PANEL_HEIGHT := 440.0
 const GRID_SEPARATION := 4.0
 const DEFAULT_COLUMNS := 6
 const ACCENT := Color(0.86, 0.72, 0.34)
@@ -42,6 +42,10 @@ func _scaled(value: float) -> float:
 	return value * EditorInterface.get_editor_scale()
 
 
+func _font(px: int) -> int:
+	return maxi(12, int(round(_scaled(float(px)))))
+
+
 func _fit_columns() -> void:
 	var stride: float = _scaled(BUTTON_SIZE.x + GRID_SEPARATION)
 	var columns: int = maxi(1, int(size.x / stride))
@@ -68,6 +72,7 @@ func _header() -> Control:
 	row.add_theme_constant_override("separation", 10)
 	var title := Label.new()
 	title.text = "SLAB"
+	title.add_theme_font_size_override("font_size", _font(20))
 	title.add_theme_color_override("font_color", ACCENT)
 	row.add_child(title)
 	var strip := SlabModeStrip.new()
@@ -109,8 +114,8 @@ func _spin(label_text: String, min_v: float, max_v: float, step: float, value: f
 	box.add_theme_constant_override("separation", 0)
 	var label := Label.new()
 	label.text = label_text
-	label.add_theme_font_size_override("font_size", 10)
-	label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.68))
+	label.add_theme_font_size_override("font_size", _font(15))
+	label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
 	box.add_child(label)
 	var spin := SpinBox.new()
 	spin.min_value = min_v
@@ -118,6 +123,8 @@ func _spin(label_text: String, min_v: float, max_v: float, step: float, value: f
 	spin.step = step
 	spin.value = value
 	spin.custom_minimum_size.x = _scaled(SPIN_WIDTH)
+	spin.add_theme_font_size_override("font_size", _font(15))
+	spin.get_line_edit().add_theme_font_size_override("font_size", _font(15))
 	spin.value_changed.connect(on_change)
 	box.add_child(spin)
 	return box
@@ -128,6 +135,7 @@ func _status_label() -> Label:
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.clip_text = true
+	label.add_theme_font_size_override("font_size", _font(16))
 	label.add_theme_color_override("font_color", ACCENT)
 	label.text = "No solid selected."
 	return label
@@ -150,7 +158,7 @@ func _grid_scroll() -> Control:
 func _section_label(text: String) -> Label:
 	var label := Label.new()
 	label.text = text.to_upper()
-	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_font_size_override("font_size", _font(16))
 	label.add_theme_color_override("font_color", ACCENT)
 	return label
 
@@ -175,6 +183,7 @@ func _action_button(row: Dictionary) -> Button:
 	button.icon = SlabIcons.texture(row["icon"])
 	button.text = row["label"]
 	button.custom_minimum_size = Vector2(_scaled(BUTTON_SIZE.x), _scaled(BUTTON_SIZE.y))
+	button.add_theme_font_size_override("font_size", _font(15))
 	button.clip_text = true
 	button.focus_mode = Control.FOCUS_NONE
 	button.tooltip_text = tooltip
