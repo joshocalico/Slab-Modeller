@@ -1,0 +1,32 @@
+.godot/
+.sconsign.dblite
+*.os
+*.o
+*.obj
+*.dblite
+.DS_Store
+compile_commands.json
+.cache/
+src/gen/
+
+# Built binaries (rebuild locally)
+project/addons/slab/bin/
+bin/
+godot-cpp/**/*.o
+godot-cpp/**/*.os
+godot-cpp/bin/
+godot-cpp/gen/
+
+# Local agent trail and screen captures. Not the product.
+.audit/
+decisions.tsv
+scripts/computer-use.swift
+scripts/godot-drive-box
+scripts/godot-drive-ux
+scripts/godot-editor-capture
+scripts/godot-screencap
+scripts/slab-window
+project/tests/dump_box_data.gd
+project/tests/dump_box_data.gd.uid
+project/addons/slab/gizmos/slab_block_gizmo.gd.uid
+

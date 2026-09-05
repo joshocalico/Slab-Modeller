@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+out="/tmp/arena-slab-kernel/slab-render.png"
+rm -f "${out}"
+# A windowed run is required. Headless viewports stay empty.
+"${root}/scripts/godot" --path "${root}/project" --script res://tests/render_smoke.gd
+test -f "${out}"
+echo "wrote ${out}"

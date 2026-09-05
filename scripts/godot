@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${GODOT:-}" && -x "${GODOT}" ]]; then
+	exec "${GODOT}" "$@"
+fi
+for candidate in \
+	"/Applications/Godot.app/Contents/MacOS/Godot" \
+	"/Applications/Godot_mono.app/Contents/MacOS/Godot"; do
+	if [[ -x "${candidate}" ]]; then
+		exec "${candidate}" "$@"
+	fi
+done
+echo "Godot not found. Set GODOT or install Godot.app in /Applications." >&2
+exit 127

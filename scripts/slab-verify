@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${root}"
+
+fails=0
+step() {
+	local name="$1"
+	shift
+	printf '\n=== %s ===\n' "${name}"
+	if "$@"; then
+		printf 'PASS %s\n' "${name}"
+	else
+		printf 'FAIL %s\n' "${name}"
+		fails=$((fails + 1))
+	fi
+}
+
+step "build extension and kernel test" scons target=template_debug -j8
+step "kernel unit tests" bin/slab_kernel_test
+step "extension loads in godot" scripts/godot --headless --path project --script res://tests/godot_smoke.gd
+
+for extra in solid_smoke sweep_smoke panel_smoke pick_smoke demo_load; do
+	if [[ -f "project/tests/${extra}.gd" ]]; then
+		step "${extra}" scripts/godot --headless --path project --script "res://tests/${extra}.gd"
+	fi
+done
+
+step "editor plugin initializes clean" bash -c '
+	out="$(scripts/godot --editor --headless --path project --quit-after 2 2>&1)"
+	echo "${out}" | grep -E "SCRIPT ERROR|Parse Error|Failed to load script" && exit 1
+	exit 0
+'
+
+printf '\n=== summary ===\n'
+if [[ ${fails} -ne 0 ]]; then
+	printf '%d gate(s) failed\n' "${fails}"
+	exit 1
+fi
+printf 'all gates green\n'

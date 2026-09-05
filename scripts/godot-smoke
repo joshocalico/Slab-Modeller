@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+godot="${root}/scripts/godot"
+"${godot}" --headless --path "${root}/project" --script res://tests/godot_smoke.gd
+"${godot}" --headless --path "${root}/project" --script res://tests/sweep_smoke.gd
+"${godot}" --editor --headless --path "${root}/project" --quit-after 2
