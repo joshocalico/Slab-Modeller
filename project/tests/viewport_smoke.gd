@@ -3,10 +3,14 @@ extends SceneTree
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
+const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabTestHost := preload("res://tests/slab_test_host.gd")
 const SlabTestWorld := preload("res://tests/slab_test_world.gd")
+const SlabTestUndo := preload("res://tests/slab_test_undo.gd")
 
 const VOID := Vector2(20000.0, 20000.0)
+const FAR := 40.0
+const NUDGE := 1.0
 
 var _world: SlabTestWorld
 var _host: SlabTestHost
@@ -90,14 +94,11 @@ func case_edge_click_along_the_segment_not_only_the_midpoint() -> void:
 
 func case_edge_click_past_the_radius_selects_nothing() -> void:
 	var box: Node3D = _world.box()
-	var edges: PackedInt64Array = box.call("face_edges", _world.top_face(box))
-	var edge: int = edges[0]
 	_host.stub_host_selection([box])
 	_session.adopt_host_selection()
 	_session.state().mode = SlabSelection.Mode.EDGE
 
-	var far_off: Vector2 = _world.along_edge(box, edge, 0.5) + Vector2(0.0, _world.metrics().pick_radius() * 4.0)
-	_session.handle(_world.camera(), _world.click(far_off))
+	_session.handle(_world.camera(), _world.click(_world.past_pick_radius(box)))
 
 	expect(_session.state().ids.is_empty(), "a click well outside the radius picks no edge")
 
@@ -222,6 +223,327 @@ func case_every_verdict_maps_to_an_editor_constant() -> void:
 		"STOP means stop")
 
 
+func case_click_without_drag_still_selects_and_never_mutates() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	_select(box, SlabSelection.Mode.FACE)
+	var pristine: PackedByteArray = box.get("data")
+	var at: Vector2 = _world.at_face(box, face)
+
+	var verdict: int = _session.handle(_world.camera(), _world.click(at))
+	var release: int = _session.handle(_world.camera(), _world.release(at))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "the press is still claimed by Slab")
+	expect(release == SlabViewport.Verdict.STOP, "the release that ends a claimed press is claimed too")
+	expect(_session.state().ids == PackedInt64Array([face]), "the press selected the face, got %s" % _session.state().ids)
+	expect(box.get("data") == pristine, "a click never reaches move_vertices or extrude_faces")
+
+
+func case_a_one_pixel_drag_stays_below_the_threshold() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	_select(box, SlabSelection.Mode.FACE)
+	var pristine: PackedByteArray = box.get("data")
+	var at: Vector2 = _world.at_face(box, face)
+
+	_session.handle(_world.camera(), _world.click(at))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(at + Vector2(NUDGE, 0.0)))
+	_session.handle(_world.camera(), _world.release(at + Vector2(NUDGE, 0.0)))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "a pressed gesture is Slab's until release, even under the threshold")
+	expect(box.get("data") == pristine, "one pixel is a click, not a drag")
+	expect(_session.state().ids == PackedInt64Array([face]), "the selection from the press survives")
+
+
+func case_a_drag_well_past_the_threshold_moves_geometry() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	_select(box, SlabSelection.Mode.FACE)
+	var pristine: PackedByteArray = box.get("data")
+	var at: Vector2 = _world.at_face(box, face)
+	var normal: Vector3 = box.call("face_normal", face)
+	var target: Vector2 = _world.toward(box.to_global(box.call("face_centroid", face)), normal, FAR)
+
+	_session.handle(_world.camera(), _world.click(at))
+	_session.handle(_world.camera(), _world.drag_to(target))
+	_session.handle(_world.camera(), _world.release(target))
+
+	expect(box.get("data") != pristine, "forty pixels is a drag")
+	expect(not _world.moved_vertices(box).is_empty(), "geometry moved")
+
+
+func case_drag_threshold_is_a_named_constant_in_the_session() -> void:
+	expect(SlabViewport.DRAG_THRESHOLD_PX >= 4.0 and SlabViewport.DRAG_THRESHOLD_PX <= 8.0,
+		"the threshold is a small named constant, got %s" % SlabViewport.DRAG_THRESHOLD_PX)
+	expect(NUDGE < SlabViewport.DRAG_THRESHOLD_PX and FAR > SlabViewport.DRAG_THRESHOLD_PX * 2.0,
+		"the smoke's nudge and far distances bracket the threshold")
+
+
+func case_drag_a_selected_vertex_moves_it_in_the_camera_plane() -> void:
+	var box: Node3D = _world.box()
+	var vertex: int = _world.top_vertex(box)
+	_select(box, SlabSelection.Mode.VERTEX)
+	var start: Vector2 = _world.at_vertex(box, vertex)
+	var target: Vector2 = start + Vector2(FAR, 0.0)
+	var before: Vector3 = _world.vertex_world(box, vertex)
+
+	_session.handle(_world.camera(), _world.click(start))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(target))
+	_session.handle(_world.camera(), _world.release(target))
+
+	var after: Vector3 = _world.vertex_world(box, vertex)
+	expect(verdict == SlabViewport.Verdict.STOP, "motion during an active drag is claimed; orbit cannot steal it")
+	expect(_session.state().ids == PackedInt64Array([vertex]), "the pressed vertex is the selection")
+	expect(_world.camera().unproject_position(after).distance_to(target) < 1.0,
+		"the vertex lands under the cursor, off by %s px" % _world.camera().unproject_position(after).distance_to(target))
+	expect(absf((after - before).dot(_world.forward())) < 0.01, "the move stays in the camera plane")
+	expect(_world.moved_vertices(box) == PackedInt64Array([vertex]), "only the grabbed vertex moved, got %s" % _world.moved_vertices(box))
+
+
+func case_drag_a_selected_edge_moves_both_endpoints_in_the_camera_plane() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	var edges: PackedInt64Array = box.call("face_edges", face)
+	var edge: int = edges[0]
+	var ends: PackedInt64Array = box.call("edge_vertices", edge)
+	_select(box, SlabSelection.Mode.EDGE)
+	var start: Vector2 = _world.along_edge_on_face(box, edge, 0.5, face)
+	var target: Vector2 = start + Vector2(0.0, FAR)
+	var before: Dictionary = _world.positions(box)
+
+	_session.handle(_world.camera(), _world.click(start))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(target))
+	_session.handle(_world.camera(), _world.release(target))
+
+	var moved: PackedInt64Array = _world.moved_vertices(box)
+	var d0: Vector3 = _world.vertex_world(box, ends[0]) - before[ends[0]]
+	var d1: Vector3 = _world.vertex_world(box, ends[1]) - before[ends[1]]
+	expect(verdict == SlabViewport.Verdict.STOP, "edge drag motion is claimed")
+	expect(_session.state().ids == PackedInt64Array([edge]), "the pressed edge is the selection")
+	expect(moved.size() == 2 and moved.has(ends[0]) and moved.has(ends[1]), "exactly the edge's two vertices moved, got %s" % moved)
+	expect(d0.is_equal_approx(d1), "both endpoints share one delta")
+	expect(d0.length() > 0.05, "the edge travelled")
+	expect(absf(d0.dot(_world.forward())) < 0.01, "the move stays in the camera plane")
+
+
+func case_drag_a_selected_face_pulls_it_along_its_normal() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	var ring: PackedInt64Array = box.call("face_vertices", face)
+	var normal: Vector3 = box.call("face_normal", face)
+	var centroid: Vector3 = box.to_global(box.call("face_centroid", face))
+	_select(box, SlabSelection.Mode.FACE)
+	var start: Vector2 = _world.at_face(box, face)
+	var target: Vector2 = _world.toward(centroid, normal, FAR)
+	var before: Dictionary = _world.positions(box)
+
+	_session.handle(_world.camera(), _world.click(start))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(target))
+	_session.handle(_world.camera(), _world.release(target))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "face drag motion is claimed")
+	expect(box.call("face_count") == 6, "a plain drag never extrudes")
+	var moved: PackedInt64Array = _world.moved_vertices(box)
+	expect(moved.size() == 4, "the four ring vertices moved, got %s" % moved)
+	var first: Vector3 = _world.vertex_world(box, ring[0]) - before[ring[0]]
+	for v in ring:
+		var d: Vector3 = _world.vertex_world(box, v) - before[v]
+		expect(d.is_equal_approx(first), "the whole face moves by one delta")
+		expect(d.cross(normal).length() < 0.001, "the delta is parallel to the face normal")
+	expect(first.dot(normal) > 0.05, "the wall was pulled outward")
+	var cap: Vector3 = box.to_global(box.call("face_centroid", face))
+	expect(_world.camera().unproject_position(cap).distance_to(target) < 1.5, "the face follows the cursor along the normal's screen line")
+
+
+func case_shift_drag_a_selected_face_extrudes_by_the_drag_distance() -> void:
+	var box: Node3D = _world.box()
+	var face: int = _world.top_face(box)
+	var base_ring: PackedInt64Array = box.call("face_vertices", face)
+	var normal: Vector3 = box.call("face_normal", face)
+	var centroid: Vector3 = box.to_global(box.call("face_centroid", face))
+	_select(box, SlabSelection.Mode.FACE)
+	var at: Vector2 = _world.at_face(box, face)
+	_session.handle(_world.camera(), _world.click(at))
+	_session.handle(_world.camera(), _world.release(at))
+	var target: Vector2 = _world.toward(centroid, normal, FAR)
+
+	_session.handle(_world.camera(), _world.click(at, true))
+	var verdict: int = _session.handle(_world.camera(), _world.drag_to(target, true))
+	_session.handle(_world.camera(), _world.release(target, true))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "extrude drag motion is claimed")
+	expect(box.call("face_count") == 10 and box.call("vertex_count") == 12,
+		"one shift-drag extrudes exactly once: 4 side faces and 4 new vertices, got %d faces %d vertices" % [box.call("face_count"), box.call("vertex_count")])
+	expect(box.call("is_alive", face), "the dragged face id survives as the cap")
+	expect(_session.state().ids == PackedInt64Array([face]), "the cap stays selected, got %s" % _session.state().ids)
+	var cap_ring: PackedInt64Array = box.call("face_vertices", face)
+	for v in cap_ring:
+		expect(not base_ring.has(v), "the cap rides on new vertices")
+	expect(_world.unchanged(box, base_ring), "the original ring stays as the base")
+	var lift: Vector3 = box.to_global(box.call("face_centroid", face)) - centroid
+	expect(lift.cross(normal).length() < 0.001 and lift.dot(normal) > 0.05, "the cap moved outward along the normal")
+	expect(_world.camera().unproject_position(centroid + lift).distance_to(target) < 1.5, "the cap follows the cursor, so the extrude distance is the drag distance")
+
+
+func case_shift_click_without_crossing_the_threshold_stays_an_additive_toggle() -> void:
+	var box: Node3D = _world.box()
+	var faces: PackedInt64Array = box.call("get_faces")
+	_select(box, SlabSelection.Mode.FACE)
+	var pristine: PackedByteArray = box.get("data")
+	_session.handle(_world.camera(), _world.click(_world.at_face(box, faces[0])))
+	_session.handle(_world.camera(), _world.release(_world.at_face(box, faces[0])))
+	var second: Vector2 = _world.at_face(box, faces[1])
+
+	_session.handle(_world.camera(), _world.click(second, true))
+	_session.handle(_world.camera(), _world.drag_to(second + Vector2(NUDGE, 0.0), true))
+	_session.handle(_world.camera(), _world.release(second + Vector2(NUDGE, 0.0), true))
+
+	expect(_session.state().ids.size() == 2, "shift added the second face, got %s" % _session.state().ids)
+	expect(box.get("data") == pristine, "no extrusion under the threshold")
+
+
+func case_double_click_an_edge_selects_the_edge_loop() -> void:
+	var ringed: Dictionary = _world.ringed_box()
+	var box: Node3D = ringed["solid"]
+	var edge: int = ringed["ring_edge"]
+	_select(box, SlabSelection.Mode.EDGE)
+	var pristine: PackedByteArray = box.get("data")
+	var at: Vector2 = _world.along_edge(box, edge, 0.5)
+	_session.handle(_world.camera(), _world.click(at))
+	_session.handle(_world.camera(), _world.release(at))
+
+	var verdict: int = _session.handle(_world.camera(), _world.double_click(at))
+	_session.handle(_world.camera(), _world.release(at))
+
+	var loop: PackedInt64Array = SlabTopology.edge_loop(box, edge)
+	expect(verdict == SlabViewport.Verdict.STOP, "the double-click is claimed")
+	expect(loop.size() > 1, "the ringed box offers a loop to find, got %d" % loop.size())
+	expect(_session.state().ids == loop, "double-click selects the whole loop, got %s want %s" % [_session.state().ids, loop])
+	expect(box.get("data") == pristine, "a double-click never drags")
+
+
+func case_object_mode_never_moves_vertices() -> void:
+	var box: Node3D = _world.box()
+	_session.state().mode = SlabSelection.Mode.OBJECT
+	var pristine: PackedByteArray = box.get("data")
+	var start: Vector2 = _world.at_face(box, _world.top_face(box))
+	var target: Vector2 = start + Vector2(FAR, 0.0)
+
+	var press: int = _session.handle(_world.camera(), _world.click(start))
+	var motion: int = _session.handle(_world.camera(), _world.drag_to(target))
+	_session.handle(_world.camera(), _world.release(target))
+
+	expect(press == SlabViewport.Verdict.STOP and _host.focused() == box, "object mode still focuses the solid on press")
+	expect(motion == SlabViewport.Verdict.PASS, "object mode never enters the grab; held motion is Godot's")
+	expect(box.get("data") == pristine, "object mode never moves vertices")
+	expect(_session.state().ids.is_empty(), "object mode selects no elements")
+
+
+func case_hover_without_buttons_still_passes_in_every_mode() -> void:
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box])
+	_session.adopt_host_selection()
+	var at: Vector2 = _world.at_face(box, _world.top_face(box))
+	for mode in SlabSelection.MODE_LABELS:
+		_session.state().mode = mode
+		var verdict: int = _session.handle(_world.camera(), _world.motion(at))
+		expect(verdict == SlabViewport.Verdict.PASS, "%s-mode hover never claims the event" % SlabSelection.MODE_LABELS[mode])
+	expect(_session.state().hover_solid == box, "hover still tracks the solid")
+
+
+func case_release_ends_the_grab_and_the_next_drag_starts_from_the_new_positions() -> void:
+	var box: Node3D = _world.box()
+	var vertex: int = _world.top_vertex(box)
+	_select(box, SlabSelection.Mode.VERTEX)
+	var p0: Vector2 = _world.at_vertex(box, vertex)
+	var p1: Vector2 = p0 + Vector2(FAR, 0.0)
+	_session.handle(_world.camera(), _world.click(p0))
+	_session.handle(_world.camera(), _world.drag_to(p1))
+	_session.handle(_world.camera(), _world.release(p1))
+	var after_first: Vector3 = _world.vertex_world(box, vertex)
+
+	var idle: int = _session.handle(_world.camera(), _world.motion(p1 + Vector2(25.0, 0.0)))
+	expect(idle == SlabViewport.Verdict.PASS, "after release, motion is hover again")
+	expect(_world.vertex_world(box, vertex) == after_first, "release ended the grab; hover moves nothing")
+
+	var p1b: Vector2 = _world.at_vertex(box, vertex)
+	var p2: Vector2 = p1b + Vector2(0.0, 30.0)
+	_session.handle(_world.camera(), _world.click(p1b))
+	_session.handle(_world.camera(), _world.drag_to(p2))
+	_session.handle(_world.camera(), _world.release(p2))
+
+	expect(_world.camera().unproject_position(_world.vertex_world(box, vertex)).distance_to(p2) < 1.0,
+		"the second drag continues from the new position, not the original")
+	expect(_host.undo() == null, "this host has no undo manager and geometry still moved")
+
+
+func case_one_undo_snapshot_per_finished_drag_when_the_host_has_undo() -> void:
+	var undo := SlabTestUndo.new()
+	_host.stub_undo(undo)
+	var box: Node3D = _world.box()
+	var vertex: int = _world.top_vertex(box)
+	_select(box, SlabSelection.Mode.VERTEX)
+	var pristine: PackedByteArray = box.get("data")
+
+	var p0: Vector2 = _world.at_vertex(box, vertex)
+	_session.handle(_world.camera(), _world.click(p0))
+	_session.handle(_world.camera(), _world.drag_to(p0 + Vector2(FAR, 0.0)))
+	expect(undo.actions.is_empty(), "nothing is recorded while the drag is live")
+	_session.handle(_world.camera(), _world.release(p0 + Vector2(FAR, 0.0)))
+	var p1: Vector2 = _world.at_vertex(box, vertex)
+	_session.handle(_world.camera(), _world.click(p1))
+	_session.handle(_world.camera(), _world.drag_to(p1 + Vector2(0.0, 30.0)))
+	_session.handle(_world.camera(), _world.release(p1 + Vector2(0.0, 30.0)))
+
+	expect(undo.actions.size() == 2, "exactly one action per finished drag, got %d" % undo.actions.size())
+	if undo.actions.size() < 2:
+		return
+	expect(undo.actions[0]["undo"] == pristine, "the first action restores the pre-drag data")
+	expect(undo.actions[0]["do"] == undo.actions[1]["undo"], "the second drag's undo lands on the first drag's result")
+	expect(undo.actions[1]["do"] == box.get("data"), "the last action's do value is the live mesh")
+	expect(undo.actions[0]["execute"] == false, "the live mesh is already mutated, so commit does not re-run")
+	expect(undo.actions[0]["context"] == box and String(undo.actions[0]["name"]).begins_with("Slab "), "actions are scoped to the solid and labelled like the panel's")
+
+
+func case_escape_during_a_drag_restores_the_snapshot_and_keeps_the_mode() -> void:
+	var box: Node3D = _world.box()
+	var vertex: int = _world.top_vertex(box)
+	_select(box, SlabSelection.Mode.VERTEX)
+	var pristine: PackedByteArray = box.get("data")
+	var p0: Vector2 = _world.at_vertex(box, vertex)
+	_session.handle(_world.camera(), _world.click(p0))
+	_session.handle(_world.camera(), _world.drag_to(p0 + Vector2(FAR, 0.0)))
+	expect(box.get("data") != pristine, "the drag moved the vertex")
+
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_ESCAPE))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "escape mid-drag is claimed")
+	expect(box.get("data") == pristine, "escape restores the pre-drag data")
+	expect(_session.state().mode == SlabSelection.Mode.VERTEX, "escape mid-drag cancels the grab, not the mode")
+
+
+func case_motion_without_the_button_held_ends_a_stale_grab() -> void:
+	var box: Node3D = _world.box()
+	var vertex: int = _world.top_vertex(box)
+	_select(box, SlabSelection.Mode.VERTEX)
+	var p0: Vector2 = _world.at_vertex(box, vertex)
+	_session.handle(_world.camera(), _world.click(p0))
+	_session.handle(_world.camera(), _world.drag_to(p0 + Vector2(FAR, 0.0)))
+	var landed: Vector3 = _world.vertex_world(box, vertex)
+
+	_session.handle(_world.camera(), _world.motion(p0 + Vector2(FAR * 2.0, 0.0)))
+
+	expect(_world.vertex_world(box, vertex) == landed, "a motion without the button ends the grab instead of dragging")
+	var again: int = _session.handle(_world.camera(), _world.motion(p0))
+	expect(again == SlabViewport.Verdict.PASS, "and the session is idle again")
+
+
+func _select(solid: Node3D, mode: int) -> void:
+	_host.stub_host_selection([solid])
+	_session.adopt_host_selection()
+	_session.state().mode = mode
+
+
 func _initialize() -> void:
 	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
 		push_error("SlabSolid missing. Build the extension first.")
@@ -243,6 +565,7 @@ func _run_all() -> void:
 		_host = SlabTestHost.over(_world.stage())
 		_session = SlabViewport.new(_host)
 		call(case_name)
+		_world.reset()
 		_ran += 1
 	_world.tear_down()
 	if _fails != 0:

@@ -5,6 +5,7 @@ var _host_selection: Array = []
 var _commands: Array[String] = []
 var _scale: float = 1.0
 var _focused: Node3D = null
+var _undo: Object = null
 
 
 static func over(root: Node):
@@ -42,7 +43,12 @@ func icon(_icon_name: String) -> Texture2D:
 
 
 func undo() -> Object:
-	return null
+	return _undo
+
+
+func stub_undo(recorder: Object):
+	_undo = recorder
+	return self
 
 
 func stub_ui_scale(scale: float):
