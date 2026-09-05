@@ -351,6 +351,24 @@ SLAB_TEST(bevel_retires_the_edge_and_cuts_the_corner_off) {
 	}
 }
 
+SLAB_TEST(bevel_clamps_a_large_amount_to_the_shortest_rail) {
+	const Mesh box = unit_box();
+	std::vector<VertexId> corners;
+	box.face_corners(top_face(box), corners);
+	const EdgeId edge = edge_between(box, corners[0], corners[1]);
+
+	MeshEdit edit(box);
+	expect(ops::bevel(edit, { edge }, 2.0f).ok(), "bevel of an amount past the short rails");
+	Mesh out;
+	const MeshFault committed = std::move(edit).commit(out);
+	expect(committed.ok(), "clamped bevel commit");
+	expect(!out.alive(edge), "clamped bevel still retires the edge");
+	expect_eq(out.face_count(), 7, "clamped bevel still adds one face");
+	expect_eq(out.vertex_count(), 10, "clamped bevel still splits both endpoints");
+	expect(out.signed_volume() < 12.0, "clamped bevel still takes material off");
+	expect(out.signed_volume() > 10.0, "clamped bevel does not eat the whole box");
+}
+
 SLAB_TEST(bevel_rejects_what_it_cannot_seat) {
 	const Mesh box = unit_box();
 	std::vector<VertexId> corners;

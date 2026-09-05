@@ -54,6 +54,34 @@ bool _offset_along(const IVec3 &p_from, const IVec3 &p_to, int32_t p_dist, IVec3
 	return !(r_out == p_from) && !(r_out == p_to);
 }
 
+int32_t _span_cap(const IVec3 &p_from, const IVec3 &p_to) {
+	const float span = (dequantize(p_to) - dequantize(p_from)).length();
+	return int32_t(double(span) * 0.45 * double(LATTICE) + 0.5);
+}
+
+int32_t _face_rail_cap(const Mesh &p_mesh, EdgeId p_edge, FaceId p_face) {
+	std::vector<VertexId> corners;
+	std::vector<EdgeId> edges;
+	p_mesh.face_corners(p_face, corners);
+	p_mesh.face_edges(p_face, edges);
+	const int n = int(corners.size());
+	if (n < 3 || int(edges.size()) != n) {
+		return 0;
+	}
+	int at = -1;
+	for (int k = 0; k < n; k++) {
+		if (edges[k].slot == p_edge.slot) {
+			at = k;
+		}
+	}
+	if (at < 0) {
+		return 0;
+	}
+	const int32_t head = _span_cap(p_mesh.position_i(corners[at]), p_mesh.position_i(corners[(at + n - 1) % n]));
+	const int32_t tail = _span_cap(p_mesh.position_i(corners[(at + 1) % n]), p_mesh.position_i(corners[(at + 2) % n]));
+	return head < tail ? head : tail;
+}
+
 bool _midway_lattice(const IVec3 &p_a, const IVec3 &p_b, IVec3 &r_out) {
 	const int64_t dx = int64_t(p_b.x) - p_a.x;
 	const int64_t dy = int64_t(p_b.y) - p_a.y;
@@ -164,9 +192,21 @@ MeshFault _plan_bevel(const Mesh &p_mesh, EdgeId p_edge, int32_t p_dist, BevelPl
 	r_plan.edge = p_edge;
 	r_plan.u = u;
 	r_plan.v = v;
+	int32_t dist = p_dist;
+	const int32_t left_cap = _face_rail_cap(p_mesh, p_edge, left);
+	const int32_t right_cap = _face_rail_cap(p_mesh, p_edge, right);
+	if (left_cap < dist) {
+		dist = left_cap;
+	}
+	if (right_cap < dist) {
+		dist = right_cap;
+	}
+	if (dist < 2) {
+		return _bad(MeshError::DEGENERATE_FACE, p_edge.slot);
+	}
 	const FaceId faces[2] = { left, right };
 	for (int i = 0; i < 2; i++) {
-		const MeshFault planned = _plan_side(p_mesh, p_edge, faces[i], u, p_dist, r_plan.side[i]);
+		const MeshFault planned = _plan_side(p_mesh, p_edge, faces[i], u, dist, r_plan.side[i]);
 		if (!planned.ok()) {
 			return planned;
 		}
