@@ -4,12 +4,12 @@ export const metadata = { title: "Block out a room" };
 
 # Block out a room
 
-We will turn one box into a taller room volume, then grow a wall. Each step should change what you see in the 3D view.
+We will hollow a box from the top. The box becomes walls, a floor, and an open top. There is no roof.
 
 <Figure
   src="/img/solid-box.png"
-  alt="A blue box solid in an empty 3D view."
-  caption="Object mode, one SlabSolid. This is the starting volume."
+  alt="A closed blue box solid in a 3D view."
+  caption="Object mode, one SlabSolid. The shots use a 4 m by 3 m by 4 m box."
 />
 
 ## Create the first solid
@@ -19,33 +19,52 @@ We will turn one box into a taller room volume, then grow a wall. Each step shou
 3. Press <kbd>1</kbd> to stay in Object mode.
 4. Click **Box**.
 
-A `SlabSolid` named something like Box appears at the origin. The 3D view should show a closed rectangular volume.
+A `SlabSolid` appears at the origin. The default box is 2 m on a side.
 
-## Switch to face mode
+5. Press <kbd>4</kbd>.
+6. Click a side face and drag it out.
+7. Drag an adjacent side the same way. Stop when the floor is about 4 m by 4 m.
+8. Click the top face and drag it up until the box is about 3 m tall.
 
-1. Click the box in the 3D view if it is not selected.
-2. Press <kbd>4</kbd>.
+You should see a closed rectangular volume that matches the shot.
 
-The status line in the panel should read that you are in Face mode with none selected.
-
-## Pull the ceiling
+## Inset the top
 
 1. Click the top face.
-2. Drag upward past a few pixels.
+2. Set **Amount** to 0.45. The default 0.5 also works.
+3. Press <kbd>I</kbd>, or click **Inset**.
 
-The face moves along its normal. Release the mouse. That drag is one undo action.
-
-If you hold Shift and drag instead, Slab extrudes the face. You get a new cap and new side faces. The Amount field is not used for a view drag. Distance comes from the cursor.
+The top face shrinks in place. A rim of new faces appears around it. The inner cap stays selected.
 
 <Figure
-  src="/img/solid-extrude.png"
-  alt="The same box after its top face was pulled up."
-  caption="After a face extrude. The solid is still closed."
+  src="/img/solid-inset.png"
+  alt="The same box after the top face was inset, showing a smaller inner cap and a rim."
+  caption="After Inset. The inner cap stays selected on the top plane."
 />
 
-## Grow a wall
+## Drag the inner face down
 
-1. Click a side face.
-2. Drag it outward, or press <kbd>E</kbd> to extrude by the Amount field. Amount starts at 0.5.
+1. Click the inner cap if it is not selected.
+2. Drag toward the floor. Do not hold Shift. Do not press <kbd>E</kbd>.
 
-You now have a room-shaped volume. Next, [select more than one element](/guide/how-to/select-in-the-view) or [punch a doorway cavity](/guide/how-to/punch-a-cavity).
+A view drag moves the face along its normal. Distance comes from the cursor, not from Amount. Amount cannot go negative, so **Extrude** always pushes the face out.
+
+Release when you can see a floor and four inner walls. That drag is one undo action.
+
+If you hold Shift and drag, Slab extrudes a new loop first, then moves the new cap. You get extra side faces you did not ask for.
+
+<Figure
+  src="/img/solid-room.png"
+  alt="A hollow box with an open top, inner walls, and a floor."
+  caption="Inset, then an inward drag. Open top. No roof."
+/>
+
+## Door and arch
+
+Do not subtract a second box through a side wall. Subtract only commits when the cutter sits wholly inside the host. A cut that crosses the wall is refused. The mesh does not change.
+
+A door is a `SlabSocket` on a `SlabModule`. See [Closed solids](/guide/explanation/closed-solids) and [Punch a cavity](/guide/how-to/punch-a-cavity).
+
+If you want a softer top corner, switch to Edge mode and bevel those edges before you inset. Bevel is one chamfer. It does not add arch segments. After the volume is hollow, bevel on those rim edges is often refused. For an arch, click **Arch** on the panel instead.
+
+Next, [select more than one element](/guide/how-to/select-in-the-view) or [pull a wall](/guide/how-to/pull-a-wall).

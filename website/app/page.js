@@ -26,9 +26,9 @@ export default function Home() {
         </Link>
       </div>
       <Figure
-        src="/img/solid-extrude.png"
-        alt="A blue SlabSolid box with its top face pulled upward."
-        caption="A box after a face extrude. That move is the core loop."
+        src="/img/solid-room.png"
+        alt="A hollow SlabSolid with an open top, inner walls, and a floor."
+        caption="Inset the top, then drag the inner face down. Walls and a floor. No roof."
       />
       <section className="mt-16 grid gap-8 sm:grid-cols-3">
         <div>
