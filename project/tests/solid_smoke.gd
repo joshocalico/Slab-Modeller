@@ -30,9 +30,11 @@ func _init() -> void:
 		_expect(solid.call("is_alive", id), "face id is alive")
 		_expect(PackedVector3Array(solid.call("face_corners", id)).size() == 4, "box face has 4 corners")
 		_expect(PackedInt64Array(solid.call("face_edges", id)).size() == 4, "box face has 4 edges")
+		_expect(PackedInt64Array(solid.call("face_vertices", id)).size() == 4, "box face has 4 vertex ids")
 	for id in edges:
 		_expect(PackedVector3Array(solid.call("edge_endpoints", id)).size() == 2, "edge has 2 endpoints")
 		_expect(PackedInt64Array(solid.call("edge_faces", id)).size() == 2, "edge borders 2 faces")
+		_expect(PackedInt64Array(solid.call("edge_vertices", id)).size() == 2, "edge has 2 vertex ids")
 
 	var top: int = _top_face(solid)
 	_expect(top != 0, "found a top face")
@@ -80,6 +82,15 @@ func _init() -> void:
 
 	var stale := PackedInt64Array([9123456789])
 	_expect(solid.call("extrude_faces", stale, 1.0) != 0, "a stale id is rejected, not crashed on")
+
+	var mover: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(mover)
+	_expect(mover.call("make_box", Vector3(2, 2, 2)) == 0, "move probe box is built")
+	var cap: int = _top_face(mover)
+	var cap_verts: PackedInt64Array = mover.call("face_vertices", cap)
+	var before_y: float = mover.call("face_centroid", cap).y
+	_expect(mover.call("move_vertices", cap_verts, Vector3(0, 1, 0)) == 0, "move_vertices lifts the cap")
+	_expect(absf(float(mover.call("face_centroid", cap).y) - (before_y + 1.0)) < 0.01, "a face move is a vertex delta")
 
 	_finish()
 

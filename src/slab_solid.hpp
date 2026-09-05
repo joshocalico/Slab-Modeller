@@ -52,7 +52,9 @@ public:
 	PackedVector3Array edge_endpoints(int64_t p_edge) const;
 	Vector3 vertex_position(int64_t p_vertex) const;
 	PackedInt64Array face_edges(int64_t p_face) const;
+	PackedInt64Array face_vertices(int64_t p_face) const;
 	PackedInt64Array edge_faces(int64_t p_edge) const;
+	PackedInt64Array edge_vertices(int64_t p_edge) const;
 	Dictionary face_uv(int64_t p_face) const;
 	int face_count() const;
 	int edge_count() const;

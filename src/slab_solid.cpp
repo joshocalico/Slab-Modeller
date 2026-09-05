@@ -47,7 +47,9 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("edge_endpoints", "edge"), &SlabSolid::edge_endpoints);
 	ClassDB::bind_method(D_METHOD("vertex_position", "vertex"), &SlabSolid::vertex_position);
 	ClassDB::bind_method(D_METHOD("face_edges", "face"), &SlabSolid::face_edges);
+	ClassDB::bind_method(D_METHOD("face_vertices", "face"), &SlabSolid::face_vertices);
 	ClassDB::bind_method(D_METHOD("edge_faces", "edge"), &SlabSolid::edge_faces);
+	ClassDB::bind_method(D_METHOD("edge_vertices", "edge"), &SlabSolid::edge_vertices);
 	ClassDB::bind_method(D_METHOD("face_uv", "face"), &SlabSolid::face_uv);
 	ClassDB::bind_method(D_METHOD("face_count"), &SlabSolid::face_count);
 	ClassDB::bind_method(D_METHOD("edge_count"), &SlabSolid::edge_count);
@@ -255,10 +257,35 @@ PackedInt64Array SlabSolid::face_edges(int64_t p_face) const {
 	return out;
 }
 
+PackedInt64Array SlabSolid::face_vertices(int64_t p_face) const {
+	std::vector<slab::VertexId> ids;
+	live_mesh.face_corners(slab::unpack_face(p_face), ids);
+	PackedInt64Array out;
+	out.resize(int64_t(ids.size()));
+	for (int64_t i = 0; i < out.size(); i++) {
+		out.set(i, slab::pack(ids[size_t(i)]));
+	}
+	return out;
+}
+
 PackedInt64Array SlabSolid::edge_faces(int64_t p_edge) const {
 	slab::FaceId a;
 	slab::FaceId b;
 	live_mesh.edge_faces(slab::unpack_edge(p_edge), a, b);
+	PackedInt64Array out;
+	if (live_mesh.alive(a)) {
+		out.push_back(slab::pack(a));
+	}
+	if (live_mesh.alive(b)) {
+		out.push_back(slab::pack(b));
+	}
+	return out;
+}
+
+PackedInt64Array SlabSolid::edge_vertices(int64_t p_edge) const {
+	slab::VertexId a;
+	slab::VertexId b;
+	live_mesh.edge_vertices(slab::unpack_edge(p_edge), a, b);
 	PackedInt64Array out;
 	if (live_mesh.alive(a)) {
 		out.push_back(slab::pack(a));
