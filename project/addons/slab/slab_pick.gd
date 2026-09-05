@@ -13,7 +13,7 @@ const POSITION_QUERY: Dictionary = {
 }
 
 
-static func pick(solid: Node3D, mode: int, camera: Camera3D, screen: Vector2) -> int:
+static func pick(solid: Node3D, mode: int, camera: Camera3D, screen: Vector2, radius: float = BASE_RADIUS) -> int:
 	if solid == null or camera == null or not POSITION_QUERY.has(mode):
 		return 0
 	var list := SlabTopology.query_for(mode)
@@ -22,8 +22,8 @@ static func pick(solid: Node3D, mode: int, camera: Camera3D, screen: Vector2) ->
 	if mode == SlabSelection.Mode.FACE:
 		return _pick_face(solid, camera, screen)
 	if mode == SlabSelection.Mode.EDGE:
-		return _pick_edge(solid, camera, screen)
-	return _pick_vertex(solid, camera, screen)
+		return _pick_edge(solid, camera, screen, radius)
+	return _pick_vertex(solid, camera, screen, radius)
 
 
 static func pick_solid(root: Node, camera: Camera3D, screen: Vector2) -> Node3D:
@@ -79,9 +79,9 @@ static func _ray_depth(solid: Node3D, origin: Vector3, direction: Vector3) -> fl
 	return best
 
 
-static func _pick_vertex(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:
+static func _pick_vertex(solid: Node3D, camera: Camera3D, screen: Vector2, radius: float) -> int:
 	var best: int = 0
-	var best_score: float = _radius()
+	var best_score: float = radius
 	for id in solid.get_vertices():
 		var world: Vector3 = solid.to_global(solid.vertex_position(id))
 		if camera.is_position_behind(world):
@@ -93,9 +93,9 @@ static func _pick_vertex(solid: Node3D, camera: Camera3D, screen: Vector2) -> in
 	return best
 
 
-static func _pick_edge(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:
+static func _pick_edge(solid: Node3D, camera: Camera3D, screen: Vector2, radius: float) -> int:
 	var best: int = 0
-	var best_score: float = _radius()
+	var best_score: float = radius
 	for id in solid.get_edges():
 		var ends: PackedVector3Array = solid.edge_endpoints(id)
 		var a_world: Vector3 = solid.to_global(ends[0])
@@ -147,10 +147,3 @@ static func _screen_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> 
 		return point.distance_to(a)
 	var t: float = clampf((point - a).dot(ab) / length_sq, 0.0, 1.0)
 	return point.distance_to(a + ab * t)
-
-
-static func _radius() -> float:
-	var scale: float = 1.0
-	if Engine.is_editor_hint():
-		scale = EditorInterface.get_editor_scale()
-	return BASE_RADIUS * maxf(scale, 1.0)

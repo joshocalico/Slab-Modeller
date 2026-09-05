@@ -15,14 +15,16 @@ const ACCENT := Color(0.86, 0.72, 0.34)
 
 var _selection: RefCounted
 var _actions: RefCounted
+var _metrics: RefCounted
 var _status: Label
 var _buttons: Dictionary = {}
 var _grids: Array[GridContainer] = []
 
 
-func setup(selection: RefCounted, actions: RefCounted) -> void:
+func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
 	_selection = selection
 	_actions = actions
+	_metrics = metrics if metrics != null else preload("res://addons/slab/slab_metrics.gd").at_scale(1.0)
 	name = "Slab"
 	custom_minimum_size = Vector2(0.0, _scaled(PANEL_HEIGHT))
 	add_theme_constant_override("separation", 6)
@@ -39,11 +41,11 @@ func setup(selection: RefCounted, actions: RefCounted) -> void:
 
 
 func _scaled(value: float) -> float:
-	return value * EditorInterface.get_editor_scale()
+	return _metrics.px(value)
 
 
 func _font(px: int) -> int:
-	return maxi(12, int(round(_scaled(float(px)))))
+	return _metrics.font(px)
 
 
 func _fit_columns() -> void:
@@ -77,7 +79,7 @@ func _header() -> Control:
 	row.add_child(title)
 	var strip := SlabModeStrip.new()
 	row.add_child(strip)
-	strip.setup(_selection, true)
+	strip.setup(_selection, true, _metrics)
 	row.add_child(_status)
 	return row
 

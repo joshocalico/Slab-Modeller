@@ -6,48 +6,53 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPanel := preload("res://addons/slab/slab_panel.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
-const SlabPick := preload("res://addons/slab/slab_pick.gd")
 const SlabSweepScript := preload("res://addons/slab/slab_sweep.gd")
+const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
+const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
 const SweepGizmo := preload("res://addons/slab/gizmos/slab_sweep_gizmo.gd")
 
+var _host: RefCounted
+var _session: RefCounted
 var _selection: RefCounted
 var _actions: RefCounted
 var _panel: Control
 var _strip: Control
 var _gizmos: Array = []
-var _gizmo_nodes: Array[Node3D] = []
 
 
 func _enter_tree() -> void:
 	set_input_event_forwarding_always_enabled()
-	_selection = SlabSelection.new()
+	_host = SlabEditorHostLive.with_undo(get_undo_redo())
+	_session = SlabViewport.new(_host)
+	_selection = _session.state()
 	_actions = SlabActions.new(_selection, get_undo_redo())
+	_session.bind_actions(_actions)
 	_add_gizmos()
 	add_custom_type("SlabSweep", "Node3D", SlabSweepScript, SlabIcons.texture("Curve3D"))
 
+	var metrics: RefCounted = _session.metrics()
 	_panel = SlabPanel.new()
-	_panel.setup(_selection, _actions)
+	_panel.setup(_selection, _actions, metrics)
 	add_control_to_bottom_panel(_panel, "Slab")
 	make_bottom_panel_item_visible(_panel)
 
 	_strip = SlabModeStrip.new()
-	_strip.setup(_selection, false)
+	_strip.setup(_selection, false, metrics)
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, _strip)
 
-	EditorInterface.get_selection().selection_changed.connect(_sync_selection)
+	_host.connect_host_selection(_on_editor_selection_changed)
 	_selection.changed.connect(_refresh_gizmos)
 	_selection.hover_changed.connect(_refresh_gizmos)
-	_sync_selection()
+	_on_editor_selection_changed()
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
 
 func _exit_tree() -> void:
-	var editor_selection := EditorInterface.get_selection()
-	if editor_selection and editor_selection.selection_changed.is_connected(_sync_selection):
-		editor_selection.selection_changed.disconnect(_sync_selection)
+	if _host:
+		_host.disconnect_host_selection(_on_editor_selection_changed)
 	if _selection:
 		if _selection.changed.is_connected(_refresh_gizmos):
 			_selection.changed.disconnect(_refresh_gizmos)
@@ -67,6 +72,8 @@ func _exit_tree() -> void:
 	_gizmos.clear()
 	_actions = null
 	_selection = null
+	_session = null
+	_host = null
 
 
 func _handles(object: Object) -> bool:
@@ -74,97 +81,26 @@ func _handles(object: Object) -> bool:
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
-	if _selection == null:
+	if _session == null:
 		return AFTER_GUI_INPUT_PASS
-	if event is InputEventMouseMotion:
-		_on_hover(viewport_camera, event.position)
-		return AFTER_GUI_INPUT_PASS
-	if event is InputEventKey and event.pressed and not event.echo:
-		return _on_key(event)
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		return _on_click(viewport_camera, event)
-	return AFTER_GUI_INPUT_PASS
+	var verdict: int = _session.handle(viewport_camera, event)
+	_refresh_gizmos()
+	return SlabViewport.after_gui_input(verdict)
 
 
-func _on_key(event: InputEventKey) -> int:
-	if event.ctrl_pressed or event.meta_pressed:
-		return AFTER_GUI_INPUT_PASS
-	if event.keycode == KEY_ESCAPE:
-		_selection.mode = SlabSelection.Mode.OBJECT
-		return AFTER_GUI_INPUT_STOP
-	var mode: int = SlabModeStrip.mode_for_keycode(event.keycode)
-	if mode != -1:
-		_selection.mode = mode
-		return AFTER_GUI_INPUT_STOP
-	if event.alt_pressed:
-		return AFTER_GUI_INPUT_PASS
-	if _actions.run_shortcut(event.keycode):
-		return AFTER_GUI_INPUT_STOP
-	return AFTER_GUI_INPUT_PASS
-
-
-func _on_hover(camera: Camera3D, screen: Vector2) -> void:
-	var hit: Node3D = SlabPick.pick_solid(EditorInterface.get_edited_scene_root(), camera, screen)
-	if hit == null or _selection.mode == SlabSelection.Mode.OBJECT:
-		_selection.set_hover(hit, 0)
+func _on_editor_selection_changed() -> void:
+	if _session == null:
 		return
-	_selection.set_hover(hit, SlabPick.pick(hit, _selection.mode, camera, screen))
-
-
-func _on_click(camera: Camera3D, event: InputEventMouseButton) -> int:
-	var additive: bool = event.shift_pressed or event.ctrl_pressed or event.meta_pressed
-	var hit: Node3D = SlabPick.pick_solid(EditorInterface.get_edited_scene_root(), camera, event.position)
-	if _selection.mode == SlabSelection.Mode.OBJECT:
-		if hit == null:
-			return AFTER_GUI_INPUT_PASS
-		_select_in_editor(hit, additive)
-		return AFTER_GUI_INPUT_STOP
-	if hit == null:
-		if not additive:
-			_selection.clear_ids()
-		return AFTER_GUI_INPUT_STOP if _selection.solid != null else AFTER_GUI_INPUT_PASS
-	_select_in_editor(hit, false)
-	var id: int = SlabPick.pick(hit, _selection.mode, camera, event.position)
-	if id == 0:
-		if not additive:
-			_selection.clear_ids()
-		return AFTER_GUI_INPUT_STOP
-	_selection.toggle_id(id, additive)
-	return AFTER_GUI_INPUT_STOP
-
-
-func _select_in_editor(solid: Node3D, additive: bool) -> void:
-	var editor_selection := EditorInterface.get_selection()
-	if not additive:
-		if _selection.objects.size() == 1 and _selection.objects[0] == solid:
-			EditorInterface.edit_node(solid)
-			return
-		editor_selection.clear()
-	editor_selection.add_node(solid)
-	EditorInterface.edit_node(solid)
-
-
-func _sync_selection() -> void:
-	_selection.set_objects(EditorInterface.get_selection().get_selected_nodes())
+	_session.adopt_host_selection()
+	_refresh_gizmos()
 
 
 func _refresh_gizmos() -> void:
-	var seen: Dictionary = {}
-	var next: Array[Node3D] = []
-	for node in _selection.objects:
-		_touch_gizmo(node, seen, next)
-	_touch_gizmo(_selection.hover_solid, seen, next)
-	for node in _gizmo_nodes:
-		_touch_gizmo(node, seen, next)
-	_gizmo_nodes = next
-
-
-func _touch_gizmo(node: Node3D, seen: Dictionary, next: Array[Node3D]) -> void:
-	if node == null or not is_instance_valid(node) or seen.has(node):
+	if _session == null:
 		return
-	seen[node] = true
-	next.append(node)
-	node.update_gizmos()
+	for node in _session.gizmo_targets():
+		if is_instance_valid(node):
+			node.update_gizmos()
 
 
 func _add_gizmos() -> void:

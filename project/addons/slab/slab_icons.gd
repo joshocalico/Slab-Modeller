@@ -5,6 +5,8 @@ const FALLBACK := "Node3D"
 
 
 static func texture(name: String) -> Texture2D:
+	if not Engine.is_editor_hint():
+		return null
 	var base := EditorInterface.get_base_control()
 	if base == null:
 		return null

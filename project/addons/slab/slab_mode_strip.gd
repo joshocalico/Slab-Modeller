@@ -25,7 +25,10 @@ const MODE_HINTS: Dictionary = {
 	SlabSelection.Mode.FACE: "Select faces. Extrude, inset and texture them.",
 }
 
+const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
+
 var _selection: RefCounted
+var _metrics: RefCounted
 var _buttons: Dictionary = {}
 
 
@@ -40,8 +43,9 @@ static func mode_for_keycode(keycode: int) -> int:
 	return -1
 
 
-func setup(selection: RefCounted, with_labels: bool) -> void:
+func setup(selection: RefCounted, with_labels: bool, metrics: RefCounted = null) -> void:
 	_selection = selection
+	_metrics = metrics if metrics != null else SlabMetrics.at_scale(1.0)
 	add_theme_constant_override("separation", 2)
 	var group := ButtonGroup.new()
 	for mode in SlabSelection.MODE_LABELS:
@@ -57,7 +61,6 @@ func refresh() -> void:
 
 
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
-	var scale: float = EditorInterface.get_editor_scale()
 	var button := Button.new()
 	button.icon = SlabIcons.texture(MODE_ICONS[mode])
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
@@ -65,8 +68,9 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.toggle_mode = true
 	button.button_group = group
 	button.focus_mode = Control.FOCUS_NONE
-	button.custom_minimum_size = Vector2((100.0 if with_label else 40.0) * scale, 36.0 * scale)
-	button.add_theme_font_size_override("font_size", maxi(14, int(round(15.0 * scale))))
+	button.set_meta("slab_mode", mode)
+	button.custom_minimum_size = Vector2(_metrics.px(100.0 if with_label else 40.0), _metrics.px(36.0))
+	button.add_theme_font_size_override("font_size", _metrics.font(15))
 	button.pressed.connect(func() -> void: _selection.mode = mode)
 	_buttons[mode] = button
 	return button
