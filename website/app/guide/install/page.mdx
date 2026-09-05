@@ -1,0 +1,33 @@
+export const metadata = { title: "Install Slab" };
+
+# Install Slab
+
+Build the GDExtension, then open the Godot project that already enables the plugin.
+
+## What you need
+
+- Godot 4.7
+- A C++ toolchain that can run `scons`
+- Git, so you can fetch `godot-cpp`
+
+## Build
+
+From the repository root:
+
+```bash
+git submodule update --init --recursive
+scons target=template_debug
+scripts/slab-verify
+```
+
+`scripts/slab-verify` builds the extension, runs the kernel tests, and loads the plugin in Godot.
+
+## Open the editor
+
+1. Open `project/` in Godot 4.7.
+2. Confirm **Project → Project Settings → Plugins** lists Slab as enabled.
+3. Open `demo/demo.tscn` if the 3D view is empty.
+
+The Slab bottom panel should appear. The spatial editor menu should show the Object, Vertex, Edge, and Face strip.
+
+If Godot reports that `SlabSolid` is missing, the extension did not build. Run `scons target=template_debug` again and restart the editor.

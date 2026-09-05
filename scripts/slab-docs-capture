@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+out="${root}/website/public/img"
+mkdir -p "${out}"
+SLAB_DOCS_ASSETS="${out}" "${root}/scripts/godot" --path "${root}/project" --resolution 1280x720 --script res://tools/docs_capture.gd
+test -f "${out}/solid-box.png"
+test -f "${out}/solid-extrude.png"
+test -f "${out}/solid-pair.png"
+test -f "${out}/panel.png"
+echo "wrote ${out}"

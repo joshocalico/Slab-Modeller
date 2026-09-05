@@ -1,0 +1,35 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Punch a cavity" };
+
+# Punch a cavity
+
+Use this when you need a hole that stays a closed solid, such as a room inside a block.
+
+## Build a host and a cutter
+
+1. Press <kbd>1</kbd> for Object mode.
+2. Click **Box** to create the host.
+3. Click **Box** again, then move the second solid so it sits wholly inside the first. Scale it down in the inspector if you need a smaller cutter.
+
+<Figure
+  src="/img/solid-pair.png"
+  alt="A blue host box beside a smaller orange cutter box."
+  caption="Two solids. Subtract uses the first selected as the host and the second as the cutter."
+/>
+
+The shot shows the two volumes side by side so you can tell them apart. For a cavity, move the orange box inside the blue one before you subtract.
+
+## Subtract
+
+1. Click the host.
+2. Shift-click the cutter so both are in the editor selection. The host must stay first.
+3. Click **Subtract** on the Slab panel.
+
+The cutter is removed from the host. The result should still be watertight. You can hide or delete the cutter node afterward.
+
+If Slab refuses the op, the cutter overlaps the host surface. Move it fully inside and try again. Overlapping clip is not supported yet.
+
+## Doors
+
+Do not subtract a hole through a wall to make a door. Place a `SlabSocket` for an opening. See [Closed solids](/guide/explanation/closed-solids).

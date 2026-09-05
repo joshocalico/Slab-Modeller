@@ -1,0 +1,39 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "The Slab panel" };
+
+# The Slab panel
+
+The panel is the bottom dock named **Slab**. Buttons disable when the mode or selection count does not match. The tooltip then states the missing requirement.
+
+<Figure
+  src="/img/panel.png"
+  alt="The Slab panel showing modes, numeric fields, and command buttons."
+  caption="Face mode, no solid selected. Create buttons stay available. Edit buttons wait for a selection."
+/>
+
+## Fields
+
+| Field | Role |
+| --- | --- |
+| Amount | Distance for extrude, inset, bevel, and weld. Default 0.5. |
+| UV scale X, UV scale Y | Written by Apply UV. |
+| UV offset X, UV offset Y | Written by Apply UV. |
+| UV rotation | Degrees on the panel. The solid stores radians. |
+| Material slot | Integer 0 to 31 for Set Material. |
+
+## Sections
+
+**Create** is Object mode with nothing required. Box, Plane, Stair (8 steps), Cylinder (16 sides), Arch (8 segments), Poly Shape, and Curve Sweep.
+
+**Object** needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. Subtract cuts `objects[1]` out of `objects[0]`. Mirror X, Y, Z, Center Pivot, Snap To Grid, and Bake Module need one. Bake writes `res://baked_<name>.tres`.
+
+**Vertex** Weld, Collapse, Connect. Collapse and Connect need two vertices. Weld uses Amount as the merge radius.
+
+**Edge** Bevel, Bridge, Connect, Insert Loop, Dissolve. Bridge and Connect need two edges. Insert Loop splits across the first selected edge at t 0.5.
+
+**Face** Extrude, Inset, Delete, Flip Normals, Subdivide, Merge, Set Material, Apply UV, UV Larger, UV Smaller, UV Rotate, UV Reset.
+
+**Selection** Select All, Select None, Invert, Grow. Select Loop and Select Ring are Edge mode.
+
+The header status line repeats the selection, for example `Box, 1 face.`

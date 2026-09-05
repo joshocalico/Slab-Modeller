@@ -1,0 +1,43 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Select in the 3D view" };
+
+# Select in the 3D view
+
+Use this when a solid is in the scene and you need to pick objects or mesh elements.
+
+## Switch mode
+
+Press <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, or <kbd>4</kbd> for Object, Vertex, Edge, or Face. The strip in the spatial editor menu and the strip in the Slab panel stay in sync. Changing mode clears the element selection.
+
+<Figure
+  src="/img/panel.png"
+  alt="The Slab bottom panel with Face mode selected."
+  caption="Face mode on the panel. The strip is the same one in the 3D editor menu."
+/>
+
+## Click to select
+
+Click a solid in the 3D view. In Object mode that focuses the node. In Vertex, Edge, or Face mode the click also picks the nearest element under the cursor.
+
+Shift, Ctrl, or Cmd click adds or removes that element. A double-click on an edge selects the edge loop.
+
+A, Grow, Invert, and Select Loop on the panel also change the set. Those buttons follow the current mode.
+
+## Drag the selection
+
+Click without moving the mouse still selects. Motion under 6 pixels is still a click. Past that, Slab claims the drag so the viewport cannot orbit.
+
+- A vertex or edge moves in the camera plane.
+- A face moves along its normal.
+- Shift-drag on a face extrudes first, then moves the new cap.
+
+Release ends the grab. The next drag starts from the new positions. Escape during a drag restores the mesh and keeps the mode.
+
+## Keep a multi-selection when you move
+
+A plain click replaces the element set with the item under the cursor. Shift-click to add faces, then Shift-drag if you want to keep that set. Shift-drag on faces also extrudes.
+
+Shift-drag on vertices or edges moves the whole set. Shift does not change those move plans.
+
+Element selection stays on one solid. Object mode can add solids to the editor selection with Shift click.

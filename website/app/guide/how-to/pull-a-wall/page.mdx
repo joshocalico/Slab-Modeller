@@ -1,0 +1,37 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Pull a wall" };
+
+# Pull a wall
+
+Use this when a face is already there and you want it farther out.
+
+## Drag in the view
+
+1. Press <kbd>4</kbd> for Face mode.
+2. Click the face.
+3. Drag along the direction you want the wall to travel.
+
+The face follows the cursor along its normal. Sub-pixel motion under 6 pixels does not move geometry.
+
+<Figure
+  src="/img/solid-extrude.png"
+  alt="A box whose top face has been pulled outward."
+  caption="A pulled face. The solid stays closed."
+/>
+
+## Extrude by a typed amount
+
+1. Set **Amount** on the panel.
+2. Select one or more faces.
+3. Press <kbd>E</kbd> or click **Extrude**.
+
+The cap moves by Amount, not by mouse travel.
+
+## Extrude by dragging
+
+Hold Shift, click a face, and drag past the threshold. Slab extrudes once at the start of the drag, then moves the new cap with the cursor. The original ring stays as the base.
+
+## Inset instead of pull
+
+Select the face and press <kbd>I</kbd>. Inset shrinks a copy of the face on the same plane. Amount is the inset depth.

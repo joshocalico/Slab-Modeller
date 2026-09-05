@@ -1,0 +1,48 @@
+export const metadata = { title: "Keys and modes" };
+
+# Keys and modes
+
+Mode keys fire even when nothing is selected. They stop in the 3D view so Godot does not treat them as numpad emulation.
+
+## Modes
+
+| Key | Mode | What a click does |
+| --- | --- | --- |
+| <kbd>1</kbd> | Object | Focus a `SlabSolid`. Drag does not move vertices. |
+| <kbd>2</kbd> | Vertex | Pick a vertex. Drag moves it in the camera plane. |
+| <kbd>3</kbd> | Edge | Pick an edge. Drag moves both endpoints in the camera plane. Double-click selects the edge loop. |
+| <kbd>4</kbd> | Face | Pick a face. Drag moves it along the face normal. Shift-drag extrudes. |
+| <kbd>Escape</kbd> | Object | Leaves element mode. During a drag, Escape cancels the grab and does not change mode. |
+
+## View
+
+| Input | Result |
+| --- | --- |
+| Click | Select. Shift, Ctrl, or Cmd toggles. |
+| Drag past 6 pixels | Move the grab. The view cannot orbit until release. |
+| Hover with no buttons | Pass. Orbit still works. |
+| Miss in element mode with a solid selected | Clear element ids. Keep the solid. |
+
+## Panel shortcuts
+
+These run only when the current mode and selection count match the command.
+
+| Key | Command | Mode |
+| --- | --- | --- |
+| <kbd>A</kbd> | Select All | Vertex, Edge, Face |
+| <kbd>D</kbd> | Select None | Vertex, Edge, Face |
+| <kbd>E</kbd> | Extrude | Face |
+| <kbd>I</kbd> | Inset | Face |
+| <kbd>B</kbd> | Bevel | Edge |
+| <kbd>L</kbd> | Insert Loop | Edge |
+| <kbd>X</kbd> | Dissolve | Edge |
+| <kbd>G</kbd> | Bridge | Edge |
+| <kbd>K</kbd> | Connect | Vertex or Edge |
+| <kbd>J</kbd> | Weld | Vertex |
+| <kbd>Y</kbd> | Collapse | Vertex |
+| <kbd>U</kbd> | Subdivide | Face |
+| <kbd>M</kbd> | Merge | Face |
+| <kbd>N</kbd> | Flip Normals | Face |
+| <kbd>Delete</kbd> | Delete | Face |
+
+<kbd>A</kbd> through those keys are ignored when Ctrl or Cmd is held, so editor chords still pass through.

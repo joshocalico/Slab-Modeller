@@ -6,7 +6,15 @@ Godot 4.5+ editor plugin. Geometry is a GDExtension (`SlabSolid`, `SlabSocket`, 
 
 ## How to use it
 
-Open `project/` in Godot 4.7. The Slab bottom panel is the editor. Create a box from that panel. Then:
+Open `project/` in Godot 4.7. The Slab bottom panel is the editor. The full manual is the Next.js app in `website/`:
+
+```bash
+cd website
+npm install
+npm run dev
+```
+
+Create a box from that panel. Then:
 
 | Key | Action |
 |---|---|

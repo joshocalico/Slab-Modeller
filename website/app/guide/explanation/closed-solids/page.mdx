@@ -1,0 +1,15 @@
+export const metadata = { title: "Closed solids" };
+
+# Closed solids
+
+Slab stores a watertight half-edge mesh on `SlabSolid`. A wall is a thin box with two sides, a thickness, and a volume. It is not a single quad floating in space.
+
+That choice keeps later ops legal. Extrude, inset, boolean, and bake all assume every edge has a twin. A one-sided sheet would fail those checks.
+
+## Openings
+
+A door is a `SlabSocket` on a `SlabModule`, not a boolean cut through a wall. Subtract is for a cavity that stays enclosed, such as a room inside a block. If the cutter crosses the host surface, the kernel refuses the edit rather than emit a hole it cannot close.
+
+## Why the view grab stays on one solid
+
+The 3D click path picks one `SlabSolid`, then an element on that mesh. Faces on two nodes are two meshes. Boolean is the op that combines them. Until you subtract or union, each solid keeps its own vertex ids.
