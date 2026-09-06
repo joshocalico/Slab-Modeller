@@ -4,12 +4,12 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. A button disables when the mode or the selection count does not match. The tooltip then states the missing requirement.
+The panel is the bottom dock named **Slab**. It shows the command groups for the current mode. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. A button disables when the selection count is too small. The tooltip then states the missing requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel showing modes, numeric fields, and command buttons."
-  caption="Face mode, no solid selected. Create buttons stay available. Edit buttons wait for a selection."
+  alt="The Slab panel showing modes, numeric fields, and the Face and Selection command buttons."
+  caption="Face mode, no solid selected. Face and Selection are the only groups shown. Their buttons wait for a selection."
 />
 
 The header status line repeats the selection, for example `Box, 1 face.`
@@ -28,7 +28,7 @@ The top row. These shape the next edit, not an existing solid's recipe.
 
 ## Create fields
 
-Under the Create heading, above those buttons. They shape the next click. Changing one never rewrites a solid that already exists.
+Under the Create heading, above those buttons, in Object mode only. They shape the next click. Changing one never rewrites a solid that already exists.
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
@@ -90,6 +90,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | Connect | 2 edges | Cuts a new edge between edge midpoints. |
 | Insert Loop | 1 edge | Splits across the first selected edge at t 0.5. |
 | Dissolve | 1 edge | Removes the edge and merges its faces. |
+| Select Loop | 1 edge | Follows the edge loop around the solid. |
+| Select Ring | 1 edge | Follows the parallel edges across quads. |
 
 ## Face
 
@@ -110,7 +112,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 ## Selection
 
-Select All, Select None, Invert, and Grow run in Vertex, Edge, or Face mode. Select Loop and Select Ring are Edge mode.
+Shown in Vertex, Edge, and Face mode. Each button works on the current mode's elements.
 
 | Button | Result |
 | --- | --- |
@@ -118,5 +120,3 @@ Select All, Select None, Invert, and Grow run in Vertex, Edge, or Face mode. Sel
 | Select None | Clears the element selection. |
 | Invert | Swaps selected elements for unselected ones. |
 | Grow | Adds the neighbours of the selection. |
-| Select Loop | Follows the edge loop around the solid. |
-| Select Ring | Follows the parallel edges across quads. |
