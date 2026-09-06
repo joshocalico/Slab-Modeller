@@ -1,0 +1,62 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Texture a room" };
+
+# Texture a room
+
+We will put a material on a room solid and scale the UVs so the floor does not look like a stretched sticker. The solid stays closed. The gray prototype colour goes away.
+
+If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-a-room) first.
+
+## Leave the prototype colour
+
+1. Click the room `SlabSolid` in the Scene tree.
+2. In the inspector, find **Material**.
+3. Click the empty slot. Choose **New StandardMaterial3D**.
+4. Open that material. Set **Albedo** to a colour that is not gray. A warm floor brown is enough.
+
+The mesh should leave the default prototype gray. That colour only shows when **Material** is empty.
+
+## Give the albedo a pattern
+
+A flat colour still looks like a graybox with a tint. Give the material a repeating albedo.
+
+1. Keep the `StandardMaterial3D` selected.
+2. Under **Albedo**, assign a texture. A checker, a floor tile, or Godot's `icon.svg` all work. The point is a pattern you can see tiling.
+3. Set **UV1** **Scale** on the material to `1, 1, 1` if you changed it. Face UVs on the solid, not this inspector field, will do the real scaling.
+
+You should see the pattern on every face, probably too big or too small.
+
+## Scale the floor
+
+1. Press <kbd>4</kbd> for Face mode.
+2. Click the floor face.
+3. Set **UV scale X** and **UV scale Y** on the Slab panel to `2`.
+4. Hover the Face icons until you see **Apply UV**. Click it.
+
+The pattern on the floor should tighten. If it is still huge, hover until you see **UV Larger** and click it. **UV Larger** doubles the scale on the selected faces and applies it. The top-row spins follow.
+
+<Figure
+  src="/img/panel.png"
+  alt="The Slab panel in Face mode, with Face and Selection icon rows."
+  caption="Face mode. Apply UV, UV Larger, UV Smaller, UV Rotate, and UV Reset sit on the Face row."
+/>
+
+## Fix a wall that runs the wrong way
+
+1. Click a wall face.
+2. Hover until you see **UV Rotate**. Click it.
+
+The pattern turns 90 degrees on that face. Click again if it is still sideways. **UV Reset** returns that face to scale one and no rotation.
+
+Offset is the UV offset X and Y fields, then **Apply UV**. Use it when a tile seam sits on a doorway.
+
+## What Set Material does
+
+**Material slot** is an integer 0 to 31. **Set Material** writes that number onto the selected faces. The solid still draws one inspector material. The slot is stored on the face for later grouping. It does not pick a second texture yet.
+
+To use two looks today, use two solids. A trim piece can be a second `SlabSolid` with its own material.
+
+## Check
+
+Orbit the room. The floor pattern should be tighter than the walls if you only scaled the floor. The volume should still be closed. Undo still steps back through the UV writes.

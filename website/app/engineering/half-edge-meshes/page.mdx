@@ -1,0 +1,27 @@
+export const metadata = { title: "Half-edge meshes" };
+
+# Half-edge meshes
+
+Slab keeps a watertight volume on each `SlabSolid`. Every edge has a twin. Walk a face, then hop the twin, and you are on the neighbour. Extrude, inset, bevel, and boolean all assume that hop exists.
+
+A triangle list does not give you that hop. You can draw it. You cannot ask "which face is across this edge" without building the adjacency again.
+
+## Why half-edge, not winged-edge
+
+Winged-edge stores more pointers per edge and grew up around manifold polyhedra for CAD. Half-edge splits each undirected edge into two directed records. The split is cheaper to walk in code, and it is the form most mesh libraries still ship.
+
+Guibas and Stolfi set down the primitives as a quad-edge algebra. Slab does not implement quad-edge. It uses the same idea: an edge record knows its origin, its next edge around the face, and its twin.
+
+Baumgart's winged-edge paper is the older computer-vision source. Weiler later compared edge-based schemes for solid modelling. Those three are enough if you want the data structure without reading a graphics textbook.
+
+## What Slab stores on a face
+
+Each face carries a UV scale, offset, rotation, a projection axis, and a material slot. The slot is an integer 0 to 31. The emitted mesh is still one surface today. The slot is data on the face, not a second material in the inspector.
+
+The click path picks one solid, then an element on that mesh. Two nodes are two meshes until you boolean them. See [Closed solids](/guide/explanation/closed-solids) for the product rule.
+
+## Papers
+
+- Leonidas Guibas and Jorge Stolfi. Primitives for the manipulation of general subdivisions and the computation of Voronoi diagrams. *ACM Transactions on Graphics*, 4(2), 1985. [doi:10.1145/282918.282923](https://doi.org/10.1145/282918.282923)
+- Bruce G. Baumgart. A polyhedron representation for computer vision. *Proceedings of the National Computer Conference*, 1975. [doi:10.1145/1499949.1500071](https://doi.org/10.1145/1499949.1500071)
+- Kevin Weiler. Edge-based data structures for solid modeling in curved-surface environments. *IEEE Computer Graphics and Applications*, 5(1), 1985. [doi:10.1109/MCG.1985.276271](https://doi.org/10.1109/MCG.1985.276271)

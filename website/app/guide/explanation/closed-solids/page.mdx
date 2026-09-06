@@ -15,3 +15,5 @@ A `SlabSocket` is a named opening on a `SlabModule`. It does not cut the mesh. K
 ## Why a click stays on one solid
 
 The 3D click path picks one `SlabSolid`, then an element on that mesh. Faces on two nodes are two meshes. Boolean is the op that combines them. Until you subtract or union, each solid keeps its own vertex ids.
+
+The mesh is a half-edge. The papers live in [Engineering notes](/engineering), off this guide.

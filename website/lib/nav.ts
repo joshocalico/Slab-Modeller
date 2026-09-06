@@ -8,7 +8,7 @@ export type NavGroup = {
   items: NavItem[];
 };
 
-export const NAV: NavGroup[] = [
+export const GUIDE_NAV: NavGroup[] = [
   {
     title: "Start",
     items: [
@@ -22,6 +22,10 @@ export const NAV: NavGroup[] = [
       {
         href: "/guide/tutorials/block-out-a-room",
         label: "Block out a room",
+      },
+      {
+        href: "/guide/tutorials/texture-a-room",
+        label: "Texture a room",
       },
     ],
   },
@@ -51,6 +55,17 @@ export const NAV: NavGroup[] = [
     title: "Explanation",
     items: [
       { href: "/guide/explanation/closed-solids", label: "Closed solids" },
+    ],
+  },
+];
+
+export const ENGINEERING_NAV: NavGroup[] = [
+  {
+    title: "Engineering",
+    items: [
+      { href: "/engineering", label: "This section" },
+      { href: "/engineering/half-edge-meshes", label: "Half-edge meshes" },
+      { href: "/engineering/mesh-booleans", label: "Mesh booleans" },
     ],
   },
 ];

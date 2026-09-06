@@ -2,16 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV } from "@/lib/nav";
+import { SiteMark } from "@/components/SiteMark";
+import type { NavGroup } from "@/lib/nav";
 
-export function GuideNav() {
+export function SideNav({
+  groups,
+  label,
+  otherHref,
+  otherLabel,
+}: {
+  groups: NavGroup[];
+  label: string;
+  otherHref: string;
+  otherLabel: string;
+}) {
   const path = usePathname();
   return (
-    <nav className="guide-nav" aria-label="Guide">
-      <Link className="guide-nav-home" href="/">
-        Slab
-      </Link>
-      {NAV.map((group) => (
+    <nav className="guide-nav" aria-label={label}>
+      <SiteMark />
+      {groups.map((group) => (
         <section key={group.title}>
           <h2>{group.title}</h2>
           <ul>
@@ -28,6 +37,9 @@ export function GuideNav() {
           </ul>
         </section>
       ))}
+      <p className="guide-nav-other">
+        <Link href={otherHref}>{otherLabel}</Link>
+      </p>
     </nav>
   );
 }

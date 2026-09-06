@@ -1,0 +1,24 @@
+export const metadata = { title: "Mesh booleans" };
+
+# Mesh booleans
+
+Godot CSG is a live node tree. `CSGBox3D` under `CSGCombiner3D` rebuilds a mesh from the inspector. That is a different job from clicking two `SlabSolid` nodes and subtracting.
+
+Slab's Subtract, Union, and Intersect run on two closed half-edge meshes. The first selected solid is the host. The second is the cutter. The result has to stay a volume. If the op would leave a sheet, a hole that does not punch through, or a disjoint leftover, Slab reports a fault and keeps the old mesh.
+
+## Why a leak is refused
+
+A blockout wall is a thin box. A doorway is a cutter that sticks out both sides. The kernel knifes both wall faces and joins the hole. A cutter that only nicks one side would open the volume. The editor would then draw a one-sided wall, and the next extrude would have no twin to walk.
+
+Zhou, Grinspun, Zorin, and Jacobson's mesh-arrangement work is the current graphics treatment of exact-ish solid booleans on triangle meshes. Slab is smaller. It does not claim their robustness. The product rule is the same shape: a boolean is legal when the output is still a solid.
+
+## What to read first
+
+If you only open one paper, open the 2016 mesh arrangements paper. Then read Guibas and Stolfi so the half-edge walk in [Half-edge meshes](/engineering/half-edge-meshes) is not a slogan.
+
+For the in-editor steps, see [Punch a cavity](/guide/how-to/punch-a-cavity).
+
+## Papers
+
+- Qingnan Zhou, Eitan Grinspun, Denis Zorin, and Alec Jacobson. Mesh arrangements for solid geometry. *ACM Transactions on Graphics*, 35(4), 2016. [doi:10.1145/2897824.2925901](https://doi.org/10.1145/2897824.2925901)
+- Leonidas Guibas and Jorge Stolfi. Primitives for the manipulation of general subdivisions and the computation of Voronoi diagrams. *ACM Transactions on Graphics*, 4(2), 1985. [doi:10.1145/282918.282923](https://doi.org/10.1145/282918.282923)

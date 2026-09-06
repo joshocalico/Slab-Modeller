@@ -1,18 +1,18 @@
-import Link from "next/link";
 import { Figure } from "@/components/Figure";
+import { EditLink } from "@/components/EditLink";
+import { SiteMark } from "@/components/SiteMark";
+import Link from "next/link";
 
 export default function Home() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
-      <p className="mb-6 text-sm font-semibold tracking-[0.14em] text-slab-gold uppercase">
-        Slab
-      </p>
-      <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-slab-ink sm:text-5xl">
+      <SiteMark />
+      <h1 className="mt-8 max-w-3xl text-4xl font-semibold tracking-tight text-slab-ink sm:text-5xl">
         Block out levels inside Godot.
       </h1>
       <p className="mt-5 max-w-2xl text-lg text-slab-muted">
-        Slab is an editor plugin for Godot 4.7. Click a face, then move it with
-        the Move gizmo. Geometry is a half-edge solid, not a one-sided sheet.
+        Godot CSG is a node tree you inspect. Blender is a round trip. Slab is
+        a closed solid you click in the 3D view.
       </p>
       <div className="mt-8 flex flex-wrap gap-4">
         <Link
@@ -30,6 +30,28 @@ export default function Home() {
         alt="A hollow SlabSolid with an open top, inner walls, and a floor."
         caption="Inset the top, then move the inner cap down. Walls and a floor. No roof."
       />
+      <section className="mt-16 max-w-2xl space-y-4 text-slab-muted">
+        <h2 className="text-lg font-semibold text-slab-ink">
+          Why not CSGBox3D
+        </h2>
+        <p>
+          <code>CSGBox3D</code> and <code>CSGCombiner3D</code> boolean at the
+          node. You add children. You wait for a mesh. You do not select a
+          face and pull it. Union is a node, not an undoable edit. The tree is
+          the document.
+        </p>
+        <p>
+          Blender and Unity ProBuilder give you the click. They are not the
+          Godot editor. GridMap is tiles. A wall there is a cell, not a
+          volume you inset.
+        </p>
+        <p>
+          Slab stores a watertight half-edge mesh on <code>SlabSolid</code>.
+          Keys 1 to 4 switch object, vertex, edge, and face. Click selects. The
+          Move gizmo translates. Subtract punches a doorway and keeps a closed
+          solid. Every edit records undo.
+        </p>
+      </section>
       <section className="mt-16 grid gap-8 sm:grid-cols-3">
         <div>
           <h2 className="text-lg font-semibold">Select in the view</h2>
@@ -54,6 +76,11 @@ export default function Home() {
           </p>
         </div>
       </section>
+      <p className="mt-16 text-sm text-slab-muted">
+        Papers and mesh notes live in{" "}
+        <Link href="/engineering">Engineering</Link>, off the guide.
+      </p>
+      <EditLink />
     </main>
   );
 }
