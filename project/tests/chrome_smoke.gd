@@ -148,15 +148,16 @@ func case_every_command_icon_rasterizes_outside_the_editor() -> void:
 func case_command_icons_are_unique_inside_each_mode() -> void:
 	var actions := SlabActions.new()
 	for mode in MODES:
+		var label: String = SlabSelection.MODE_LABELS[mode]
 		var seen := {}
 		for section in actions.command_sections_for(mode):
 			for row in section["rows"]:
 				var name: String = row["icon"]
-				expect(not seen.has(name),
-					"%s and %s share %s in %s mode" % [
-						seen.get(name, ""), row["id"], name, SlabSelection.MODE_LABELS[mode]
-					])
-				seen[name] = row["id"]
+				if seen.has(name):
+					expect(false, "%s and %s share %s in %s mode" % [seen[name], row["id"], name, label])
+				else:
+					expect(true, "%s uses %s in %s mode" % [row["id"], name, label])
+					seen[name] = row["id"]
 
 
 func case_face_mode_shows_only_face_and_selection_commands() -> void:
