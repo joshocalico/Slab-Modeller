@@ -411,7 +411,7 @@ int SlabSolid::make_cylinder(float p_radius, float p_height, int p_sides) {
 
 int SlabSolid::make_arch(const Vector3 &p_size, int p_segments, float p_thickness) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
-	const slab::MeshFault fault = slab::ops::arch(edit, p_size, p_segments, p_thickness);
+	const slab::MeshFault fault = slab::ops::arch(edit, p_size.x, p_size.z, p_segments, p_thickness, Math_PI);
 	if (!fault.ok()) {
 		return int(fault.code);
 	}

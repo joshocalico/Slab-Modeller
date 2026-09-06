@@ -21,6 +21,24 @@ static int _clamp_int(int p_v, int p_lo, int p_hi) {
 	return p_v;
 }
 
+static double _clamp_double(double p_v, double p_lo, double p_hi) {
+	if (p_v < p_lo) {
+		return p_lo;
+	}
+	if (p_v > p_hi) {
+		return p_hi;
+	}
+	return p_v;
+}
+
+static IVec3 _polar(int32_t p_radius, double p_angle) {
+	return IVec3{
+		int32_t(godot::Math::round(double(p_radius) * godot::Math::cos(p_angle))),
+		int32_t(godot::Math::round(double(p_radius) * godot::Math::sin(p_angle))),
+		0
+	};
+}
+
 static MeshFault _move_cap(MeshEdit &p_edit, FaceId p_cap, const IVec3 &p_delta) {
 	std::vector<VertexId> corners;
 	p_edit.scratch().face_corners(p_cap, corners);
@@ -207,7 +225,7 @@ MeshFault stair(MeshEdit &p_edit, const godot::Vector3 &p_size, int p_steps) {
 	if (sx.x == 0 || sy.y == 0 || sz.z == 0) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
-	const int steps = _clamp_int(p_steps, 1, 32);
+	const int steps = _clamp_int(p_steps, STAIR_STEPS_MIN, STAIR_STEPS_MAX);
 	const int32_t step_w = sx.x / steps;
 	const int32_t step_h = sy.y / steps;
 	if (step_w == 0 || step_h == 0) {
@@ -228,10 +246,10 @@ MeshFault stair(MeshEdit &p_edit, const godot::Vector3 &p_size, int p_steps) {
 }
 
 MeshFault cylinder(MeshEdit &p_edit, float p_radius, float p_height, int p_sides) {
-	if (p_sides < 3) {
+	if (p_sides < CYLINDER_SIDES_MIN) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
-	const int sides = _clamp_int(p_sides, 3, 32);
+	const int sides = _clamp_int(p_sides, CYLINDER_SIDES_MIN, CYLINDER_SIDES_MAX);
 	IVec3 sr;
 	IVec3 sh;
 	if (!quantize(godot::Vector3(p_radius, 0, 0), sr) || !quantize(godot::Vector3(0, p_height, 0), sh)) {
@@ -250,16 +268,16 @@ MeshFault cylinder(MeshEdit &p_edit, float p_radius, float p_height, int p_sides
 	return _extrude_lamina(p_edit, loop.data(), sides, IVec3{ 0, sh.y, 0 });
 }
 
-MeshFault arch(MeshEdit &p_edit, const godot::Vector3 &p_size, int p_segments, float p_thickness) {
-	const int segments = _clamp_int(p_segments, 4, 32);
+MeshFault arch(MeshEdit &p_edit, float p_span, float p_depth, int p_segments, float p_thickness, double p_arc) {
+	const int segments = _clamp_int(p_segments, ARCH_SEGMENTS_MIN, ARCH_SEGMENTS_MAX);
+	const double arc = _clamp_double(p_arc, ARCH_ARC_MIN, ARCH_ARC_MAX);
 	IVec3 sx;
-	IVec3 sy;
 	IVec3 sz;
 	IVec3 st;
-	if (!quantize(godot::Vector3(p_size.x, 0, 0), sx) || !quantize(godot::Vector3(0, p_size.y, 0), sy) || !quantize(godot::Vector3(0, 0, p_size.z), sz) || !quantize(godot::Vector3(p_thickness, 0, 0), st)) {
+	if (!quantize(godot::Vector3(p_span, 0, 0), sx) || !quantize(godot::Vector3(0, 0, p_depth), sz) || !quantize(godot::Vector3(p_thickness, 0, 0), st)) {
 		return _bad(MeshError::COORD_OUT_OF_RANGE);
 	}
-	if (sx.x == 0 || sy.y == 0 || sz.z == 0 || st.x == 0) {
+	if (sx.x == 0 || sz.z == 0 || st.x == 0) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
 	const int32_t outer_r = sx.x / 2;
@@ -267,21 +285,29 @@ MeshFault arch(MeshEdit &p_edit, const godot::Vector3 &p_size, int p_segments, f
 	if (outer_r == 0 || inner_r <= 0) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
-	const int32_t cx = outer_r;
+	const double half = arc * 0.5;
+	const double hi = Math_PI * 0.5 + half;
+	const double lo = Math_PI * 0.5 - half;
+	const auto angle_at = [&](int p_i) {
+		return lo + (hi - lo) * double(segments - p_i) / double(segments);
+	};
 	std::vector<IVec3> loop;
-	loop.reserve(size_t(segments) * 2 + 2);
+	loop.reserve(size_t(segments + 1) * 2);
 	for (int i = 0; i <= segments; i++) {
-		const double angle = Math_PI * double(segments - i) / double(segments);
-		const int64_t x = int64_t(cx) + int64_t(godot::Math::round(double(outer_r) * godot::Math::cos(angle)));
-		const int64_t y = int64_t(godot::Math::round(double(outer_r) * godot::Math::sin(angle)));
-		loop.push_back(IVec3{ int32_t(x), int32_t(y), 0 });
+		loop.push_back(_polar(outer_r, angle_at(i)));
 	}
-	loop.push_back(IVec3{ cx + inner_r, 0, 0 });
-	for (int i = 1; i <= segments; i++) {
-		const double angle = Math_PI * double(i) / double(segments);
-		const int64_t x = int64_t(cx) + int64_t(godot::Math::round(double(inner_r) * godot::Math::cos(angle)));
-		const int64_t y = int64_t(godot::Math::round(double(inner_r) * godot::Math::sin(angle)));
-		loop.push_back(IVec3{ int32_t(x), int32_t(y), 0 });
+	for (int k = 0; k <= segments; k++) {
+		loop.push_back(_polar(inner_r, angle_at(segments - k)));
+	}
+	int32_t min_x = loop[0].x;
+	int32_t min_y = loop[0].y;
+	for (const IVec3 &p : loop) {
+		min_x = std::min(min_x, p.x);
+		min_y = std::min(min_y, p.y);
+	}
+	for (IVec3 &p : loop) {
+		p.x -= min_x;
+		p.y -= min_y;
 	}
 	if (_loop_self_intersects(loop.data(), int(loop.size()))) {
 		return _bad(MeshError::DEGENERATE_FACE);
