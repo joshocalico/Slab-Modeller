@@ -263,21 +263,6 @@ func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
 
-func _bake_op() -> Dictionary:
-	return { "run": _bake }
-
-
-func _bake(target: Node3D) -> String:
-	var mesh_node := target.get_node_or_null("Mesh") as MeshInstance3D
-	if mesh_node == null or mesh_node.mesh == null:
-		return "%s has no mesh to bake yet." % target.name
-	var path := "res://baked_%s.tres" % target.name.to_snake_case()
-	var err := ResourceSaver.save(mesh_node.mesh, path)
-	if err != OK:
-		return "Bake failed. Error %d." % err
-	return "Baked %s." % path
-
-
 func _select_op(pick: Callable) -> Dictionary:
 	return { "method": SlabTopology.query_for(_selection.mode), "run": pick }
 
@@ -344,7 +329,6 @@ func _build() -> Array[Dictionary]:
 		_row("mirror_z", "Mirror Z", "Object", object, 1, "Mirrors the solid across its local Z axis.", 0, _mirror_op.bind(Vector3(1.0, 1.0, -1.0))),
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
-		_row("bake_module", "Bake Module", "Save", object, 1, "Writes res://baked_<snake_case_name>.tres.", 0, _bake_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),

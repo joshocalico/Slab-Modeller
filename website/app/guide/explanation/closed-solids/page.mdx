@@ -4,13 +4,13 @@ export const metadata = { title: "Closed solids" };
 
 Slab stores a watertight half-edge mesh on `SlabSolid`. A wall is a thin box with two sides, a thickness, and a volume. It is not a single quad floating in space.
 
-Extrude, inset, boolean, and bake all assume every edge has a twin. A one-sided sheet fails those checks.
+Extrude, inset, and boolean all assume every edge has a twin. A one-sided sheet fails those checks.
 
 ## Openings
 
 A one-off door can be a Subtract through a wall. Push a second solid through the wall so it sticks out on both sides, then subtract. The kernel knifes both faces and joins the opening. See [Punch a cavity](/guide/how-to/punch-a-cavity).
 
-A `SlabSocket` is a named opening on a `SlabModule`. It does not cut the mesh. Kind is door, open, or window. Face, offset, and opening size sit on the socket node. Bake Module on the panel writes the built mesh. It does not write sockets.
+A `SlabSocket` is a named opening on a `SlabModule`. It does not cut the mesh. Kind is door, open, or window. Face, offset, and opening size sit on the socket node. The Mesh child on each solid is the built mesh. It updates on every edit. Sockets are not part of that mesh.
 
 ## Why a click stays on one solid
 
