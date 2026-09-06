@@ -20,6 +20,9 @@ var _actions: RefCounted
 var _panel: Control
 var _strip: Control
 var _gizmos: Array = []
+var _solid_gizmo: EditorNode3DGizmoPlugin
+var _subgizmo_token := ""
+var _subgizmo_solid: Node3D = null
 
 
 func _enter_tree() -> void:
@@ -67,9 +70,11 @@ func _exit_tree() -> void:
 		_strip.queue_free()
 		_strip = null
 	remove_custom_type("SlabSweep")
+	_clear_subgizmo()
 	for gizmo in _gizmos:
 		remove_node_3d_gizmo_plugin(gizmo)
 	_gizmos.clear()
+	_solid_gizmo = null
 	_actions = null
 	_selection = null
 	_session = null
@@ -101,12 +106,47 @@ func _refresh_gizmos() -> void:
 	for node in _session.gizmo_targets():
 		if is_instance_valid(node):
 			node.update_gizmos()
+	_sync_subgizmo()
+
+
+func _sync_subgizmo() -> void:
+	var solid: Node3D = _selection.solid
+	if solid == null or not is_instance_valid(solid) or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
+		_clear_subgizmo()
+		return
+	var token: String = "%s:%d:%s" % [solid.get_instance_id(), _selection.mode, ",".join(_id_tokens(_selection.ids))]
+	if token == _subgizmo_token:
+		return
+	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:
+		_subgizmo_solid.clear_subgizmo_selection()
+	for gizmo in solid.get_gizmos():
+		if gizmo.get_plugin() != _solid_gizmo:
+			continue
+		solid.set_subgizmo_selection(gizmo, SolidGizmo.SELECTION_SUBGIZMO, _solid_gizmo._get_subgizmo_transform(gizmo, SolidGizmo.SELECTION_SUBGIZMO))
+		_subgizmo_token = token
+		_subgizmo_solid = solid
+		return
+	_clear_subgizmo()
+
+
+func _clear_subgizmo() -> void:
+	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid):
+		_subgizmo_solid.clear_subgizmo_selection()
+	_subgizmo_token = ""
+	_subgizmo_solid = null
+
+
+func _id_tokens(ids: PackedInt64Array) -> PackedStringArray:
+	var tokens := PackedStringArray()
+	for id in ids:
+		tokens.append(str(id))
+	return tokens
 
 
 func _add_gizmos() -> void:
-	var solid := SolidGizmo.new()
-	solid.setup(_selection)
-	_gizmos = [solid, SocketGizmo.new(), SweepGizmo.new()]
+	_solid_gizmo = SolidGizmo.new()
+	_solid_gizmo.setup(_selection, get_undo_redo())
+	_gizmos = [_solid_gizmo, SocketGizmo.new(), SweepGizmo.new()]
 	for gizmo in _gizmos:
 		add_node_3d_gizmo_plugin(gizmo)
 

@@ -2,14 +2,19 @@
 extends EditorNode3DGizmoPlugin
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 
 const HOT := "hot"
 const HOVER := "hover"
 const FILL := "fill"
 const FILL_HOVER := "fill_hover"
 const WIRE := "wire"
+const SELECTION_SUBGIZMO := 0
 
 var _selection: RefCounted
+var _undo: Object
+var _rest_data := PackedByteArray()
+var _rest_origin := Vector3.ZERO
 
 
 func _init() -> void:
@@ -20,8 +25,9 @@ func _init() -> void:
 	create_material(FILL_HOVER, Color(1.0, 0.82, 0.48, 0.28), false, true)
 
 
-func setup(selection: RefCounted) -> void:
+func setup(selection: RefCounted, undo: Object = null) -> void:
 	_selection = selection
+	_undo = undo
 
 
 func _get_gizmo_name() -> String:
@@ -30,6 +36,44 @@ func _get_gizmo_name() -> String:
 
 func _has_gizmo(for_node_3d: Node3D) -> bool:
 	return SlabSelection.is_solid(for_node_3d)
+
+
+func _subgizmos_intersect_ray(_gizmo: EditorNode3DGizmo, _camera: Camera3D, _screen_pos: Vector2) -> int:
+	return -1
+
+
+func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int) -> Transform3D:
+	return Transform3D(Basis.IDENTITY, _selection_origin(gizmo.get_node_3d()))
+
+
+func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int, xform: Transform3D) -> void:
+	var solid: Node3D = gizmo.get_node_3d()
+	if solid == null or _selection == null or _selection.ids.is_empty():
+		return
+	if _rest_data.is_empty():
+		_rest_data = solid.get("data")
+		_rest_origin = SlabXform.centroid(solid, _selection.mode, _selection.ids)
+	solid.set("data", _rest_data)
+	SlabXform.translate(solid, _selection.mode, _selection.ids, xform.origin - _rest_origin)
+
+
+func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restores: Array, cancel: bool) -> void:
+	var solid: Node3D = gizmo.get_node_3d()
+	if solid == null:
+		_rest_data = PackedByteArray()
+		_rest_origin = Vector3.ZERO
+		return
+	if cancel and not _rest_data.is_empty():
+		solid.set("data", _rest_data)
+	elif _undo != null and not _rest_data.is_empty():
+		var after: PackedByteArray = solid.get("data")
+		if after != _rest_data:
+			_undo.create_action("Slab Move Elements", UndoRedo.MERGE_DISABLE, solid)
+			_undo.add_do_property(solid, "data", after)
+			_undo.add_undo_property(solid, "data", _rest_data)
+			_undo.commit_action(false)
+	_rest_data = PackedByteArray()
+	_rest_origin = Vector3.ZERO
 
 
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
@@ -123,3 +167,9 @@ func _outline(corners: PackedVector3Array) -> PackedVector3Array:
 		lines.append(corners[i])
 		lines.append(corners[(i + 1) % corners.size()])
 	return lines
+
+
+func _selection_origin(solid: Node3D) -> Vector3:
+	if solid == null or _selection == null or _selection.ids.is_empty():
+		return Vector3.ZERO
+	return SlabXform.centroid(solid, _selection.mode, _selection.ids)

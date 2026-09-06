@@ -24,21 +24,21 @@ Shift, Ctrl, or Cmd click adds or removes that element. A double-click on an edg
 
 A, Grow, Invert, and Select Loop on the panel also change the set. Those buttons follow the current mode.
 
-## Drag the selection
+## Move the selection
 
-Click without moving the mouse still selects. Motion under 6 pixels is still a click. Past that, Slab claims the drag so the viewport cannot orbit.
+Click without moving the mouse still selects. Motion under 6 pixels is still a click.
 
-- A vertex or edge moves in the camera plane.
-- A face moves along its normal.
+Press <kbd>W</kbd> for the Move gizmo. That gizmo translates the selected vertices, edges, or faces. Rotate and Scale do not move vertices. A plain drag is left for that gizmo, so the view can still orbit.
+
 - Shift-drag on a face extrudes first, then moves the new cap.
 - Shift-drag on an edge bevels it. The drag distance is the chamfer amount.
 
-Release ends the grab. The next drag starts from the new positions. Escape during a drag restores the mesh and keeps the mode.
+Release ends a Shift-drag. The next Shift-drag starts from the new positions. Escape during a Shift-drag restores the mesh and keeps the mode.
 
 ## Keep a multi-selection when you move
 
-A plain click replaces the element set with the item under the cursor. Shift-click to add faces, then Shift-drag if you want to keep that set. Shift-drag on faces also extrudes.
+A plain click replaces the element set with the item under the cursor. Shift-click to add faces, then use the Move gizmo. Shift-drag on faces also extrudes.
 
-Shift-drag on vertices moves the whole set. Shift-drag on edges bevels the set. To translate edges, drag without Shift.
+Shift-drag on edges bevels the set. To translate edges, use the Move gizmo.
 
 Element selection stays on one solid. Object mode can add solids to the editor selection with Shift click.

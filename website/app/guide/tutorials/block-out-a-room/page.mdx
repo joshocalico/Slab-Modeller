@@ -22,9 +22,9 @@ We will hollow a box from the top. The box becomes walls, a floor, and an open t
 A `SlabSolid` appears at the origin. The default box is 2 m on a side.
 
 5. Press <kbd>4</kbd>.
-6. Click a side face and drag it out.
-7. Drag an adjacent side the same way. Stop when the floor is about 4 m by 4 m.
-8. Click the top face and drag it up until the box is about 3 m tall.
+6. Click a side face. Press <kbd>W</kbd>. Drag the Move gizmo out.
+7. Move an adjacent side the same way. Stop when the floor is about 4 m by 4 m.
+8. Click the top face. Drag the Move gizmo up until the box is about 3 m tall.
 
 You should see a closed rectangular volume that matches the shot.
 
@@ -42,21 +42,22 @@ The top face shrinks in place. A rim of new faces appears around it. The inner c
   caption="After Inset. The inner cap stays selected on the top plane."
 />
 
-## Drag the inner face down
+## Move the inner face down
 
 1. Click the inner cap if it is not selected.
-2. Drag toward the floor. Do not hold Shift. Do not press <kbd>E</kbd>.
+2. Press <kbd>W</kbd>.
+3. Drag the Move gizmo toward the floor. Do not hold Shift. Do not press <kbd>E</kbd>.
 
-A view drag moves the face along its normal. Distance comes from the cursor, not from Amount. Amount cannot go negative, so **Extrude** always pushes the face out.
+The gizmo translates the face. Distance comes from the gizmo, not from Amount. Amount cannot go negative, so **Extrude** always pushes the face out.
 
-Release when you can see a floor and four inner walls. That drag is one undo action.
+Release when you can see a floor and four inner walls. That gizmo commit is one undo action.
 
 If you hold Shift and drag, Slab extrudes a new loop first, then moves the new cap. You get extra side faces you did not ask for.
 
 <Figure
   src="/img/solid-room.png"
   alt="A hollow box with an open top, inner walls, and a floor."
-  caption="Inset, then an inward drag. Open top. No roof."
+  caption="Inset, then move the cap in. Open top. No roof."
 />
 
 ## Cut a door

@@ -6,13 +6,14 @@ export const metadata = { title: "Pull a wall" };
 
 Use this when a face is already there and you want it farther out.
 
-## Drag in the view
+## Move the face
 
 1. Press <kbd>4</kbd> for Face mode.
 2. Click the face.
-3. Drag along the direction you want the wall to travel.
+3. Press <kbd>W</kbd> so the editor is in Move mode.
+4. Drag an axis of the gizmo.
 
-The face follows the cursor along its normal. Sub-pixel motion under 6 pixels does not move geometry.
+The face translates with the gizmo. It is not locked to the face normal.
 
 <Figure
   src="/img/solid-extrude.png"

@@ -6,25 +6,21 @@ const SlabPick := preload("res://addons/slab/slab_pick.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
+const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 
-enum Verdict { PASS, STOP }
+enum Verdict { PASS, STOP, CUSTOM }
 
 const DRAG_THRESHOLD_PX := 6.0
 const MIN_STEP := 0.0002
 const MIN_BEVEL := 0.002
 
-const LABELS: Dictionary = {
-	SlabSelection.Mode.VERTEX: "Slab Move Vertices",
-	SlabSelection.Mode.EDGE: "Slab Move Edges",
-	SlabSelection.Mode.FACE: "Slab Move Faces",
-}
 const EXTRUDE_LABEL := "Slab Extrude Faces"
 const BEVEL_LABEL := "Slab Bevel Edges"
 
 
 class Grab:
 	enum Phase { IDLE, PRESSED, DRAGGING }
-	enum Plan { NONE, MOVE_IN_CAMERA_PLANE, MOVE_ALONG_NORMAL, EXTRUDE_ALONG_NORMAL, BEVEL_EDGES }
+	enum Plan { NONE, MOVE_ALONG_NORMAL, EXTRUDE_ALONG_NORMAL, BEVEL_EDGES }
 
 	var phase: int = Phase.IDLE
 	var solid: Node3D = null
@@ -143,23 +139,25 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 		if hit == null:
 			return Verdict.PASS
 		_focus(hit, additive)
-		return Verdict.STOP
+		return Verdict.CUSTOM
 	if hit == null:
 		if not additive:
 			_selection.clear_ids()
-		return Verdict.STOP if _selection.solid != null else Verdict.PASS
+		return Verdict.CUSTOM if _selection.solid != null else Verdict.PASS
 	_focus(hit, false)
 	var id: int = SlabPick.pick(hit, _selection.mode, camera, screen, _metrics.pick_radius())
 	if id == 0:
 		if not additive:
 			_selection.clear_ids()
-		return Verdict.STOP
+		return Verdict.CUSTOM
 	if event.double_click and _selection.mode == SlabSelection.Mode.EDGE:
 		_select_loop(hit, id, additive)
 		return Verdict.STOP
 	_selection.toggle_id(id, additive)
-	_grab = _armed(camera, hit, id, screen)
-	return Verdict.STOP
+	if event.shift_pressed and _selection.mode in [SlabSelection.Mode.FACE, SlabSelection.Mode.EDGE]:
+		_grab = _armed(camera, hit, id, screen)
+		return Verdict.STOP
+	return Verdict.CUSTOM
 
 
 func _on_release() -> int:
@@ -200,10 +198,7 @@ func _armed(camera: Camera3D, solid: Node3D, id: int, screen: Vector2) -> Grab:
 	grab.mode = _selection.mode
 	grab.pressed_id = id
 	grab.press_screen = screen
-	if grab.mode == SlabSelection.Mode.VERTEX:
-		grab.anchor = solid.to_global(solid.vertex_position(id))
-		grab.axis = -camera.global_transform.basis.z
-	elif grab.mode == SlabSelection.Mode.EDGE:
+	if grab.mode == SlabSelection.Mode.EDGE:
 		var ends: PackedVector3Array = solid.edge_endpoints(id)
 		grab.anchor = solid.to_global((ends[0] + ends[1]) * 0.5)
 		grab.axis = -camera.global_transform.basis.z
@@ -219,7 +214,10 @@ func _start_drag(camera: Camera3D, event: InputEventMouseMotion) -> bool:
 		_grab = Grab.idle()
 		return false
 	g.plan = _plan_for(g.mode, event.shift_pressed)
-	g.label = _label_for(g.plan, g.mode)
+	if g.plan == Grab.Plan.NONE:
+		_grab = Grab.idle()
+		return false
+	g.label = EXTRUDE_LABEL if g.plan == Grab.Plan.EXTRUDE_ALONG_NORMAL else BEVEL_LABEL
 	g.ids = PackedInt64Array(_selection.ids)
 	if not g.ids.has(g.pressed_id):
 		g.ids.append(g.pressed_id)
@@ -236,7 +234,7 @@ func _start_drag(camera: Camera3D, event: InputEventMouseMotion) -> bool:
 		if g.axis == Vector3.ZERO:
 			_grab = Grab.idle()
 			return false
-	g.vertices = _gather_vertices(g.solid, g.mode, g.ids)
+	g.vertices = SlabXform.vertices(g.solid, g.mode, g.ids)
 	if g.vertices.is_empty():
 		_grab = Grab.idle()
 		return false
@@ -251,16 +249,8 @@ func _drag_to(camera: Camera3D, screen: Vector2) -> void:
 		_bevel_to(camera, screen)
 		return
 	var g := _grab
-	var wanted_world := Vector3.ZERO
-	if g.plan == Grab.Plan.MOVE_IN_CAMERA_PLANE:
-		var now: Variant = _plane_point(camera, screen, g.anchor, g.axis)
-		var was: Variant = _plane_point(camera, g.press_screen, g.anchor, g.axis)
-		if now == null or was == null:
-			return
-		wanted_world = now - was
-	else:
-		var travel: float = _axis_travel(camera, screen, g.anchor, g.axis) - _axis_travel(camera, g.press_screen, g.anchor, g.axis)
-		wanted_world = g.axis * travel
+	var travel: float = _axis_travel(camera, screen, g.anchor, g.axis) - _axis_travel(camera, g.press_screen, g.anchor, g.axis)
+	var wanted_world: Vector3 = g.axis * travel
 	var wanted_local: Vector3 = g.solid.to_local(g.anchor + wanted_world) - g.solid.to_local(g.anchor)
 	var applied_local: Vector3 = g.solid.vertex_position(g.anchor_vertex) - g.anchor_origin
 	var step: Vector3 = wanted_local - applied_local
@@ -331,19 +321,11 @@ func _select_loop(solid: Node3D, edge: int, additive: bool) -> void:
 
 
 static func _plan_for(mode: int, shift: bool) -> int:
-	if mode == SlabSelection.Mode.FACE:
-		return Grab.Plan.EXTRUDE_ALONG_NORMAL if shift else Grab.Plan.MOVE_ALONG_NORMAL
+	if mode == SlabSelection.Mode.FACE and shift:
+		return Grab.Plan.EXTRUDE_ALONG_NORMAL
 	if mode == SlabSelection.Mode.EDGE and shift:
 		return Grab.Plan.BEVEL_EDGES
-	return Grab.Plan.MOVE_IN_CAMERA_PLANE
-
-
-static func _label_for(plan: int, mode: int) -> String:
-	if plan == Grab.Plan.EXTRUDE_ALONG_NORMAL:
-		return EXTRUDE_LABEL
-	if plan == Grab.Plan.BEVEL_EDGES:
-		return BEVEL_LABEL
-	return String(LABELS[mode])
+	return Grab.Plan.NONE
 
 
 static func _bevel_axis(solid: Node3D, edge: int) -> Vector3:
@@ -354,21 +336,6 @@ static func _bevel_axis(solid: Node3D, edge: int) -> Vector3:
 	if axis.length_squared() < 0.0001:
 		return _world_normal(solid, faces[0])
 	return axis.normalized()
-
-
-static func _gather_vertices(solid: Node3D, mode: int, ids: PackedInt64Array) -> PackedInt64Array:
-	if mode == SlabSelection.Mode.VERTEX:
-		return ids
-	var seen: Dictionary = {}
-	var out := PackedInt64Array()
-	for id in ids:
-		var verts: PackedInt64Array = solid.face_vertices(id) if mode == SlabSelection.Mode.FACE else solid.edge_vertices(id)
-		for vertex in verts:
-			if seen.has(vertex):
-				continue
-			seen[vertex] = true
-			out.append(vertex)
-	return out
 
 
 static func _plane_point(camera: Camera3D, screen: Vector2, anchor: Vector3, normal: Vector3) -> Variant:
