@@ -9,31 +9,13 @@ static var _bundle: Dictionary = {}
 
 
 static func texture(name: String) -> Texture2D:
-	var tex := _named(name)
+	var tex := _bundled(name)
 	if tex != null:
 		return tex
 	if name == FALLBACK:
 		return null
 	push_warning("Slab has no icon named %s. Falling back to %s." % [name, FALLBACK])
-	return _named(FALLBACK)
-
-
-static func _named(name: String) -> Texture2D:
-	var from_editor := _editor_icon(name)
-	if from_editor != null:
-		return from_editor
-	return _bundled(name)
-
-
-static func _editor_icon(name: String) -> Texture2D:
-	if not Engine.is_editor_hint():
-		return null
-	var base := EditorInterface.get_base_control()
-	if base == null:
-		return null
-	if base.has_theme_icon(name, "EditorIcons"):
-		return base.get_theme_icon(name, "EditorIcons")
-	return null
+	return _bundled(FALLBACK)
 
 
 static func _bundled(name: String) -> Texture2D:

@@ -33,7 +33,7 @@ const CATALOG: Dictionary = {
 		"params": [&"size_x", &"size_y", &"cylinder_sides"], "derives": "Width is the diameter.",
 	},
 	&"make_arch": {
-		"label": "Arch", "icon": "CurveConstant", "tooltip": "Creates an arch.",
+		"label": "Arch", "icon": "TorusMesh", "tooltip": "Creates an arch.",
 		"params": [&"size_x", &"size_z", &"arch_segments", &"arch_thickness", &"arch_arc"],
 		"derives": "Height follows Width and Arc.",
 	},

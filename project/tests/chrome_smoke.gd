@@ -14,7 +14,6 @@ const EDITOR_INTERFACE_ALLOWLIST: PackedStringArray = [
 	"plugin.gd",
 	"slab_editor_host_live.gd",
 	"slab_actions.gd",
-	"slab_icons.gd",
 ]
 
 const EDITOR_INTERFACE_FENCE: PackedStringArray = [
@@ -150,9 +149,14 @@ func case_command_icons_are_unique_inside_each_mode() -> void:
 	for mode in MODES:
 		var label: String = SlabSelection.MODE_LABELS[mode]
 		var seen := {}
+		var strip: String = SlabModeStrip.MODE_ICONS[mode]
 		for section in actions.command_sections_for(mode):
 			for row in section["rows"]:
 				var name: String = row["icon"]
+				if name == strip:
+					expect(false, "%s reuses the %s mode icon %s" % [row["id"], label, strip])
+				else:
+					expect(true, "%s does not reuse the %s mode icon" % [row["id"], label])
 				if seen.has(name):
 					expect(false, "%s and %s share %s in %s mode" % [seen[name], row["id"], name, label])
 				else:

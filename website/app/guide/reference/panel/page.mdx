@@ -32,9 +32,9 @@ Under the Create heading, above those icons, in Object mode only. They shape the
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
-| Width | 2 m | 0.05 to 64 | Every Create button. Cylinder reads it as diameter. Arch reads it as the outer sweep diameter. |
+| Width | 2 m | 0.05 to 64 | Every Create command. Cylinder reads it as diameter. Arch reads it as the outer sweep diameter. |
 | Height | 2 m | 0.05 to 64 | Box, Stair, Cylinder, Poly Shape, Curve Sweep. Plane and Arch ignore it. |
-| Depth | 2 m | 0.05 to 64 | Every Create button except Cylinder. Curve Sweep uses it as path length. |
+| Depth | 2 m | 0.05 to 64 | Every Create command except Cylinder. Curve Sweep uses it as path length. |
 | Steps | 8 | 1 to 32 | Stair. |
 | Sides | 16 | 3 to 32 | Cylinder. |
 | Segments | 8 | 4 to 32 | Arch. |
@@ -112,7 +112,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 ## Selection
 
-Shown in Vertex, Edge, and Face mode. Each button works on the current mode's elements.
+Shown in Vertex, Edge, and Face mode. Each command works on the current mode's elements.
 
 | Command | Result |
 | --- | --- |
