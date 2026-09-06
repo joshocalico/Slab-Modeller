@@ -61,6 +61,19 @@ func _process(_dt: float) -> bool:
 		return false
 	if _phase == 4:
 		_save("solid-door.png")
+		_paint_room()
+		_phase = 40
+		_wait = 0
+		return false
+	if _phase == 40:
+		_save("texture-01.png")
+		_paint_walls()
+		_phase = 41
+		_wait = 0
+		return false
+	if _phase == 41:
+		_save("texture-02.png")
+		_save("solid-textured.png")
 		_stage_extrude_demo()
 		_phase = 5
 		_wait = 0
@@ -182,6 +195,40 @@ func _make_solid(size: Vector3, color: Color) -> Node3D:
 	mat.metallic = 0.0
 	solid.set("material", mat)
 	return solid
+
+
+func _paint_room() -> void:
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.albedo_color = Color(0.55, 0.38, 0.22)
+	floor_mat.roughness = 0.72
+	floor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	_solid.set("material", floor_mat)
+	_clear_overlays()
+	_overlay_wires(_solid)
+
+
+func _paint_walls() -> void:
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.albedo_color = Color(0.55, 0.38, 0.22)
+	floor_mat.roughness = 0.72
+	floor_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	var wall_mat := StandardMaterial3D.new()
+	wall_mat.albedo_color = Color(0.82, 0.78, 0.7)
+	wall_mat.roughness = 0.68
+	wall_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	var mats: Array = []
+	mats.append(floor_mat)
+	mats.append(wall_mat)
+	_solid.set("materials", mats)
+	var walls := PackedInt64Array()
+	for id in PackedInt64Array(_solid.call("get_faces")):
+		var n: Vector3 = _solid.call("face_normal", id)
+		if absf(n.y) < 0.35:
+			walls.append(id)
+	var err: int = _solid.call("set_face_material", walls, 1)
+	print("docs_capture paint walls ", err, " count=", walls.size())
+	_clear_overlays()
+	_overlay_wires(_solid)
 
 
 func _aim(eye: Vector3, look: Vector3) -> void:

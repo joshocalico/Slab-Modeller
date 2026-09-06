@@ -12,4 +12,12 @@ test -f "${out}/solid-extrude.png"
 test -f "${out}/solid-pair.png"
 test -f "${out}/panel.png"
 test -f "${out}/panel-object.png"
+test -f "${out}/solid-textured.png"
+test -f "${out}/texture-01.png"
+test -f "${out}/texture-02.png"
+if command -v ffmpeg >/dev/null 2>&1; then
+	ffmpeg -y -loop 1 -t 2 -i "${out}/texture-01.png" -loop 1 -t 2 -i "${out}/texture-02.png" \
+		-filter_complex "[0:v][1:v]concat=n=2:v=1:a=0,format=yuv420p" -movflags +faststart "${out}/texture-a-room.mp4"
+	test -f "${out}/texture-a-room.mp4"
+fi
 echo "wrote ${out}"

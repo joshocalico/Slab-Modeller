@@ -4,31 +4,31 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. It shows the command groups for the current mode. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. Each command is an icon. The tooltip holds the name, what it does, and the shortcut. A command disables when the selection count is too small. The tooltip then states the missing requirement.
+The panel is the bottom dock named **Slab**. It is a command toolbar. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. Each command is an icon. The tooltip holds the name, what it does, and the shortcut. A command disables when the selection count is too small. The tooltip then states the missing requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel showing modes, numeric fields, and the Face and Selection command icons."
-  caption="Face mode, no solid selected. Face and Selection are the only groups shown. Hover an icon for its name. The first Selection icon is Select All."
+  alt="The Slab panel in Face mode, with Face and Selection icon rows above Amount and UV fields."
+  caption="Face mode. Icons first. Amount and UV sit in the settings strip under the icons. Hover an icon for its name. The first Selection icon is Select All."
 />
 
 The header status line repeats the selection, for example `Box, 1 face.`
 
-## Edit fields
+## Settings strip
 
-The top row. These shape the next edit, not an existing solid's recipe.
+Under the icons. The fields follow the mode, and in Object mode they follow the Create icon you last hovered.
 
-| Field | Role |
-| --- | --- |
-| Amount | Distance for Extrude, Inset, Bevel, and Weld. Default 0.5. |
-| UV scale X, UV scale Y | Written by Apply UV. |
-| UV offset X, UV offset Y | Written by Apply UV. |
-| UV rotation | Degrees on the panel. The solid stores radians. |
-| Material slot | Integer 0 to 31 for Set Material. |
+| Field | When it shows | Role |
+| --- | --- | --- |
+| Width, Height, Depth | Object, on the focused Create icon | Size for that click. |
+| Steps, Sides, Segments, Thickness, Arc | Object, when Stair, Cylinder, or Arch is focused | Only the params that shape reads. |
+| Amount | Vertex, Edge, Face | Distance for Extrude, Inset, Bevel, and Weld. Default 0.5. |
+| UV scale, offset, rotation | Face | Written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
+| Material chips | Face, with a solid selected | Click a chip to pick the paint. The plus chip appends a material. **Set Material** writes that index onto the faces. |
 
 ## Create fields
 
-Under the Create heading, above those icons, in Object mode only. They shape the next click. Changing one never rewrites a solid that already exists.
+Object mode. Hover a Create icon to see its fields. Changing a field never rewrites a solid that already exists.
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
@@ -45,7 +45,7 @@ Under the Create heading, above those icons, in Object mode only. They shape the
 
 ## Create
 
-Object mode. No selection required. Set the Create fields, then click.
+Object mode. No selection required. Hover a Create icon, set its fields, then click.
 
 | Command | Result |
 | --- | --- |
@@ -103,7 +103,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | Flip Normals | 1 face | Reverses which way the faces point. |
 | Subdivide | 1 face | Splits each face into four. |
 | Merge | 2 faces | Joins coplanar faces into one. |
-| Set Material | 1 face | Assigns the Material slot field. |
+| Set Material | 1 face | Assigns the active material chip to the faces. |
 | Apply UV | 1 face | Writes the UV scale, offset, and rotation fields. |
 | UV Larger | 1 face | Doubles the UV scale and applies it. |
 | UV Smaller | 1 face | Halves the UV scale and applies it. |

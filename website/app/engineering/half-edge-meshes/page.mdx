@@ -16,7 +16,7 @@ Baumgart's winged-edge paper is the older computer-vision source. Weiler later c
 
 ## What Slab stores on a face
 
-Each face carries a UV scale, offset, rotation, a projection axis, and a material slot. The slot is an integer 0 to 31. The emitted mesh is still one surface today. The slot is data on the face, not a second material in the inspector.
+Each face carries a UV scale, offset, rotation, a projection axis, and a material slot. The slot is an index into the `materials` array on `SlabSolid`. Emit writes one mesh surface per used index. The array has no 32 cap.
 
 The click path picks one solid, then an element on that mesh. Two nodes are two meshes until you boolean them. See [Closed solids](/guide/explanation/closed-solids) for the product rule.
 
