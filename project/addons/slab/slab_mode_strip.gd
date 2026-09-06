@@ -62,7 +62,7 @@ func refresh() -> void:
 
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	var button := Button.new()
-	button.icon = SlabIcons.texture(MODE_ICONS[mode])
+	button.icon = SlabIcons.texture(MODE_ICONS[mode], _metrics.scale())
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
 	button.tooltip_text = "%s\nShortcut %s." % [MODE_HINTS[mode], OS.get_keycode_string(MODE_KEYS[mode])]
 	button.toggle_mode = true

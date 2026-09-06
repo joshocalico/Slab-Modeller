@@ -231,7 +231,7 @@ func _action_button(row: Dictionary) -> Button:
 	var id: String = row["id"]
 	var button := Button.new()
 	button.name = id
-	button.icon = SlabIcons.texture(row["icon"])
+	button.icon = SlabIcons.texture(row["icon"], _metrics.scale())
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.custom_minimum_size = Vector2(_scaled(BUTTON_SIZE.x), _scaled(BUTTON_SIZE.y))

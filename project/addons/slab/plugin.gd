@@ -33,7 +33,7 @@ func _enter_tree() -> void:
 	_actions = SlabActions.new(_selection, get_undo_redo())
 	_session.bind_actions(_actions)
 	_add_gizmos()
-	add_custom_type("SlabSweep", "Node3D", SlabSweepScript, SlabIcons.texture("Curve3D"))
+	add_custom_type("SlabSweep", "Node3D", SlabSweepScript, SlabIcons.texture("Curve3D", EditorInterface.get_editor_scale()))
 
 	var metrics: RefCounted = _session.metrics()
 	_panel = SlabPanel.new()

@@ -8,32 +8,34 @@ const RASTER_SCALE := 2.0
 static var _bundle: Dictionary = {}
 
 
-static func texture(name: String) -> Texture2D:
-	var tex := _bundled(name)
+static func texture(name: String, ui_scale: float = 1.0) -> Texture2D:
+	var raster: float = RASTER_SCALE * ui_scale
+	var tex := _bundled(name, raster)
 	if tex != null:
 		return tex
 	if name == FALLBACK:
 		return null
 	push_warning("Slab has no icon named %s. Falling back to %s." % [name, FALLBACK])
-	return _bundled(FALLBACK)
+	return _bundled(FALLBACK, raster)
 
 
-static func _bundled(name: String) -> Texture2D:
-	if _bundle.has(name):
-		return _bundle[name]
+static func _bundled(name: String, raster: float) -> Texture2D:
+	var key := "%s@%.3f" % [name, raster]
+	if _bundle.has(key):
+		return _bundle[key]
 	var path := ICON_DIR.path_join("%s.svg" % name)
 	if not FileAccess.file_exists(path):
-		_bundle[name] = null
+		_bundle[key] = null
 		return null
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
-		_bundle[name] = null
+		_bundle[key] = null
 		return null
 	var img := Image.new()
-	var err: int = img.load_svg_from_string(file.get_as_text(), RASTER_SCALE)
+	var err: int = img.load_svg_from_string(file.get_as_text(), raster)
 	if err != OK or img.is_empty():
-		_bundle[name] = null
+		_bundle[key] = null
 		return null
 	var tex := ImageTexture.create_from_image(img)
-	_bundle[name] = tex
+	_bundle[key] = tex
 	return tex

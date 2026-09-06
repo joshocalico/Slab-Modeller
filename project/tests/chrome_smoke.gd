@@ -115,6 +115,8 @@ func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
 	expect(stair.icon != null, "Stair has an icon outside the editor")
 	expect(stair.icon.get_width() == int(16.0 * SlabIcons.RASTER_SCALE),
 		"bundled icons rasterize at %d px, got %d" % [int(16.0 * SlabIcons.RASTER_SCALE), stair.icon.get_width()])
+	expect(SlabIcons.texture("BoxMesh", 2.0).get_width() == int(16.0 * SlabIcons.RASTER_SCALE * 2.0),
+		"scale 2 doubles the raster, got %d" % SlabIcons.texture("BoxMesh", 2.0).get_width())
 	expect(stair.tooltip_text.begins_with("Stair"), "the tooltip leads with the command name, got %s" % stair.tooltip_text)
 	expect(stair.tooltip_text.contains("8 steps"), "the tooltip still carries the live shape phrase")
 	expect(is_equal_approx(stair.custom_minimum_size.x, SlabPanel.BUTTON_SIZE.x),

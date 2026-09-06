@@ -25,7 +25,7 @@ const CATALOG: Dictionary = {
 		"params": [&"size_x", &"size_z"], "derives": "Thickness is the solid's grid step.",
 	},
 	&"make_stair": {
-		"label": "Stair", "icon": "GridContainer", "tooltip": "Creates a straight run of steps.",
+		"label": "Stair", "icon": "ArrayMesh", "tooltip": "Creates a straight run of steps.",
 		"params": [&"size_x", &"size_y", &"size_z", &"stair_steps"], "derives": "",
 	},
 	&"make_cylinder": {
@@ -33,7 +33,7 @@ const CATALOG: Dictionary = {
 		"params": [&"size_x", &"size_y", &"cylinder_sides"], "derives": "Width is the diameter.",
 	},
 	&"make_arch": {
-		"label": "Arch", "icon": "TorusMesh", "tooltip": "Creates an arch.",
+		"label": "Arch", "icon": "CapsuleMesh", "tooltip": "Creates an arch.",
 		"params": [&"size_x", &"size_z", &"arch_segments", &"arch_thickness", &"arch_arc"],
 		"derives": "Height follows Width and Arc.",
 	},

@@ -38,7 +38,7 @@ func ui_scale() -> float:
 
 
 func icon(icon_name: String) -> Texture2D:
-	return SlabIcons.texture(icon_name)
+	return SlabIcons.texture(icon_name, ui_scale())
 
 
 func undo() -> Object:
