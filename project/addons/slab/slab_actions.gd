@@ -372,8 +372,8 @@ func _build() -> Array[Dictionary]:
 		_row("select_all", "Select All", "ListSelect", elements, 0, "Selects every element in the current mode.", KEY_A, _select_op.bind(_pick_all)),
 		_row("select_none", "Select None", "Clear", elements, 1, "Clears the element selection.", KEY_D, _select_op.bind(_pick_none)),
 		_row("select_invert", "Invert", "GuiChecked", elements, 1, "Swaps selected elements for unselected ones.", 0, _select_op.bind(_pick_inverted)),
-		_row("select_grow", "Grow", "ZoomMore", elements, 1, "Adds the neighbours of the selection.", 0, _select_op.bind(_pick_grown)),
-		_row("select_loop", "Select Loop", "AnimationTrackGroup", edge, 1, "Follows the edge loop around the solid.", 0, _select_op.bind(_pick_loop)),
+		_row("select_grow", "Grow", "Add", elements, 1, "Adds the neighbours of the selection.", 0, _select_op.bind(_pick_grown)),
+		_row("select_loop", "Select Loop", "Path3D", edge, 1, "Follows the edge loop around the solid.", 0, _select_op.bind(_pick_loop)),
 		_row("select_ring", "Select Ring", "AnimationTrackList", edge, 1, "Follows the parallel edges across quads.", 0, _select_op.bind(_pick_ring)),
 	])
 	var out: Array[Dictionary] = []

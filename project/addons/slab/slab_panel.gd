@@ -78,9 +78,10 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	_buttons.clear()
 	_grids.clear()
 	# Immediate free keeps outgoing buttons out of the tree for the headless smokes.
-	# block_signals so a pressed handler cannot run while its button is leaving.
+	# block_signals on the buttons themselves. It does not propagate from the heading or grid.
+	for id in _buttons:
+		_buttons[id].set_block_signals(true)
 	for child in _command_column.get_children():
-		child.set_block_signals(true)
 		_command_column.remove_child(child)
 		child.free()
 	for section in sections:

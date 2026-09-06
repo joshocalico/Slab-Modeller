@@ -113,17 +113,39 @@ func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
 
 
 func case_every_command_icon_rasterizes_outside_the_editor() -> void:
+	var fallback: Texture2D = SlabIcons.texture(SlabIcons.FALLBACK)
+	expect(fallback != null, "the Node3D fallback rasterizes")
 	var seen := {}
 	for row in SlabActions.new().rows():
 		var name: String = row["icon"]
 		if seen.has(name):
 			continue
 		seen[name] = true
-		expect(SlabIcons.texture(name) != null, "row %s rasterizes %s" % [row["id"], name])
+		expect(FileAccess.file_exists("res://addons/slab/icons/%s.svg" % name),
+			"row %s has a bundled svg named %s" % [row["id"], name])
+		var tex: Texture2D = SlabIcons.texture(name)
+		expect(tex != null and tex != fallback, "row %s rasterizes %s, not the fallback" % [row["id"], name])
 	for mode in SlabModeStrip.MODE_ICONS:
 		var name: String = SlabModeStrip.MODE_ICONS[mode]
-		expect(SlabIcons.texture(name) != null,
-			"mode %s rasterizes %s" % [SlabSelection.MODE_LABELS[mode], name])
+		expect(FileAccess.file_exists("res://addons/slab/icons/%s.svg" % name),
+			"mode %s has a bundled svg named %s" % [SlabSelection.MODE_LABELS[mode], name])
+		var tex: Texture2D = SlabIcons.texture(name)
+		expect(tex != null and tex != fallback,
+			"mode %s rasterizes %s, not the fallback" % [SlabSelection.MODE_LABELS[mode], name])
+
+
+func case_command_icons_are_unique_inside_each_mode() -> void:
+	var actions := SlabActions.new()
+	for mode in MODES:
+		var seen := {}
+		for section in actions.command_sections_for(mode):
+			for row in section["rows"]:
+				var name: String = row["icon"]
+				expect(not seen.has(name),
+					"%s and %s share %s in %s mode" % [
+						seen.get(name, ""), row["id"], name, SlabSelection.MODE_LABELS[mode]
+					])
+				seen[name] = row["id"]
 
 
 func case_face_mode_shows_only_face_and_selection_commands() -> void:
