@@ -4,7 +4,7 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Buttons disable when the mode or selection count does not match. The tooltip then states the missing requirement.
+The panel is the bottom dock named **Slab**. A button disables when the mode or the selection count does not match. The tooltip then states the missing requirement.
 
 <Figure
   src="/img/panel.png"
@@ -12,28 +12,94 @@ The panel is the bottom dock named **Slab**. Buttons disable when the mode or se
   caption="Face mode, no solid selected. Create buttons stay available. Edit buttons wait for a selection."
 />
 
+The header status line repeats the selection, for example `Box, 1 face.`
+
 ## Fields
 
 | Field | Role |
 | --- | --- |
-| Amount | Distance for extrude, inset, bevel, and weld. Default 0.5. |
+| Amount | Distance for Extrude, Inset, Bevel, and Weld. Default 0.5. |
 | UV scale X, UV scale Y | Written by Apply UV. |
 | UV offset X, UV offset Y | Written by Apply UV. |
 | UV rotation | Degrees on the panel. The solid stores radians. |
 | Material slot | Integer 0 to 31 for Set Material. |
 
-## Sections
+Create buttons use a 2 m default size. That size is not a panel field.
 
-**Create** is Object mode with nothing required. Box, Plane, Stair (8 steps), Cylinder (16 sides), Arch (8 segments), Poly Shape, and Curve Sweep.
+## Create
 
-**Object** needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. Subtract cuts `objects[1]` out of `objects[0]`. Mirror X, Y, Z, Center Pivot, Snap To Grid, and Bake Module need one. Bake writes `res://baked_<name>.tres`.
+Object mode. No selection required.
 
-**Vertex** Weld, Collapse, Connect. Collapse and Connect need two vertices. Weld uses Amount as the merge radius.
+| Button | Result |
+| --- | --- |
+| Box | A cube at the origin. |
+| Plane | A flat slab one grid step thick. |
+| Stair | A straight run of 8 steps. |
+| Cylinder | A cylinder with 16 sides. |
+| Arch | A thick half-tube. 8 segments. Thickness 0.25 m. |
+| Poly Shape | A square outline extruded into a prism. |
+| Curve Sweep | A corridor profile swept along a three-point path. |
 
-**Edge** Bevel, Bridge, Connect, Insert Loop, Dissolve. Bridge and Connect need two edges. Insert Loop splits across the first selected edge at t 0.5.
+See [Create a solid](/guide/how-to/create-a-solid).
 
-**Face** Extrude, Inset, Delete, Flip Normals, Subdivide, Merge, Set Material, Apply UV, UV Larger, UV Smaller, UV Rotate, UV Reset.
+## Object
 
-**Selection** Select All, Select None, Invert, Grow. Select Loop and Select Ring are Edge mode.
+Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first selected solid is the host. The second is the other operand.
 
-The header status line repeats the selection, for example `Box, 1 face.`
+| Button | Result |
+| --- | --- |
+| Union | Adds the second solid into the first. |
+| Subtract | Cuts the second solid out of the first. |
+| Intersect | Keeps only the overlap. |
+| Mirror X, Mirror Y, Mirror Z | Mirrors across that local axis. |
+| Center Pivot | Moves the origin to the middle of the solid. |
+| Snap To Grid | Rounds every vertex onto the grid step. |
+| Bake Module | Writes `res://baked_<name>.tres`. |
+
+## Vertex
+
+| Button | Needs | Result |
+| --- | --- | --- |
+| Weld | 2 vertices | Merges vertices closer than Amount. |
+| Collapse | 2 vertices | Collapses the selection to one vertex. |
+| Connect | 2 vertices | Cuts an edge between the selected vertices. |
+
+## Edge
+
+| Button | Needs | Result |
+| --- | --- | --- |
+| Bevel | 1 edge | Chamfers the edge by Amount. |
+| Bridge | 2 edges | Builds a face between two open edges. |
+| Connect | 2 edges | Cuts a new edge between edge midpoints. |
+| Insert Loop | 1 edge | Splits across the first selected edge at t 0.5. |
+| Dissolve | 1 edge | Removes the edge and merges its faces. |
+
+## Face
+
+| Button | Needs | Result |
+| --- | --- | --- |
+| Extrude | 1 face | Pulls the face out by Amount. |
+| Inset | 1 face | Shrinks a copy of the face on the same plane. |
+| Delete | 1 face | Deletes the selected faces. |
+| Flip Normals | 1 face | Reverses which way the faces point. |
+| Subdivide | 1 face | Splits each face into four. |
+| Merge | 2 faces | Joins coplanar faces into one. |
+| Set Material | 1 face | Assigns the Material slot field. |
+| Apply UV | 1 face | Writes the UV scale, offset, and rotation fields. |
+| UV Larger | 1 face | Doubles the UV scale and applies it. |
+| UV Smaller | 1 face | Halves the UV scale and applies it. |
+| UV Rotate | 1 face | Turns the UV by 90 degrees. |
+| UV Reset | 1 face | Returns the UV to scale one and no rotation. |
+
+## Selection
+
+Select All, Select None, Invert, and Grow run in Vertex, Edge, or Face mode. Select Loop and Select Ring are Edge mode.
+
+| Button | Result |
+| --- | --- |
+| Select All | Selects every element in the current mode. |
+| Select None | Clears the element selection. |
+| Invert | Swaps selected elements for unselected ones. |
+| Grow | Adds the neighbours of the selection. |
+| Select Loop | Follows the edge loop around the solid. |
+| Select Ring | Follows the parallel edges across quads. |

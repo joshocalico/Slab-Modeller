@@ -1,0 +1,39 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Create a solid" };
+
+# Create a solid
+
+Use this when the scene has no `SlabSolid` yet, or when you want a second volume as a cutter.
+
+## Make a box
+
+1. Press <kbd>1</kbd> for Object mode.
+2. Click **Box** on the Slab panel.
+
+A `SlabSolid` appears at the origin. The default size is 2 m on a side.
+
+<Figure
+  src="/img/solid-box.png"
+  alt="A closed blue box solid in a 3D view."
+  caption="A default box. The other Create buttons use the same 2 m size."
+/>
+
+## Other Create buttons
+
+Each button adds a closed `SlabSolid` at the origin. None of them need a selection.
+
+| Button | What you get |
+| --- | --- |
+| **Plane** | A flat slab. Thickness is one grid step. |
+| **Stair** | A straight run of 8 steps. |
+| **Cylinder** | A 16-sided cylinder. |
+| **Arch** | A thick half-tube. 8 segments. Thickness 0.25 m. |
+| **Poly Shape** | A square outline extruded into a prism. |
+| **Curve Sweep** | A corridor profile swept along a three-point path. |
+
+To size a box after you create it, switch to Face mode and use the Move gizmo. See [Pull a wall](/guide/how-to/pull-a-wall).
+
+## Live sweep path
+
+**Curve Sweep** on the panel is a one-shot solid. For a path you can edit, add a `SlabSweep` node. Set **Points** along the floor. **Profile** is width and height. The node rebuilds a mesh as you change those fields. It is not a `SlabSolid`. Boolean and the Slab panel do not edit it.

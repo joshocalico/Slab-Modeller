@@ -30,6 +30,8 @@ The cutter is removed from the host. The result should still be watertight. You 
 
 If Slab refuses the op, the cutter may be disjoint from the host. Move it so the volumes overlap and try again.
 
+Union adds the second solid into the first. Intersect keeps only the overlap. Both need two solids in the same order, host first.
+
 ## Doors
 
-To open a doorway, push the cutter through the wall so it sticks out on both sides, then subtract. See [Block out a room](/guide/tutorials/block-out-a-room). A `SlabSocket` is still the opening on a `SlabModule`. See [Closed solids](/guide/explanation/closed-solids).
+To open a doorway, push the cutter through the wall so it sticks out on both sides, then subtract. See [Block out a room](/guide/tutorials/block-out-a-room). A `SlabSocket` is a named opening on a `SlabModule`. It does not cut the mesh. See [Closed solids](/guide/explanation/closed-solids).

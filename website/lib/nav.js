@@ -19,6 +19,10 @@ export const NAV = [
     title: "How to",
     items: [
       {
+        href: "/guide/how-to/create-a-solid",
+        label: "Create a solid",
+      },
+      {
         href: "/guide/how-to/select-in-the-view",
         label: "Select in the 3D view",
       },
