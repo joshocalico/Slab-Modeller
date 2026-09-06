@@ -1,0 +1,102 @@
+import { Figure } from "@/components/Figure";
+
+export const metadata = { title: "Build a house" };
+
+# Build a house
+
+We will make a 4 m box, seat an Arch on it, union them into one solid, cut a door, then paint walls, roof, and gables.
+
+<Figure
+  src="/img/build-a-house.mp4"
+  alt="Four stills of a box, a seated arch, a doorway, and three painted materials."
+  caption="Four stills. Box and Arch, Union, a door, then three materials."
+/>
+
+If you do not have Slab open yet, do [Install Slab](/guide/install) first. Arch itself is in [Create a solid](/guide/how-to/create-a-solid).
+
+## Create the walls
+
+1. Press <kbd>1</kbd> for Object mode.
+2. Hover the Create icons until you see **Box**.
+3. Set **Width** to 4, **Height** to 2.2, and **Depth** to 4.
+4. Click **Box**.
+
+A `SlabSolid` appears at the origin.
+
+## Make the arch
+
+1. Hover until you see **Arch**.
+2. Set **Width** to 4 and **Depth** to 4. Width is the outer span.
+3. Set **Segments** to 12, **Thickness** to 0.4, and **Arc** to 180.
+4. Click **Arch**.
+
+A second `SlabSolid` appears at the origin, inside the box. Height follows Width and Arc. A 180° arch on a 4 m span is 2 m tall.
+
+## Seat the arch
+
+1. Click the arch solid.
+2. Press <kbd>W</kbd>.
+3. Drag the Move gizmo up until the feet sit in the top of the box. Stop around Y = 2.05.
+
+The feet must overlap the box a little. Union of two solids that only touch, or that sit apart, does not merge the volumes.
+
+<Figure
+  src="/img/house-01.png"
+  alt="A blue box with an orange arched roof seated on top, still two solids."
+  caption="The box is 4 m by 2.2 m by 4 m. The Arch is a second solid. Its feet sit in the top of the box."
+/>
+
+## Union
+
+1. Click the box first, then Shift-click the arch. The box must stay first.
+2. Hover the Object icons until you see **Union**. Click it.
+
+The arch joins the box. Hide or delete the unused arch node afterward. You should see one vaulted solid.
+
+<Figure
+  src="/img/house-02.png"
+  alt="One vaulted solid after Union, still in the prototype colour."
+  caption="One solid. The vault and the walls share an edge."
+/>
+
+If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so the feet overlap the top, then try again.
+
+## Cut a door
+
+1. Hover until you see **Box**. Set **Width** to 0.9, **Height** to 1.6, and **Depth** to 1.2. Click **Box**.
+2. Move that cutter so it pokes through one wall. It should stick out on both sides of the wall.
+3. Click the house first, then Shift-click the cutter.
+4. Hover until you see **Subtract**. Click it.
+
+<Figure
+  src="/img/house-03.png"
+  alt="The vaulted house with a doorway cut through the near wall."
+  caption="Subtract through a wall. The opening stays a closed solid."
+/>
+
+## Paint three materials
+
+1. Click the house `SlabSolid` in the Scene tree.
+2. Press <kbd>4</kbd> for Face mode.
+3. On the Slab panel, click the plus chip until you see three material chips.
+4. In the inspector, set slot 0 to a wall colour. Set slot 1 to a roof colour. Set slot 2 to a darker gable colour. Assign a repeating albedo on each if you have one.
+
+Faces still use slot 0.
+
+5. Click a roof face. Grow until the vault is selected.
+6. Click chip 1. Hover until you see **Set Material**. Click it.
+7. Click a gable face, the flat end of the arch. Click chip 2, then **Set Material**.
+
+<Figure
+  src="/img/house-04.png"
+  alt="The house with plaster walls, a terracotta roof, and darker gables."
+  caption="Slot 0 on the walls. Slot 1 on the vault. Slot 2 on the gables."
+/>
+
+Set **UV scale X** and **UV scale Y** to 2, then **Apply UV** on the roof if the pattern is huge. **UV Larger** doubles the scale on the selected faces.
+
+## Check
+
+Orbit the house. The volume should stay closed. Undo still steps back through Union, Subtract, and the paints.
+
+Next, [texture a room](/guide/tutorials/texture-a-room) if you want UV steps on a hollow interior, or [punch a cavity](/guide/how-to/punch-a-cavity) for other booleans.

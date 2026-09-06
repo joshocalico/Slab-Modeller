@@ -98,6 +98,30 @@ func _process(_dt: float) -> bool:
 		return false
 	if _phase == 8:
 		_save("panel-object.png")
+		_stage_house()
+		_phase = 9
+		_wait = 0
+		return false
+	if _phase == 9:
+		_save("house-01.png")
+		_union_house_roof()
+		_phase = 10
+		_wait = 0
+		return false
+	if _phase == 10:
+		_save("house-02.png")
+		_cut_house_door()
+		_phase = 11
+		_wait = 0
+		return false
+	if _phase == 11:
+		_save("house-03.png")
+		_paint_house()
+		_phase = 12
+		_wait = 0
+		return false
+	if _phase == 12:
+		_save("house-04.png")
 		print("docs_capture wrote ", _out)
 		quit(0)
 		return true
@@ -182,6 +206,101 @@ func _stage_panel() -> void:
 	root.add_child(panel)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	selection.mode = SlabSelection.Mode.FACE
+
+
+func _stage_house() -> void:
+	_clear_root()
+	root.size = VIEW
+	DisplayServer.window_set_size(VIEW)
+	_world = Node3D.new()
+	root.add_child(_world)
+	_add_camera(_world, Vector3(7.2, 5.4, 8.2), Vector3(2.0, 2.4, 2.0), 0.28)
+	_add_lights(_world)
+	_solid = _make_solid(Vector3(4, 2.2, 4), Color(0.62, 0.78, 0.98))
+	_make_arch(Color(0.86, 0.42, 0.28), 2.05)
+	_overlay_wires(_solid)
+	var roof: Node3D = _world.get_node_or_null("Roof")
+	if roof != null:
+		_overlay_wires(roof)
+
+
+func _union_house_roof() -> void:
+	var roof: Node3D = _world.get_node_or_null("Roof")
+	var err: int = _solid.call("boolean_with", roof, 0)
+	print("docs_capture house union ", err, " faces=", _solid.call("face_count"))
+	roof.free()
+	_clear_overlays()
+	_overlay_wires(_solid)
+
+
+func _cut_house_door() -> void:
+	var door: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	_world.add_child(door)
+	door.call("make_box", Vector3(0.9, 1.6, 1.2))
+	door.position = Vector3(1.55, 0.0, 3.4)
+	var err: int = _solid.call("boolean_with", door, 1)
+	print("docs_capture house door ", err, " faces=", _solid.call("face_count"))
+	door.free()
+	_clear_overlays()
+	_overlay_wires(_solid)
+
+
+func _paint_house() -> void:
+	var walls := _tile(Color(0.82, 0.78, 0.7), Color(0.72, 0.68, 0.6))
+	var roof := _tile(Color(0.72, 0.28, 0.18), Color(0.52, 0.18, 0.12))
+	var gable := _tile(Color(0.45, 0.32, 0.22), Color(0.32, 0.22, 0.14))
+	var mats: Array = []
+	mats.append(walls)
+	mats.append(roof)
+	mats.append(gable)
+	_solid.set("materials", mats)
+	var roof_faces := PackedInt64Array()
+	var gable_faces := PackedInt64Array()
+	for id in PackedInt64Array(_solid.call("get_faces")):
+		var n: Vector3 = _solid.call("face_normal", id)
+		var c: Vector3 = _solid.call("face_centroid", id)
+		if absf(n.z) > 0.55 and c.y >= 1.9:
+			gable_faces.append(id)
+		elif c.y >= 2.0:
+			roof_faces.append(id)
+	var roof_err: int = _solid.call("set_face_material", roof_faces, 1)
+	var gable_err: int = _solid.call("set_face_material", gable_faces, 2)
+	_solid.call("set_face_uv", roof_faces, Vector2(2, 2), Vector2.ZERO, 0.0)
+	print("docs_capture house paint roof ", roof_err, " n=", roof_faces.size(), " gable ", gable_err, " n=", gable_faces.size())
+	_clear_overlays()
+	_overlay_wires(_solid)
+
+
+func _make_arch(color: Color, y: float) -> Node3D:
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	solid.name = "Roof"
+	_world.add_child(solid)
+	var err: int = solid.call("make_arch", 4.0, 4.0, 12, 0.4, PI)
+	print("docs_capture arch ", err)
+	solid.position = Vector3(0, y, 0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.55
+	solid.set("material", mat)
+	return solid
+
+
+func _tile(a: Color, b: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = a
+	mat.albedo_texture = _checker(a, b)
+	mat.roughness = 0.62
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	return mat
+
+
+func _checker(a: Color, b: Color) -> ImageTexture:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	for y in 16:
+		for x in 16:
+			var odd: bool = ((x / 4) + (y / 4)) % 2 == 1
+			img.set_pixel(x, y, b if odd else a)
+	return ImageTexture.create_from_image(img)
 
 
 func _make_solid(size: Vector3, color: Color) -> Node3D:
@@ -272,8 +391,8 @@ func _overlay_wires(solid: Node3D) -> void:
 	st.begin(Mesh.PRIMITIVE_LINES)
 	for edge in PackedInt64Array(solid.call("get_edges")):
 		var ends: PackedVector3Array = solid.call("edge_endpoints", edge)
-		st.add_vertex(ends[0])
-		st.add_vertex(ends[1])
+		st.add_vertex(solid.to_global(ends[0]))
+		st.add_vertex(solid.to_global(ends[1]))
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = Color(0.93, 0.88, 0.72)

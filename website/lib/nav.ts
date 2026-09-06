@@ -27,6 +27,10 @@ export const GUIDE_NAV: NavGroup[] = [
         href: "/guide/tutorials/texture-a-room",
         label: "Texture a room",
       },
+      {
+        href: "/guide/tutorials/build-a-house",
+        label: "Build a house",
+      },
     ],
   },
   {
