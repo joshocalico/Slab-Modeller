@@ -92,11 +92,15 @@ func _init() -> void:
 		if shape_node.shape is ConcavePolygonShape3D:
 			_expect(shape_node.shape.get_faces().size() >= 3, "soup has triangles")
 		_expect(shape_node.disabled == false, "collider is enabled")
+		var before_mesh: Mesh = null
+		if mesh_node != null:
+			before_mesh = mesh_node.mesh
 		solid.set("collision_enabled", false)
 		_expect(shape_node.disabled == true, "toggle disables the collider")
-		_expect(solid.call("face_count") == 10, "toggle does not rebuild the mesh")
+		_expect(mesh_node != null and mesh_node.mesh == before_mesh, "toggle does not replace the Mesh")
 		solid.set("collision_enabled", true)
 		_expect(shape_node.disabled == false, "re-enable restores the collider")
+		_expect(mesh_node != null and mesh_node.mesh == before_mesh, "re-enable still keeps the Mesh")
 
 	_expect(solid.call("inset_faces", PackedInt64Array([top]), 0.25) == 0, "inset_faces succeeds")
 	_expect(solid.call("is_alive", top), "inset keeps the center face id")
