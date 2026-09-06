@@ -8,7 +8,7 @@ The panel is the bottom dock named **Slab**. It shows the command groups for the
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel showing modes, numeric fields, and the Face and Selection command buttons."
+  alt="The Slab panel showing modes, numeric fields, and the Face and Selection command icons."
   caption="Face mode, no solid selected. Face and Selection are the only groups shown. Hover an icon for its name. The first Selection icon is Select All."
 />
 
@@ -28,7 +28,7 @@ The top row. These shape the next edit, not an existing solid's recipe.
 
 ## Create fields
 
-Under the Create heading, above those buttons, in Object mode only. They shape the next click. Changing one never rewrites a solid that already exists.
+Under the Create heading, above those icons, in Object mode only. They shape the next click. Changing one never rewrites a solid that already exists.
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
@@ -47,7 +47,7 @@ Under the Create heading, above those buttons, in Object mode only. They shape t
 
 Object mode. No selection required. Set the Create fields, then click.
 
-| Button | Result |
+| Command | Result |
 | --- | --- |
 | Box | A box of Width × Height × Depth at the origin. |
 | Plane | A Width × Depth slab one grid step thick. |
@@ -63,7 +63,7 @@ See [Create a solid](/guide/how-to/create-a-solid).
 
 Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first selected solid is the host. The second is the other operand.
 
-| Button | Result |
+| Command | Result |
 | --- | --- |
 | Union | Adds the second solid into the first. |
 | Subtract | Cuts the second solid out of the first. |
@@ -75,7 +75,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 ## Vertex
 
-| Button | Needs | Result |
+| Command | Needs | Result |
 | --- | --- | --- |
 | Weld | 2 vertices | Merges vertices closer than Amount. |
 | Collapse | 2 vertices | Collapses the selection to one vertex. |
@@ -83,7 +83,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 ## Edge
 
-| Button | Needs | Result |
+| Command | Needs | Result |
 | --- | --- | --- |
 | Bevel | 1 edge | Chamfers the edge by Amount. |
 | Bridge | 2 edges | Builds a face between two open edges. |
@@ -95,7 +95,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 ## Face
 
-| Button | Needs | Result |
+| Command | Needs | Result |
 | --- | --- | --- |
 | Extrude | 1 face | Pulls the face out by Amount. |
 | Inset | 1 face | Shrinks a copy of the face on the same plane. |
@@ -114,7 +114,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 Shown in Vertex, Edge, and Face mode. Each button works on the current mode's elements.
 
-| Button | Result |
+| Command | Result |
 | --- | --- |
 | Select All | Selects every element in the current mode. |
 | Select None | Clears the element selection. |
