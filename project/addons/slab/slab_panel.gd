@@ -70,9 +70,11 @@ func refresh() -> void:
 
 
 func _rebuild_commands(sections: Array[Dictionary]) -> void:
-	# A number typed into a Create field but not yet entered would otherwise leave with its widget.
+	# apply() writes the LineEdit into the Range and does not emit value_changed, so the
+	# catalog store would otherwise keep the last committed number.
 	for spin in _spins_under(_command_column):
 		spin.apply()
+		spin.value_changed.emit(spin.value)
 	_buttons.clear()
 	_grids.clear()
 	# Nothing in the command column can change the mode, so no freed control is mid-signal here,

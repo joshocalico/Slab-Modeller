@@ -129,6 +129,38 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	panel.free()
 
 
+func case_a_half_typed_create_field_commits_on_mode_change() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
+	steps.get_line_edit().text = "20"
+	selection.mode = SlabSelection.Mode.FACE
+	expect(is_equal_approx(actions.shapes.value_of(&"stair_steps"), 20.0),
+		"leaving Object mode applies a half-typed Steps value, got %s" % actions.shapes.value_of(&"stair_steps"))
+	selection.mode = SlabSelection.Mode.OBJECT
+	var stair: Button = _button_for(panel, "Stair")
+	expect(stair != null and stair.tooltip_text.contains("20 steps"),
+		"the rebuilt Stair tooltip follows the committed steps, got %s" % stair.tooltip_text)
+	panel.free()
+
+
+func case_command_grids_fit_once_the_panel_has_a_width() -> void:
+	var panel := _build_panel(1.0)
+	var grid: GridContainer = _first_grid(panel)
+	expect(grid != null, "Object mode has a command grid")
+	expect(grid.columns == SlabPanel.DEFAULT_COLUMNS,
+		"a detached panel keeps the default column count, got %d" % grid.columns)
+	root.add_child(panel)
+	panel.size = Vector2(1600.0, 440.0)
+	# Setting size on a SceneTree harness does not emit resized.
+	panel.resized.emit()
+	expect(grid.columns == 10, "1600 px fits ten 156 px buttons, got %d" % grid.columns)
+	panel.free()
+
+
 func case_font_scaling_is_monotonic() -> void:
 	var previous: int = 0
 	for scale in SCALES:
@@ -229,6 +261,16 @@ func _button_for(node: Node, text: String) -> Button:
 	for button in _buttons(node):
 		if button.text == text:
 			return button
+	return null
+
+
+func _first_grid(node: Node) -> GridContainer:
+	if node is GridContainer:
+		return node
+	for child in node.get_children():
+		var found: GridContainer = _first_grid(child)
+		if found != null:
+			return found
 	return null
 
 
