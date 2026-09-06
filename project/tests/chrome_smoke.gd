@@ -178,6 +178,18 @@ func case_a_twelve_px_svg_vector_rasters_to_the_cell() -> void:
 		"CurveIn matches the 32 px vector raster, not a stretch")
 
 
+func case_stair_uses_the_material_design_stairs_glyph() -> void:
+	var svg := FileAccess.get_file_as_string("res://addons/slab/icons/Stair.svg")
+	expect(svg.contains('viewBox="0 0 24 24"'), "Stair.svg keeps the MDI 24x24 viewBox")
+	expect(svg.contains("M15,5V9H11V13H7V17H3V20H10V16H14V12H18V8H22V5H15Z"),
+		"Stair.svg keeps the MDI stairs path")
+	var notice := FileAccess.get_file_as_string("res://addons/slab/icons/NOTICE")
+	expect(notice.contains("Godot Engine editor icons"), "NOTICE still credits Godot icons")
+	expect(notice.contains("Apache License, Version 2.0"), "NOTICE names Apache for Stair")
+	expect(FileAccess.file_exists("res://addons/slab/icons/Apache-2.0.txt"),
+		"Apache-2.0.txt sits next to Stair.svg")
+
+
 func case_every_command_icon_rasterizes_outside_the_editor() -> void:
 	var fallback: Texture2D = SlabIcons.texture(SlabIcons.FALLBACK)
 	expect(fallback != null, "the Node3D fallback rasterizes")
