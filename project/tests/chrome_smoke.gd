@@ -124,6 +124,17 @@ func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
 	panel.free()
 
 
+func case_command_icon_fits_inside_the_cell() -> void:
+	var panel := _build_panel(1.0)
+	var stair: Button = _button_for(panel, "Stair")
+	_expect_icon_fits(stair, "Stair")
+	panel.free()
+	var strip := _build_strip(1.0)
+	for button in _buttons(strip):
+		_expect_icon_fits(button, button.text)
+	strip.free()
+
+
 func case_a_twelve_px_svg_vector_rasters_to_the_cell() -> void:
 	var svg := FileAccess.get_file_as_string("res://addons/slab/icons/CurveIn.svg")
 	expect(svg != "", "CurveIn.svg reads")
@@ -369,6 +380,17 @@ func _button_for(node: Node, label: String) -> Button:
 		if String(button.get_meta("slab_label", "")) == label:
 			return button
 	return null
+
+
+func _expect_icon_fits(button: Button, name: String) -> void:
+	var box: StyleBox = button.get_theme_stylebox("normal")
+	var min_size: Vector2 = button.get_minimum_size()
+	var inner_w: float = min_size.x - box.get_margin(SIDE_LEFT) - box.get_margin(SIDE_RIGHT)
+	var inner_h: float = min_size.y - box.get_margin(SIDE_TOP) - box.get_margin(SIDE_BOTTOM)
+	expect(inner_w >= float(button.icon.get_width()) and inner_h >= float(button.icon.get_height()),
+		"%s inner size %.1fx%.1f fits a %dx%d icon" % [
+			name, inner_w, inner_h, button.icon.get_width(), button.icon.get_height()
+		])
 
 
 func _first_grid(node: Node) -> GridContainer:
