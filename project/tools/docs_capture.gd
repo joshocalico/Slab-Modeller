@@ -158,7 +158,7 @@ func _stage_panel() -> void:
 	var panel: Control = SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	root.add_child(panel)
-	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	selection.mode = SlabSelection.Mode.FACE
 
 
