@@ -47,6 +47,17 @@ int orient3d(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c, const IVec3 &
 	return 0;
 }
 
+int orient2d(int32_t p_ax, int32_t p_ay, int32_t p_bx, int32_t p_by, int32_t p_cx, int32_t p_cy) {
+	const __int128 d = (__int128)(p_bx - p_ax) * (p_cy - p_ay) - (__int128)(p_by - p_ay) * (p_cx - p_ax);
+	if (d > 0) {
+		return 1;
+	}
+	if (d < 0) {
+		return -1;
+	}
+	return 0;
+}
+
 __int128 signed_volume_6x(const Mesh &p_mesh) {
 	__int128 acc = 0;
 	std::vector<VertexId> corners;

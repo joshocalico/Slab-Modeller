@@ -20,6 +20,14 @@ Each face carries a UV scale, offset, rotation, a projection axis, and a materia
 
 The click path picks one solid, then an element on that mesh. Two nodes are two meshes until you boolean them. See [Closed solids](/guide/explanation/closed-solids) for the product rule.
 
+## What validate checks
+
+Every live edge has a twin. Face loops agree with those twins. The signed volume is positive. Those checks still allow a cap to sit inside the box.
+
+`validate` also checks the embedding. It tests non-adjacent faces with exact orientation predicates on the integer lattice. A transverse edge that stabs a triangle is a fault. A coplanar overlap of interiors is a fault. An edge that lies in another face and crosses its interior is a fault. Faces that share a mesh edge are neighbours. They are not a self-intersection.
+
+`MeshEdit::commit` calls `validate`. Ops such as `extrude` can still run on the scratch mesh. The commit is the gate.
+
 ## Papers
 
 - Leonidas Guibas and Jorge Stolfi. Primitives for the manipulation of general subdivisions and the computation of Voronoi diagrams. *ACM Transactions on Graphics*, 4(2), 1985. [doi:10.1145/282918.282923](https://doi.org/10.1145/282918.282923)

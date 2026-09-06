@@ -65,6 +65,7 @@ enum class MeshError : uint8_t {
 	NO_INTERSECTION,
 	CORRUPT_DATA,
 	INVALID_SELECTION,
+	SELF_INTERSECTION,
 };
 
 struct MeshFault {

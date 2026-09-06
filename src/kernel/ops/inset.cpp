@@ -91,6 +91,43 @@ bool _mitre(const godot::Vector3 &p_normal, const std::vector<IVec3> &p_src, flo
 	return true;
 }
 
+int _side(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c, const Wide &p_ref) {
+	const int64_t ax = int64_t(p_b.x) - p_a.x;
+	const int64_t ay = int64_t(p_b.y) - p_a.y;
+	const int64_t az = int64_t(p_b.z) - p_a.z;
+	const int64_t bx = int64_t(p_c.x) - p_a.x;
+	const int64_t by = int64_t(p_c.y) - p_a.y;
+	const int64_t bz = int64_t(p_c.z) - p_a.z;
+	Wide cross;
+	cross.x = __int128(ay) * bz - __int128(az) * by;
+	cross.y = __int128(az) * bx - __int128(ax) * bz;
+	cross.z = __int128(ax) * by - __int128(ay) * bx;
+	const __int128 d = _dot(cross, p_ref);
+	if (d > 0) {
+		return 1;
+	}
+	if (d < 0) {
+		return -1;
+	}
+	return 0;
+}
+
+bool _spokes_cross(const std::vector<IVec3> &p_src, const std::vector<IVec3> &p_dst, const Wide &p_ref) {
+	const int n = int(p_src.size());
+	for (int i = 0; i < n; i++) {
+		for (int j = i + 1; j < n; j++) {
+			const int o1 = _side(p_src[i], p_dst[i], p_src[j], p_ref);
+			const int o2 = _side(p_src[i], p_dst[i], p_dst[j], p_ref);
+			const int o3 = _side(p_src[j], p_dst[j], p_src[i], p_ref);
+			const int o4 = _side(p_src[j], p_dst[j], p_dst[i], p_ref);
+			if (o1 * o2 < 0 && o3 * o4 < 0) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 bool _shrinks_without_inverting(const std::vector<IVec3> &p_src, const std::vector<IVec3> &p_dst) {
 	const int n = int(p_src.size());
 	for (int i = 0; i < n; i++) {
@@ -114,6 +151,9 @@ bool _shrinks_without_inverting(const std::vector<IVec3> &p_src, const std::vect
 		if (_turn(p_src[prev], p_src[i], p_src[next], src) != _turn(p_dst[prev], p_dst[i], p_dst[next], src)) {
 			return false;
 		}
+	}
+	if (_spokes_cross(p_src, p_dst, src)) {
+		return false;
 	}
 	return true;
 }

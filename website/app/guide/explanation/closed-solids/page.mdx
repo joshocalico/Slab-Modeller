@@ -17,3 +17,13 @@ A `SlabSocket` is a named opening on a `SlabModule`. It does not cut the mesh. K
 The 3D click path picks one `SlabSolid`, then an element on that mesh. Faces on two nodes are two meshes. Boolean is the op that combines them. Until you subtract or union, each solid keeps its own vertex ids.
 
 The mesh is a half-edge. The papers live in [Engineering notes](/engineering), off this guide.
+
+## Embeddings, not only twins
+
+Twins make every edge meet a neighbour. That is a combinatorial solid. It is not enough.
+
+A legal `SlabSolid` is a closed, consistently oriented, positive-volume 2-manifold. It must sit in space without piercing itself. `MeshEdit::commit` runs `validate`. Combinatorial watertightness can still hide a cap that occupies the floor, or cap edges that lie on the original walls.
+
+Inset a face, then extrude the inner cap to hollow a room. Keep the cap above the floor. That mesh still embeds. Extrude a whole face through the opposite face. Commit refuses with `SELF_INTERSECTION`. An inward extrude with no inset is the same fault.
+
+Do not punch an opening by driving a face into itself. Cut a hole with Subtract.

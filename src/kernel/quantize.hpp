@@ -36,6 +36,7 @@ struct IVec3 {
 bool quantize(const godot::Vector3 &p_p, IVec3 &r_out);
 godot::Vector3 dequantize(const IVec3 &p_p);
 int orient3d(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c, const IVec3 &p_d);
+int orient2d(int32_t p_ax, int32_t p_ay, int32_t p_bx, int32_t p_by, int32_t p_cx, int32_t p_cy);
 __int128 det3(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c);
 
 class Mesh;
