@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${root}"
+scons target=template_debug -j8 bin/slab_kernel_test >/dev/null
+SLAB_TOPO=1 bin/slab_kernel_test topo_measure
