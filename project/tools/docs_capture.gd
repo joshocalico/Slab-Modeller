@@ -14,6 +14,7 @@ const INWARD := -2.4
 var _out := ""
 var _world: Node3D
 var _solid: Node3D
+var _panel_selection: RefCounted
 var _phase := 0
 var _wait := 0
 
@@ -78,6 +79,12 @@ func _process(_dt: float) -> bool:
 		return false
 	if _phase == 7:
 		_save("panel.png")
+		_panel_selection.mode = SlabSelection.Mode.OBJECT
+		_phase = 8
+		_wait = 0
+		return false
+	if _phase == 8:
+		_save("panel-object.png")
 		print("docs_capture wrote ", _out)
 		quit(0)
 		return true
@@ -155,6 +162,7 @@ func _stage_panel() -> void:
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
 	var selection := SlabSelection.new()
+	_panel_selection = selection
 	var actions := SlabActions.new(selection)
 	var panel: Control = SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
