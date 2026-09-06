@@ -344,13 +344,13 @@ func _build() -> Array[Dictionary]:
 		_row("mirror_z", "Mirror Z", "Object", object, 1, "Mirrors the solid across its local Z axis.", 0, _mirror_op.bind(Vector3(1.0, 1.0, -1.0))),
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
-		_row("bake_module", "Bake Module", "Save", object, 1, "Saves the built mesh next to the project.", 0, _bake_op),
+		_row("bake_module", "Bake Module", "Save", object, 1, "Writes res://baked_<snake_case_name>.tres.", 0, _bake_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
 		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Cuts an edge between the selected vertices.", KEY_K, _ids_op.bind("connect_vertices")),
 
-		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Rounds the edge by the amount field.", KEY_B, _amount_op.bind("bevel_edges")),
+		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Chamfers the edge by the amount field.", KEY_B, _amount_op.bind("bevel_edges")),
 		_row("bridge_edges", "Bridge", "CurveIn", edge, 2, "Builds a face between two open edges.", KEY_G, _ids_op.bind("bridge_edges")),
 		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Cuts a new edge between edge midpoints.", KEY_K, _ids_op.bind("connect_edges")),
 		_row("insert_loop", "Insert Loop", "AnimationTrackGroup", edge, 1, "Inserts an edge loop across the first edge.", KEY_L, _loop_op),
