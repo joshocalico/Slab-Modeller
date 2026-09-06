@@ -98,6 +98,28 @@ func case_create_tooltips_follow_the_fields() -> void:
 	panel.free()
 
 
+func case_uv_quick_actions_update_the_spins() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([7]))
+	var scale_x: SpinBox = _spins(panel.find_child("uv_scale_x", true, false))[0]
+	var rotation: SpinBox = _spins(panel.find_child("uv_rotation", true, false))[0]
+	expect(is_equal_approx(scale_x.value, 1.0), "UV scale X starts at 1")
+	actions.run("uv_scale_up")
+	expect(is_equal_approx(scale_x.value, 2.0), "UV Larger writes 2 into the spin, got %s" % scale_x.value)
+	actions.run("uv_scale_up")
+	expect(is_equal_approx(scale_x.value, 4.0), "a second UV Larger writes 4 into the spin, got %s" % scale_x.value)
+	actions.run("uv_rotate")
+	expect(is_equal_approx(rotation.value, 90.0), "UV Rotate writes 90 into the spin, got %s" % rotation.value)
+	actions.run("uv_reset")
+	expect(is_equal_approx(scale_x.value, 1.0) and is_equal_approx(rotation.value, 0.0),
+		"UV Reset restores the spins, got scale %s rotation %s" % [scale_x.value, rotation.value])
+	panel.free()
+
+
 func case_rebuild_blocks_button_signals_before_it_clears_them() -> void:
 	var source: String = _source_of("slab_panel.gd")
 	var rebuild: int = source.find("func _rebuild_commands")

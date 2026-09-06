@@ -37,7 +37,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	add_child(_command_scroll())
 
 	_selection.changed.connect(refresh)
-	_actions.reported.connect(set_status)
+	_actions.reported.connect(_on_reported)
 	resized.connect(_fit_columns)
 	refresh()
 
@@ -107,6 +107,33 @@ func set_status(text: String) -> void:
 		_status.text = text
 
 
+func _on_reported(text: String) -> void:
+	set_status(text)
+	# UV Larger, Smaller, Rotate, and Reset write _actions without touching the spins.
+	_sync_edit_fields()
+
+
+func _sync_edit_fields() -> void:
+	_set_spin(&"amount", _actions.amount)
+	_set_spin(&"uv_scale_x", _actions.uv_scale.x)
+	_set_spin(&"uv_scale_y", _actions.uv_scale.y)
+	_set_spin(&"uv_offset_x", _actions.uv_offset.x)
+	_set_spin(&"uv_offset_y", _actions.uv_offset.y)
+	_set_spin(&"uv_rotation", _actions.uv_rotation_degrees)
+	_set_spin(&"material_slot", float(_actions.material_slot))
+
+
+func _set_spin(key: StringName, value: float) -> void:
+	var box: Node = find_child(String(key), true, false)
+	if box == null:
+		return
+	var spins: Array[SpinBox] = _spins_under(box)
+	if spins.is_empty():
+		return
+	if not is_equal_approx(spins[0].value, value):
+		spins[0].set_value_no_signal(value)
+
+
 func _header() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -127,25 +154,25 @@ func _fields() -> Control:
 	row.add_theme_constant_override("separation", 10)
 	row.add_child(_spin("Amount", 0.05, 64.0, 0.05, _actions.amount, func(v: float) -> void:
 		_actions.amount = v
-	))
+	, "", &"amount"))
 	row.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
 		_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
-	))
+	, "", &"uv_scale_x"))
 	row.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
 		_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
-	))
+	, "", &"uv_scale_y"))
 	row.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
 		_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
-	))
+	, "", &"uv_offset_x"))
 	row.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
 		_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
-	))
+	, "", &"uv_offset_y"))
 	row.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
 		_actions.uv_rotation_degrees = v
-	))
+	, "", &"uv_rotation"))
 	row.add_child(_spin("Material slot", 0.0, 31.0, 1.0, float(_actions.material_slot), func(v: float) -> void:
 		_actions.material_slot = int(v)
-	))
+	, "", &"material_slot"))
 	return row
 
 
