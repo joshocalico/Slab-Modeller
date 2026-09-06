@@ -36,6 +36,9 @@ static func _bundled(name: String, raster: float) -> Texture2D:
 	if err != OK or img.is_empty():
 		_bundle[key] = null
 		return null
+	var edge: int = maxi(1, int(round(16.0 * raster)))
+	if img.get_width() != edge or img.get_height() != edge:
+		img.resize(edge, edge, Image.INTERPOLATE_BILINEAR)
 	var tex := ImageTexture.create_from_image(img)
 	_bundle[key] = tex
 	return tex

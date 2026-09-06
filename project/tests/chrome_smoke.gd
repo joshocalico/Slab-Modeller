@@ -137,6 +137,8 @@ func case_every_command_icon_rasterizes_outside_the_editor() -> void:
 			"row %s has a bundled svg named %s" % [row["id"], name])
 		var tex: Texture2D = SlabIcons.texture(name)
 		expect(tex != null and tex != fallback, "row %s rasterizes %s, not the fallback" % [row["id"], name])
+		expect(tex.get_width() == int(16.0 * SlabIcons.RASTER_SCALE) and tex.get_height() == int(16.0 * SlabIcons.RASTER_SCALE),
+			"row %s %s is 32 px square, got %dx%d" % [row["id"], name, tex.get_width(), tex.get_height()])
 	for mode in SlabModeStrip.MODE_ICONS:
 		var name: String = SlabModeStrip.MODE_ICONS[mode]
 		expect(FileAccess.file_exists("res://addons/slab/icons/%s.svg" % name),
@@ -144,6 +146,8 @@ func case_every_command_icon_rasterizes_outside_the_editor() -> void:
 		var tex: Texture2D = SlabIcons.texture(name)
 		expect(tex != null and tex != fallback,
 			"mode %s rasterizes %s, not the fallback" % [SlabSelection.MODE_LABELS[mode], name])
+		expect(tex.get_width() == int(16.0 * SlabIcons.RASTER_SCALE),
+			"mode %s %s is 32 px, got %d" % [SlabSelection.MODE_LABELS[mode], name, tex.get_width()])
 
 
 func case_command_icons_are_unique_inside_each_mode() -> void:
