@@ -2,6 +2,7 @@
 extends RefCounted
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 
 signal reported(text: String)
@@ -9,11 +10,6 @@ signal reported(text: String)
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
 const SECTION_ORDER: Array = [SECTION_CREATE, "Object", "Vertex", "Edge", "Face", SECTION_SELECTION]
-
-const STAIR_STEPS := 8
-const CYLINDER_SIDES := 16
-const ARCH_SEGMENTS := 8
-const ARCH_THICKNESS := 0.25
 
 const BOOLEAN_UNION := 0
 const BOOLEAN_SUBTRACT := 1
@@ -24,7 +20,8 @@ var uv_scale := Vector2.ONE
 var uv_offset := Vector2.ZERO
 var uv_rotation_degrees: float = 0.0
 var material_slot: int = 0
-var primitive_size := Vector3(2.0, 2.0, 2.0)
+
+var shapes: RefCounted
 
 var _selection: RefCounted
 var _undo: EditorUndoRedoManager
@@ -34,6 +31,7 @@ var _rows: Array[Dictionary] = []
 func _init(selection: RefCounted = null, undo: EditorUndoRedoManager = null) -> void:
 	_selection = selection if selection != null else SlabSelection.new()
 	_undo = undo
+	shapes = SlabShapes.new()
 	_rows = _build()
 
 
@@ -75,6 +73,11 @@ func disabled_reason(row: Dictionary) -> String:
 	if _selection.count() < need:
 		return "%s needs %s." % [row["label"], _element_count(_selection.mode, need)]
 	return ""
+
+
+func tooltip_of(row: Dictionary) -> String:
+	var live: String = shapes.describe(row["id"])
+	return row["tooltip"] if live == "" else "%s %s" % [row["tooltip"], live]
 
 
 func run(id: String) -> void:
@@ -298,48 +301,6 @@ func _pick_ring(target: Node3D) -> String:
 	return _selection.describe()
 
 
-func _make_box() -> Dictionary:
-	return { "method": "make_box", "args": [primitive_size], "create": "Box" }
-
-
-func _make_plane() -> Dictionary:
-	return { "method": "make_plane", "args": [Vector2(primitive_size.x, primitive_size.z)], "create": "Plane" }
-
-
-func _make_stair() -> Dictionary:
-	return { "method": "make_stair", "args": [primitive_size, STAIR_STEPS], "create": "Stair" }
-
-
-func _make_cylinder() -> Dictionary:
-	return { "method": "make_cylinder", "args": [primitive_size.x * 0.5, primitive_size.y, CYLINDER_SIDES], "create": "Cylinder" }
-
-
-func _make_arch() -> Dictionary:
-	return { "method": "make_arch", "args": [primitive_size, ARCH_SEGMENTS, ARCH_THICKNESS], "create": "Arch" }
-
-
-func _make_poly_shape() -> Dictionary:
-	var half_x: float = primitive_size.x * 0.5
-	var half_z: float = primitive_size.z * 0.5
-	var outline := PackedVector3Array([
-		Vector3(-half_x, 0.0, -half_z),
-		Vector3(half_x, 0.0, -half_z),
-		Vector3(half_x, 0.0, half_z),
-		Vector3(-half_x, 0.0, half_z),
-	])
-	return { "method": "make_prism", "args": [outline, primitive_size.y], "create": "PolyShape" }
-
-
-func _make_sweep() -> Dictionary:
-	var length: float = primitive_size.z * 2.0
-	var path := PackedVector3Array([
-		Vector3.ZERO,
-		Vector3(0.0, 0.0, length * 0.5),
-		Vector3(length * 0.5, 0.0, length),
-	])
-	return { "method": "make_sweep", "args": [path, Vector2(primitive_size.x, primitive_size.y), false], "create": "Sweep" }
-
-
 func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable) -> Dictionary:
 	return {
 		"id": id,
@@ -360,15 +321,10 @@ func _build() -> Array[Dictionary]:
 	var face: Array = [SlabSelection.Mode.FACE]
 	var elements: Array = [SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]
 
-	var table: Array = [
-		_row("make_box", "Box", "BoxMesh", object, 0, "Creates a box solid at the scene origin.", 0, _make_box),
-		_row("make_plane", "Plane", "PlaneMesh", object, 0, "Creates a flat slab one grid step thick.", 0, _make_plane),
-		_row("make_stair", "Stair", "GridContainer", object, 0, "Creates a straight run of %d steps." % STAIR_STEPS, 0, _make_stair),
-		_row("make_cylinder", "Cylinder", "CylinderMesh", object, 0, "Creates a cylinder with %d sides." % CYLINDER_SIDES, 0, _make_cylinder),
-		_row("make_arch", "Arch", "CurveConstant", object, 0, "Creates an arch with %d segments." % ARCH_SEGMENTS, 0, _make_arch),
-		_row("make_poly_shape", "Poly Shape", "PrismMesh", object, 0, "Extrudes a square outline into a prism.", 0, _make_poly_shape),
-		_row("make_sweep", "Curve Sweep", "Curve3D", object, 0, "Sweeps a corridor profile along a path.", 0, _make_sweep),
-
+	var table: Array = []
+	for entry in shapes.entries():
+		table.append(_row(entry["id"], entry["label"], entry["icon"], object, 0, entry["tooltip"], 0, shapes.plan.bind(entry["id"])))
+	table.append_array([
 		_row("boolean_union", "Union", "CSGCombiner3D", object, 2, "Adds the second solid into the first.", 0, _boolean_op.bind(BOOLEAN_UNION)),
 		_row("boolean_subtract", "Subtract", "CSGBox3D", object, 2, "Cuts the second solid out of the first.", 0, _boolean_op.bind(BOOLEAN_SUBTRACT)),
 		_row("boolean_intersect", "Intersect", "CSGMesh3D", object, 2, "Keeps only the overlap of two solids.", 0, _boolean_op.bind(BOOLEAN_INTERSECT)),
@@ -408,7 +364,7 @@ func _build() -> Array[Dictionary]:
 		_row("select_grow", "Grow", "ZoomMore", elements, 1, "Adds the neighbours of the selection.", 0, _select_op.bind(_pick_grown)),
 		_row("select_loop", "Select Loop", "AnimationTrackGroup", edge, 1, "Follows the edge loop around the solid.", 0, _select_op.bind(_pick_loop)),
 		_row("select_ring", "Select Ring", "AnimationTrackList", edge, 1, "Follows the parallel edges across quads.", 0, _select_op.bind(_pick_ring)),
-	]
+	])
 	var out: Array[Dictionary] = []
 	out.assign(table)
 	return out

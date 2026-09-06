@@ -56,12 +56,17 @@ func _fit_columns() -> void:
 
 
 func refresh() -> void:
+	_refresh_buttons()
+	set_status(_selection.describe())
+
+
+func _refresh_buttons() -> void:
 	for id in _buttons:
 		var button: Button = _buttons[id]
-		var reason: String = _actions.disabled_reason(_actions.find(id))
+		var row: Dictionary = _actions.find(id)
+		var reason: String = _actions.disabled_reason(row)
 		button.disabled = reason != ""
-		button.tooltip_text = reason if reason != "" else button.get_meta("slab_tooltip")
-	set_status(_selection.describe())
+		button.tooltip_text = reason if reason != "" else _tooltip_of(row)
 
 
 func set_status(text: String) -> void:
@@ -111,11 +116,16 @@ func _fields() -> Control:
 	return row
 
 
-func _spin(label_text: String, min_v: float, max_v: float, step: float, value: float, on_change: Callable) -> Control:
+func _spin(label_text: String, min_v: float, max_v: float, step: float, value: float, on_change: Callable, tooltip: String = "", key: StringName = &"") -> Control:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 0)
+	if key != &"":
+		box.name = key
 	var label := Label.new()
 	label.text = label_text
+	if tooltip != "":
+		label.tooltip_text = tooltip
+		label.mouse_filter = Control.MOUSE_FILTER_STOP
 	label.add_theme_font_size_override("font_size", _font(15))
 	label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
 	box.add_child(label)
@@ -124,6 +134,7 @@ func _spin(label_text: String, min_v: float, max_v: float, step: float, value: f
 	spin.max_value = max_v
 	spin.step = step
 	spin.value = value
+	spin.tooltip_text = tooltip
 	spin.custom_minimum_size.x = _scaled(SPIN_WIDTH)
 	spin.add_theme_font_size_override("font_size", _font(15))
 	spin.get_line_edit().add_theme_font_size_override("font_size", _font(15))
@@ -152,9 +163,23 @@ func _grid_scroll() -> Control:
 	column.add_theme_constant_override("separation", 8)
 	for section in _actions.sections():
 		column.add_child(_section_label(section))
+		if section == SlabActions.SECTION_CREATE:
+			column.add_child(_create_fields())
 		column.add_child(_section_grid(section))
 	scroll.add_child(column)
 	return scroll
+
+
+func _create_fields() -> Control:
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 10)
+	for field in _actions.shapes.fields():
+		var key: StringName = field["key"]
+		flow.add_child(_spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
+			_actions.shapes.set_value(key, v)
+			_refresh_buttons()
+		, field["tooltip"], key))
+	return flow
 
 
 func _section_label(text: String) -> Label:
@@ -177,10 +202,6 @@ func _section_grid(section: String) -> GridContainer:
 
 func _action_button(row: Dictionary) -> Button:
 	var id: String = row["id"]
-	var tooltip: String = row["tooltip"]
-	var shortcut: int = row["shortcut"]
-	if shortcut != 0:
-		tooltip += "\nShortcut %s." % OS.get_keycode_string(shortcut)
 	var button := Button.new()
 	button.icon = SlabIcons.texture(row["icon"])
 	button.text = row["label"]
@@ -188,8 +209,15 @@ func _action_button(row: Dictionary) -> Button:
 	button.add_theme_font_size_override("font_size", _font(15))
 	button.clip_text = true
 	button.focus_mode = Control.FOCUS_NONE
-	button.tooltip_text = tooltip
-	button.set_meta("slab_tooltip", tooltip)
+	button.tooltip_text = _tooltip_of(row)
 	button.pressed.connect(func() -> void: _actions.run(id))
 	_buttons[id] = button
 	return button
+
+
+func _tooltip_of(row: Dictionary) -> String:
+	var text: String = _actions.tooltip_of(row)
+	var shortcut: int = row["shortcut"]
+	if shortcut != 0:
+		text += "\nShortcut %s." % OS.get_keycode_string(shortcut)
+	return text

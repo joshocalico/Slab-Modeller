@@ -62,7 +62,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
 	ClassDB::bind_method(D_METHOD("make_stair", "size", "steps"), &SlabSolid::make_stair);
 	ClassDB::bind_method(D_METHOD("make_cylinder", "radius", "height", "sides"), &SlabSolid::make_cylinder);
-	ClassDB::bind_method(D_METHOD("make_arch", "size", "segments", "thickness"), &SlabSolid::make_arch);
+	ClassDB::bind_method(D_METHOD("make_arch", "span", "depth", "segments", "thickness", "arc"), &SlabSolid::make_arch, DEFVAL(Math_PI));
 	ClassDB::bind_method(D_METHOD("make_prism", "polygon", "height"), &SlabSolid::make_prism);
 	ClassDB::bind_method(D_METHOD("make_sweep", "path", "profile", "closed"), &SlabSolid::make_sweep);
 
@@ -409,9 +409,9 @@ int SlabSolid::make_cylinder(float p_radius, float p_height, int p_sides) {
 	return _commit(std::move(edit));
 }
 
-int SlabSolid::make_arch(const Vector3 &p_size, int p_segments, float p_thickness) {
+int SlabSolid::make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
-	const slab::MeshFault fault = slab::ops::arch(edit, p_size.x, p_size.z, p_segments, p_thickness, Math_PI);
+	const slab::MeshFault fault = slab::ops::arch(edit, p_span, p_depth, p_segments, p_thickness, p_arc);
 	if (!fault.ok()) {
 		return int(fault.code);
 	}

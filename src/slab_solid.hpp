@@ -67,7 +67,7 @@ public:
 	int make_plane(const Vector2 &p_size);
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
-	int make_arch(const Vector3 &p_size, int p_segments, float p_thickness);
+	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);
 	int make_prism(const PackedVector3Array &p_polygon, float p_height);
 	int make_sweep(const PackedVector3Array &p_path, const Vector2 &p_profile, bool p_closed);
 

@@ -1,5 +1,8 @@
 extends SceneTree
 
+const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
+
 var _fails := 0
 
 
@@ -92,7 +95,57 @@ func _init() -> void:
 	_expect(mover.call("move_vertices", cap_verts, Vector3(0, 1, 0)) == 0, "move_vertices lifts the cap")
 	_expect(absf(float(mover.call("face_centroid", cap).y) - (before_y + 1.0)) < 0.01, "a face move is a vertex delta")
 
+	_check_arch()
+	_check_shapes_stay_off_the_solid()
 	_finish()
+
+
+func _check_arch() -> void:
+	var by_default: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(by_default)
+	_expect(by_default.call("make_arch", 2, 2, 8, 0.25) == 0, "make_arch builds with the arc left to its default")
+	var explicit: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(explicit)
+	_expect(explicit.call("make_arch", 2, 2, 8, 0.25, PI) == 0, "make_arch builds at an explicit PI")
+	_expect(by_default.get("data") == explicit.get("data"), "the default arc is PI, byte for byte")
+	_expect(by_default.call("face_count") == 20, "an 8 segment arch has 20 faces")
+
+	var band: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(band)
+	_expect(band.call("make_arch", 4, 1, 8, 0.5, PI / 2.0) == 0, "a 90 degree arch builds")
+	var bounds: AABB = band.call("get_local_aabb")
+	_expect(absf(bounds.position.y) < 0.001, "the 90 degree arch sits on the floor, y origin %s" % bounds.position.y)
+	_expect(absf(bounds.position.x) < 0.001, "the 90 degree arch starts at x zero, got %s" % bounds.position.x)
+	_expect(bounds.size.x < 4.0, "a 90 degree arch is narrower than its span, got %s" % bounds.size.x)
+	_expect(float(band.call("volume")) > 0.0, "the 90 degree arch has positive volume")
+	_expect(band.get("data") != explicit.get("data"), "the arc changes the mesh")
+
+	_expect(band.call("make_arch", 2, 2, 8, 1.0) != 0, "thickness at half the span is refused")
+
+
+func _check_shapes_stay_off_the_solid() -> void:
+	var actions := SlabActions.new(SlabSelection.new())
+	var shapes: RefCounted = actions.shapes
+	var plan: Dictionary = shapes.plan(&"make_stair")
+	var stair: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(stair)
+	_expect(stair.callv(plan["method"], plan["args"]) == 0, "the stair plan builds a solid")
+	var cap: int = _top_face(stair)
+	_expect(stair.call("extrude_faces", PackedInt64Array([cap]), 0.5) == 0, "the stair takes an extrude")
+	var edited: PackedByteArray = stair.get("data")
+
+	shapes.set_value(&"stair_steps", 20.0)
+	_expect(shapes.plan(&"make_stair")["args"][1] == 20, "the next stair plan reads 20 steps")
+	_expect(stair.get("data") == edited, "changing the Steps field leaves the built solid alone")
+	for prop in ["steps", "segments", "arc", "thickness", "sides", "size"]:
+		_expect(not _has_property(stair, prop), "the solid stores no %s property" % prop)
+
+
+func _has_property(node: Object, prop: String) -> bool:
+	for info in node.get_property_list():
+		if info["name"] == prop:
+			return true
+	return false
 
 
 func _top_face(solid: Node3D) -> int:

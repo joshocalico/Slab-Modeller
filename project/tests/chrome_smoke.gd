@@ -57,6 +57,42 @@ func case_every_text_control_declares_a_font_size() -> void:
 	panel.free()
 
 
+func case_every_declared_field_renders_one_spin() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var spins: Array[SpinBox] = _spins(panel)
+	var expected: int = 7 + actions.shapes.fields().size()
+	expect(spins.size() == expected, "panel renders %d spins for 7 edit fields plus the shape catalog, got %d" % [expected, spins.size()])
+	for field in actions.shapes.fields():
+		var named: Node = panel.find_child(String(field["key"]), true, false)
+		expect(named != null, "the %s field has a spin" % field["key"])
+		if named != null:
+			var spin: SpinBox = _spins(named)[0]
+			expect(is_equal_approx(spin.value, field["value"]), "the %s spin starts at %s" % [field["key"], field["value"]])
+			expect(spin.tooltip_text == field["tooltip"], "the %s spin carries the field tooltip" % field["key"])
+	panel.free()
+
+
+func case_create_tooltips_follow_the_fields() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var stair: Button = _button_for(panel, "Stair")
+	expect(stair != null and stair.tooltip_text.contains("8 steps"), "the Stair button starts by saying 8 steps")
+	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
+	# Range only emits value_changed inside the tree, and this harness runs in _init.
+	steps.value = 20.0
+	steps.value_changed.emit(steps.value)
+	expect(stair.tooltip_text.contains("20 steps") and not stair.tooltip_text.contains("8 steps"),
+		"turning the Steps spin rewrites the Stair tooltip, got %s" % stair.tooltip_text)
+	selection.mode = SlabSelection.Mode.FACE
+	expect(stair.tooltip_text == "Stair needs Object mode.", "a disabled reason still wins over the live tooltip")
+	panel.free()
+
+
 func case_font_scaling_is_monotonic() -> void:
 	var previous: int = 0
 	for scale in SCALES:
@@ -141,6 +177,22 @@ func _buttons(node: Node) -> Array[Button]:
 	for child in node.get_children():
 		out.append_array(_buttons(child))
 	return out
+
+
+func _spins(node: Node) -> Array[SpinBox]:
+	var out: Array[SpinBox] = []
+	if node is SpinBox:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_spins(child))
+	return out
+
+
+func _button_for(node: Node, text: String) -> Button:
+	for button in _buttons(node):
+		if button.text == text:
+			return button
+	return null
 
 
 func _largest_font(node: Node) -> int:

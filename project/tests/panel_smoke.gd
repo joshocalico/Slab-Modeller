@@ -2,10 +2,25 @@ extends SceneTree
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
+const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 
 const REQUIRED_KEYS: PackedStringArray = [
 	"id", "label", "icon", "modes", "min_count", "tooltip", "shortcut", "handler",
 ]
+
+const FIELD_KEYS: PackedStringArray = ["key", "label", "min", "max", "step", "value", "tooltip"]
+
+const DEFAULTS: Dictionary = {
+	&"size_x": 2.0, &"size_y": 2.0, &"size_z": 2.0,
+	&"stair_steps": 8.0, &"cylinder_sides": 16.0, &"arch_segments": 8.0,
+	&"arch_thickness": 0.25, &"arch_arc": 180.0,
+}
+
+const RANGES: Dictionary = {
+	&"stair_steps": [1.0, 32.0], &"cylinder_sides": [3.0, 32.0], &"arch_segments": [4.0, 32.0],
+	&"arch_arc": [15.0, 345.0], &"arch_thickness": [0.05, 8.0],
+	&"size_x": [0.05, 64.0], &"size_y": [0.05, 64.0], &"size_z": [0.05, 64.0],
+}
 
 var _fails := 0
 
@@ -47,8 +62,113 @@ func _init() -> void:
 	var blocked: String = actions.disabled_reason(actions.find("extrude_faces"))
 	_expect(blocked == "Extrude needs Face mode.", "wrong mode disables extrude, got %s" % blocked)
 
+	_check_catalog(actions, rows)
+	_check_fields(actions.shapes)
+	_check_phrasing(actions)
+	_check_plans(SlabShapes.new())
+
 	print("panel_smoke rows=%d sections=%s" % [rows.size(), ", ".join(actions.sections())])
 	_finish()
+
+
+func _check_catalog(actions: RefCounted, rows: Array[Dictionary]) -> void:
+	var create_ids: Array[String] = []
+	for row in rows:
+		if SlabActions.section_of(row) == SlabActions.SECTION_CREATE:
+			create_ids.append(row["id"])
+	var catalog_ids: Array[String] = []
+	for key in SlabShapes.CATALOG:
+		catalog_ids.append(String(key))
+	_expect(create_ids == catalog_ids, "Create rows are the catalog in order, got %s" % [create_ids])
+
+	var claimed: Dictionary = {}
+	for id in SlabShapes.CATALOG:
+		var entry: Dictionary = SlabShapes.CATALOG[id]
+		for key in entry["params"]:
+			_expect(SlabShapes.PARAMS.has(key), "%s reads a declared parameter %s" % [id, key])
+			claimed[key] = true
+	for key in SlabShapes.PARAMS:
+		_expect(claimed.has(key), "parameter %s is read by at least one shape" % key)
+
+	_expect(not SlabShapes.CATALOG[&"make_arch"]["params"].has(&"size_y"), "arch does not read Height")
+	_expect(not SlabShapes.CATALOG[&"make_plane"]["params"].has(&"size_y"), "plane does not read Height")
+
+	for id in SlabShapes.CATALOG:
+		var row: Dictionary = actions.find(id)
+		_expect(row["handler"].call().has("method"), "%s plans a method at defaults" % id)
+
+
+func _check_fields(shapes: RefCounted) -> void:
+	var fields: Array[Dictionary] = shapes.fields()
+	_expect(fields.size() == SlabShapes.PARAMS.size(), "one field per parameter, got %d" % fields.size())
+	for field in fields:
+		var key: StringName = field["key"]
+		for name in FIELD_KEYS:
+			_expect(field.has(name), "field %s has key %s" % [key, name])
+		_expect(is_equal_approx(field["value"], DEFAULTS[key]), "%s defaults to %s, got %s" % [key, DEFAULTS[key], field["value"]])
+		var bounds: Array = RANGES[key]
+		_expect(is_equal_approx(field["min"], bounds[0]) and is_equal_approx(field["max"], bounds[1]),
+			"%s ranges %s..%s, got %s..%s" % [key, bounds[0], bounds[1], field["min"], field["max"]])
+		_expect(field["tooltip"] != "", "%s has a tooltip" % key)
+
+	shapes.set_value(&"stair_steps", 99.0)
+	_expect(shapes.value_of(&"stair_steps") == 32.0, "set_value clamps high, got %s" % shapes.value_of(&"stair_steps"))
+	shapes.set_value(&"stair_steps", -4.0)
+	_expect(shapes.value_of(&"stair_steps") == 1.0, "set_value clamps low, got %s" % shapes.value_of(&"stair_steps"))
+	shapes.set_value(&"arch_arc", 400.0)
+	_expect(shapes.value_of(&"arch_arc") == 345.0, "arc clamps to 345, got %s" % shapes.value_of(&"arch_arc"))
+	shapes.set_value(&"no_such_key", 5.0)
+	_expect(shapes.fields().size() == SlabShapes.PARAMS.size(), "an unknown key does not grow the store")
+	shapes.set_value(&"stair_steps", 8.0)
+	shapes.set_value(&"arch_arc", 180.0)
+
+	var height_tip: String = ""
+	for field in fields:
+		if field["key"] == &"size_y":
+			height_tip = field["tooltip"]
+	_expect(height_tip.contains("Arch") and height_tip.contains("Plane") and height_tip.contains("ignore"),
+		"the Height tooltip names Arch and Plane as ignoring it, got %s" % height_tip)
+
+
+func _check_phrasing(actions: RefCounted) -> void:
+	var shapes: RefCounted = actions.shapes
+	var stair: String = shapes.describe(&"make_stair")
+	_expect(stair.contains("8 steps"), "stair describes 8 steps, got %s" % stair)
+	shapes.set_value(&"stair_steps", 20.0)
+	stair = shapes.describe(&"make_stair")
+	_expect(stair.contains("20 steps") and not stair.contains("8"), "stair describes 20 steps and no stale 8, got %s" % stair)
+	shapes.set_value(&"stair_steps", 8.0)
+
+	var arch_row: Dictionary = actions.find("make_arch")
+	_expect(actions.tooltip_of(arch_row).contains("180 degrees"), "arch tooltip carries 180 degrees")
+	shapes.set_value(&"arch_arc", 90.0)
+	_expect(actions.tooltip_of(arch_row).contains("90 degrees"), "arch tooltip follows the arc field")
+	shapes.set_value(&"arch_arc", 180.0)
+	_expect(actions.tooltip_of(arch_row).begins_with(arch_row["tooltip"]), "arch tooltip starts with the row's sentence")
+	_expect(actions.tooltip_of(actions.find("extrude_faces")) == "Pulls the face out by the amount field.",
+		"edit rows keep their static tooltip")
+	_expect(shapes.describe(&"extrude_faces") == "", "describe is empty for a non-shape id")
+
+
+func _check_plans(shapes: RefCounted) -> void:
+	var arch: Dictionary = shapes.plan(&"make_arch")
+	_expect(arch.get("method", "") == "make_arch", "arch plan calls make_arch")
+	var args: Array = arch.get("args", [])
+	_expect(args.size() == 5, "arch plan passes five args, got %d" % args.size())
+	if args.size() == 5:
+		_expect(is_equal_approx(args[0], 2.0) and is_equal_approx(args[1], 2.0), "arch plan passes width then depth")
+		_expect(args[2] == 8 and is_equal_approx(args[3], 0.25), "arch plan passes segments and thickness")
+		_expect(is_equal_approx(args[4], PI), "arch plan passes the arc in radians, got %s" % args[4])
+
+	shapes.set_value(&"arch_thickness", 2.0)
+	var refused: Dictionary = shapes.plan(&"make_arch")
+	_expect(refused.has("status") and not refused.has("method"), "a thick arch is refused in words, got %s" % [refused])
+	shapes.set_value(&"arch_thickness", 0.25)
+
+	var cylinder: Dictionary = shapes.plan(&"make_cylinder")
+	_expect(is_equal_approx(cylinder["args"][0], 1.0), "cylinder radius is half the width")
+	_expect(shapes.plan(&"make_plane")["args"][0] == Vector2(2.0, 2.0), "plane takes width and depth")
+	_expect(shapes.plan(&"no_such_shape").is_empty(), "an unknown id plans nothing")
 
 
 func _expect(ok: bool, what: String) -> void:
