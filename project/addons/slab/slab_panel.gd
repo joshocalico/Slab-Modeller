@@ -2,7 +2,6 @@
 extends VBoxContainer
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
-const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 
@@ -17,8 +16,11 @@ var _selection: RefCounted
 var _actions: RefCounted
 var _metrics: RefCounted
 var _status: Label
+var _command_column: VBoxContainer
 var _buttons: Dictionary = {}
 var _grids: Array[GridContainer] = []
+# Mode.OBJECT is 0, so -1 means the command column has never been built.
+var _built_mode: int = -1
 
 
 func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
@@ -32,7 +34,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_status = _status_label()
 	add_child(_header())
 	add_child(_fields())
-	add_child(_grid_scroll())
+	add_child(_command_scroll())
 
 	_selection.changed.connect(refresh)
 	_actions.reported.connect(set_status)
@@ -56,8 +58,31 @@ func _fit_columns() -> void:
 
 
 func refresh() -> void:
+	var mode: int = _selection.mode
+	if _built_mode != mode:
+		_rebuild_commands(_actions.command_sections_for(mode))
+		_built_mode = mode
 	_refresh_buttons()
 	set_status(_selection.describe())
+
+
+func _rebuild_commands(sections: Array[Dictionary]) -> void:
+	# A number typed into a Create field but not yet entered would otherwise leave with its widget.
+	for spin in _spins_under(_command_column):
+		spin.apply()
+	_buttons.clear()
+	_grids.clear()
+	# Nothing in the command column can change the mode, so no freed control is mid-signal here,
+	# and freeing now rather than at idle keeps the outgoing buttons out of the tree at once.
+	for child in _command_column.get_children():
+		_command_column.remove_child(child)
+		child.free()
+	for section in sections:
+		_command_column.add_child(_section_label(section["heading"]))
+		if not section["fields"].is_empty():
+			_command_column.add_child(_create_fields(section["fields"]))
+		_command_column.add_child(_section_grid(section["rows"]))
+	_fit_columns()
 
 
 func _refresh_buttons() -> void:
@@ -154,26 +179,22 @@ func _status_label() -> Label:
 	return label
 
 
-func _grid_scroll() -> Control:
+func _command_scroll() -> Control:
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var column := VBoxContainer.new()
-	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	column.add_theme_constant_override("separation", 8)
-	for section in _actions.sections():
-		column.add_child(_section_label(section))
-		if section == SlabActions.SECTION_CREATE:
-			column.add_child(_create_fields())
-		column.add_child(_section_grid(section))
-	scroll.add_child(column)
+	_command_column = VBoxContainer.new()
+	_command_column.name = "Commands"
+	_command_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_command_column.add_theme_constant_override("separation", 8)
+	scroll.add_child(_command_column)
 	return scroll
 
 
-func _create_fields() -> Control:
+func _create_fields(fields: Array[Dictionary]) -> Control:
 	var flow := HFlowContainer.new()
 	flow.add_theme_constant_override("h_separation", 10)
-	for field in _actions.shapes.fields():
+	for field in fields:
 		var key: StringName = field["key"]
 		flow.add_child(_spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
 			_actions.shapes.set_value(key, v)
@@ -190,12 +211,11 @@ func _section_label(text: String) -> Label:
 	return label
 
 
-func _section_grid(section: String) -> GridContainer:
+func _section_grid(rows: Array[Dictionary]) -> GridContainer:
 	var grid := GridContainer.new()
 	grid.columns = DEFAULT_COLUMNS
-	for row in _actions.rows():
-		if SlabActions.section_of(row) == section:
-			grid.add_child(_action_button(row))
+	for row in rows:
+		grid.add_child(_action_button(row))
 	_grids.append(grid)
 	return grid
 
@@ -221,3 +241,12 @@ func _tooltip_of(row: Dictionary) -> String:
 	if shortcut != 0:
 		text += "\nShortcut %s." % OS.get_keycode_string(shortcut)
 	return text
+
+
+func _spins_under(node: Node) -> Array[SpinBox]:
+	var out: Array[SpinBox] = []
+	if node is SpinBox:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_spins_under(child))
+	return out

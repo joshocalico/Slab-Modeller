@@ -24,6 +24,9 @@ const EDITOR_INTERFACE_FENCE: PackedStringArray = [
 ]
 
 const SCALES: PackedFloat32Array = [0.75, 1.0, 1.25, 1.5, 2.0]
+const MODES: Array = [
+	SlabSelection.Mode.OBJECT, SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE,
+]
 
 var _fails := 0
 var _ran := 0
@@ -31,30 +34,34 @@ var _ran := 0
 
 func case_every_panel_font_clears_the_floor_at_every_scale() -> void:
 	for scale in SCALES:
-		var panel := _build_panel(scale)
+		for mode in MODES:
+			var panel := _build_panel(scale, mode)
+			for control in _text_controls(panel):
+				var size: int = control.get_theme_font_size("font_size")
+				expect(size >= SlabMetrics.FONT_FLOOR,
+					"at scale %.2f in %s mode, panel %s renders at %d, floor is %d" % [
+						scale, SlabSelection.MODE_LABELS[mode], _path_of(panel, control), size, SlabMetrics.FONT_FLOOR
+					])
+			panel.free()
 		var strip := _build_strip(scale)
-		for control in _text_controls(panel):
-			var size: int = control.get_theme_font_size("font_size")
-			expect(size >= SlabMetrics.FONT_FLOOR,
-				"at scale %.2f, panel %s renders at %d, floor is %d" % [
-					scale, _path_of(panel, control), size, SlabMetrics.FONT_FLOOR
-				])
 		for control in _text_controls(strip):
 			var size: int = control.get_theme_font_size("font_size")
 			expect(size >= SlabMetrics.FONT_FLOOR,
 				"at scale %.2f, strip %s renders at %d, floor is %d" % [
 					scale, _path_of(strip, control), size, SlabMetrics.FONT_FLOOR
 				])
-		panel.free()
 		strip.free()
 
 
 func case_every_text_control_declares_a_font_size() -> void:
-	var panel := _build_panel(1.0)
-	for control in _text_controls(panel):
-		expect(control.has_theme_font_size_override("font_size"),
-			"%s declares its own font_size instead of inheriting one" % _path_of(panel, control))
-	panel.free()
+	for mode in MODES:
+		var panel := _build_panel(1.0, mode)
+		for control in _text_controls(panel):
+			expect(control.has_theme_font_size_override("font_size"),
+				"in %s mode, %s declares its own font_size instead of inheriting one" % [
+					SlabSelection.MODE_LABELS[mode], _path_of(panel, control)
+				])
+		panel.free()
 
 
 func case_every_declared_field_renders_one_spin() -> void:
@@ -88,8 +95,37 @@ func case_create_tooltips_follow_the_fields() -> void:
 	steps.value_changed.emit(steps.value)
 	expect(stair.tooltip_text.contains("20 steps") and not stair.tooltip_text.contains("8 steps"),
 		"turning the Steps spin rewrites the Stair tooltip, got %s" % stair.tooltip_text)
+	panel.free()
+
+
+func case_face_mode_shows_only_face_and_selection_commands() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	expect(_button_for(panel, "Extrude") == null, "Object mode does not render the Extrude button")
 	selection.mode = SlabSelection.Mode.FACE
-	expect(stair.tooltip_text == "Stair needs Object mode.", "a disabled reason still wins over the live tooltip")
+	expect(_label_for(panel, "CREATE") == null, "Face mode does not render a Create heading")
+	expect(_button_for(panel, "Stair") == null, "Face mode does not render the Stair button")
+	for field in actions.shapes.fields():
+		var key: String = String(field["key"])
+		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
+	expect(_spins(panel).size() == 7, "Face mode keeps the 7 edit spins, got %d" % _spins(panel).size())
+	expect(_label_for(panel, "FACE") != null and _label_for(panel, "SELECTION") != null,
+		"Face mode renders the Face and Selection headings")
+	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
+	var extrude: Button = _button_for(panel, "Extrude")
+	expect(extrude != null and extrude.disabled and extrude.tooltip_text == "Extrude needs 1 face.",
+		"Extrude stays on the dock, disabled for count, with the old wording")
+	var before: PackedStringArray = _command_tree_signature(panel)
+	panel.refresh()
+	expect(_command_tree_signature(panel) == before, "a second Face refresh leaves the command tree as it was")
+	selection.set_ids(PackedInt64Array([7]))
+	expect(_button_for(panel, "Extrude") == extrude and not extrude.disabled,
+		"picking a face enables the same Extrude button instead of rebuilding the column")
+	selection.mode = SlabSelection.Mode.OBJECT
+	expect(_button_for(panel, "Extrude") == null and _button_for(panel, "Stair") != null,
+		"returning to Object mode brings the Create buttons back and drops Extrude")
 	panel.free()
 
 
@@ -142,11 +178,12 @@ func case_plugin_forwards_input_without_a_selection() -> void:
 	expect(source.contains("_forward_3d_gui_input"), "plugin.gd still forwards 3D GUI input")
 
 
-func _build_panel(scale: float) -> SlabPanel:
+func _build_panel(scale: float, mode: int = SlabSelection.Mode.OBJECT) -> SlabPanel:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(scale))
+	selection.mode = mode
 	return panel
 
 
@@ -193,6 +230,35 @@ func _button_for(node: Node, text: String) -> Button:
 		if button.text == text:
 			return button
 	return null
+
+
+func _label_for(node: Node, text: String) -> Label:
+	if node is Label and node.text == text:
+		return node
+	for child in node.get_children():
+		var found: Label = _label_for(child, text)
+		if found != null:
+			return found
+	return null
+
+
+func _command_tree_signature(panel: SlabPanel) -> PackedStringArray:
+	var out := PackedStringArray()
+	_sign(panel.find_child("Commands", true, false), 0, out)
+	return out
+
+
+func _sign(node: Node, depth: int, out: PackedStringArray) -> void:
+	if node == null:
+		return
+	var bits: PackedStringArray = [str(depth), node.get_class()]
+	if not String(node.name).begins_with("@"):
+		bits.append(node.name)
+	if node is Label or node is Button:
+		bits.append(node.text)
+	out.append(" ".join(bits))
+	for child in node.get_children():
+		_sign(child, depth + 1, out)
 
 
 func _largest_font(node: Node) -> int:
