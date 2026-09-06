@@ -64,7 +64,12 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	var button := Button.new()
 	button.icon = SlabIcons.texture(MODE_ICONS[mode], _metrics.scale())
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
-	button.tooltip_text = "%s\nShortcut %s." % [MODE_HINTS[mode], OS.get_keycode_string(MODE_KEYS[mode])]
+	var lines := PackedStringArray()
+	if not with_label:
+		lines.append(SlabSelection.MODE_LABELS[mode])
+	lines.append(MODE_HINTS[mode])
+	lines.append("Shortcut %s." % OS.get_keycode_string(MODE_KEYS[mode]))
+	button.tooltip_text = "\n".join(lines)
 	button.toggle_mode = true
 	button.button_group = group
 	button.focus_mode = Control.FOCUS_NONE

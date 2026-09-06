@@ -284,6 +284,21 @@ func case_strip_tooltip_matches_the_binding_table() -> void:
 	strip.free()
 
 
+func case_unlabeled_mode_strip_names_the_mode() -> void:
+	var selection := SlabSelection.new()
+	var strip := SlabModeStrip.new()
+	strip.setup(selection, false, SlabMetrics.at_scale(1.0))
+	for button in _buttons(strip):
+		var mode: int = int(button.get_meta("slab_mode"))
+		var label: String = SlabSelection.MODE_LABELS[mode]
+		expect(button.text == "", "the spatial strip has no caption for %s" % label)
+		expect(button.tooltip_text.begins_with(label),
+			"the unlabeled %s tooltip leads with the mode name, got %s" % [label, button.tooltip_text])
+		expect(button.tooltip_text.contains(OS.get_keycode_string(SlabModeStrip.keycode_for(mode))),
+			"the unlabeled %s tooltip still names the shortcut" % label)
+	strip.free()
+
+
 func case_editor_interface_stays_behind_the_host() -> void:
 	for file_name in EDITOR_INTERFACE_FENCE:
 		expect(not _source_of(file_name).contains("EditorInterface"),
