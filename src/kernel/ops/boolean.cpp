@@ -255,6 +255,10 @@ bool _ray_tri(const godot::Vector3 &p_o, const godot::Vector3 &p_d, const godot:
 }
 
 bool _point_inside(const Mesh &p_mesh, const godot::Vector3 &p_p) {
+	const godot::AABB box = p_mesh.local_aabb().grow(2.0f / float(LATTICE));
+	if (!box.has_point(p_p)) {
+		return false;
+	}
 	const godot::Vector3 dir(1.0f, 0.013f, 0.007f);
 	int hits = 0;
 	std::vector<FaceId> faces;
@@ -548,9 +552,9 @@ void _dissolve_coplanar(MeshEdit &p_edit) {
 			}
 			if (p_edit.dissolve_edge(id).ok()) {
 				did = true;
-				break;
+			} else {
+				p_edit.clear_fault();
 			}
-			p_edit.replace_with(p_edit.scratch());
 		}
 		if (!did) {
 			return;
@@ -606,10 +610,7 @@ void _strip_collinear(MeshEdit &p_edit) {
 					did = true;
 					break;
 				}
-				p_edit.replace_with(p_edit.scratch());
-			}
-			if (did) {
-				break;
+				p_edit.clear_fault();
 			}
 		}
 		if (!did) {

@@ -36,6 +36,10 @@ public:
 		return fault;
 	}
 
+	void clear_fault() {
+		fault = MeshFault{};
+	}
+
 	MeshFault commit(Mesh &r_out) &&;
 
 private:

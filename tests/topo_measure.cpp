@@ -6,6 +6,7 @@
 #include "kernel/ops/primitives.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -157,7 +158,9 @@ SLAB_TEST(topo_measure) {
 
 	const Mesh roof = shifted(arch, godot::Vector3(0, 2.05f, 0));
 	MeshEdit joined(box);
+	const auto t0 = std::chrono::steady_clock::now();
 	expect(ops::boolean(joined, roof, 0).ok(), "house union");
+	const auto t_union = std::chrono::steady_clock::now();
 	Mesh house;
 	expect(std::move(joined).commit(house).ok(), "house union commit");
 	expect(validate(house).ok(), "house union watertight");
@@ -166,15 +169,20 @@ SLAB_TEST(topo_measure) {
 
 	const Mesh door = shifted(make_box(godot::Vector3(0.9f, 1.6f, 1.2f)), godot::Vector3(1.55f, 0.0f, -0.2f));
 	MeshEdit cut(house);
+	const auto t_door0 = std::chrono::steady_clock::now();
 	expect(ops::boolean(cut, door, 1).ok(), "house door");
+	const auto t1 = std::chrono::steady_clock::now();
 	expect(std::move(cut).commit(house).ok(), "house door commit");
 	expect(validate(house).ok(), "house door watertight");
 	const Topo door_topo = measure(house);
 	print_case("house_door", door_topo);
+	const double boolean_ms = std::chrono::duration<double, std::milli>(t_union - t0).count()
+			+ std::chrono::duration<double, std::milli>(t1 - t_door0).count();
 
 	const int topo_cost = cost(union_topo, door_topo);
 	if (std::getenv("SLAB_TOPO") != nullptr) {
 		std::printf("topo_cost=%d\n", topo_cost);
+		std::printf("boolean_ms=%.2f\n", boolean_ms);
 	}
 	expect(topo_cost >= 0, "cost is defined");
 }
