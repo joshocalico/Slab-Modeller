@@ -56,6 +56,27 @@ func sections() -> PackedStringArray:
 	return out
 
 
+# Each element is { "heading": String, "rows": Array[Dictionary], "fields": Array[Dictionary] }.
+# "fields" is shapes.fields() on Create and empty elsewhere. Headings with no rows are omitted.
+func command_sections_for(mode: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not SlabSelection.MODE_LABELS.has(mode):
+		push_error("Unknown mode %d." % mode)
+		return out
+	for heading in SECTION_ORDER:
+		var rows: Array[Dictionary] = []
+		for row in _rows:
+			if row["modes"].has(mode) and section_of(row) == heading:
+				rows.append(row)
+		if rows.is_empty():
+			continue
+		var fields: Array[Dictionary] = []
+		if heading == SECTION_CREATE:
+			fields = shapes.fields()
+		out.append({ "heading": heading, "rows": rows, "fields": fields })
+	return out
+
+
 static func section_of(row: Dictionary) -> String:
 	var modes: Array = row["modes"]
 	if modes.size() > 1:

@@ -22,6 +22,33 @@ const RANGES: Dictionary = {
 	&"size_x": [0.05, 64.0], &"size_y": [0.05, 64.0], &"size_z": [0.05, 64.0],
 }
 
+const SELECTION_IDS: Array = ["select_all", "select_none", "select_invert", "select_grow"]
+
+const SECTIONS_BY_MODE: Dictionary = {
+	SlabSelection.Mode.OBJECT: {
+		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
+		"Object": [
+			"boolean_union", "boolean_subtract", "boolean_intersect", "mirror_x", "mirror_y", "mirror_z",
+			"center_pivot", "snap_to_grid", "bake_module",
+		],
+	},
+	SlabSelection.Mode.VERTEX: {
+		"Vertex": ["weld_vertices", "collapse_vertices", "connect_vertices"],
+		"Selection": SELECTION_IDS,
+	},
+	SlabSelection.Mode.EDGE: {
+		"Edge": ["bevel_edges", "bridge_edges", "connect_edges", "insert_loop", "dissolve_edges", "select_loop", "select_ring"],
+		"Selection": SELECTION_IDS,
+	},
+	SlabSelection.Mode.FACE: {
+		"Face": [
+			"extrude_faces", "inset_faces", "delete_faces", "flip_faces", "subdivide_faces", "merge_faces",
+			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset",
+		],
+		"Selection": SELECTION_IDS,
+	},
+}
+
 var _fails := 0
 
 
@@ -66,9 +93,61 @@ func _init() -> void:
 	_check_fields(actions.shapes)
 	_check_phrasing(actions)
 	_check_plans(SlabShapes.new())
+	_check_mode_sections(actions, rows)
+	_check_count_disable_wording(actions, selection)
+	_check_shortcuts_without_a_panel(actions, selection)
 
 	print("panel_smoke rows=%d sections=%s" % [rows.size(), ", ".join(actions.sections())])
 	_finish()
+
+
+func _check_mode_sections(actions: RefCounted, rows: Array[Dictionary]) -> void:
+	var placed: Dictionary = {}
+	for mode in SECTIONS_BY_MODE:
+		var label: String = SlabSelection.MODE_LABELS[mode]
+		var expected: Dictionary = SECTIONS_BY_MODE[mode]
+		var sections: Array[Dictionary] = actions.command_sections_for(mode)
+		var headings: Array = sections.map(func(section: Dictionary) -> String: return section["heading"])
+		_expect(headings == expected.keys(), "%s mode shows %s, got %s" % [label, expected.keys(), headings])
+		for section in sections:
+			var heading: String = section["heading"]
+			var ids: Array = section["rows"].map(func(row: Dictionary) -> String: return row["id"])
+			_expect(ids == expected.get(heading, []), "%s mode lists %s under %s, got %s" % [label, expected.get(heading, []), heading, ids])
+			for row in section["rows"]:
+				_expect(row["modes"].has(mode), "%s is shown in %s mode only because it allows that mode" % [row["id"], label])
+				placed[row["id"]] = true
+			if heading == SlabActions.SECTION_CREATE:
+				_expect(section["fields"] == actions.shapes.fields(), "the Create section carries the shape fields")
+			else:
+				_expect(section["fields"].is_empty(), "the %s section carries no fields" % heading)
+	for row in rows:
+		_expect(placed.has(row["id"]), "%s is shown in at least one mode" % row["id"])
+	_expect(SlabActions.section_of(actions.find("select_loop")) == "Edge", "Select Loop is an Edge row")
+	_expect(SlabActions.section_of(actions.find("select_ring")) == "Edge", "Select Ring is an Edge row")
+
+
+func _check_count_disable_wording(actions: RefCounted, selection: RefCounted) -> void:
+	selection.mode = SlabSelection.Mode.FACE
+	selection.clear_ids()
+	var extrude: Dictionary = actions.find("extrude_faces")
+	var merge: Dictionary = actions.find("merge_faces")
+	var blocked: String = actions.disabled_reason(extrude)
+	_expect(blocked == "Extrude needs 1 face.", "no face disables extrude by count, got %s" % blocked)
+	selection.set_ids(PackedInt64Array([5]))
+	_expect(actions.disabled_reason(extrude) == "", "one face enables extrude")
+	blocked = actions.disabled_reason(merge)
+	_expect(blocked == "Merge needs 2 faces.", "one face disables merge by count, got %s" % blocked)
+
+
+func _check_shortcuts_without_a_panel(actions: RefCounted, selection: RefCounted) -> void:
+	selection.mode = SlabSelection.Mode.FACE
+	selection.clear_ids()
+	var said: Array[String] = []
+	actions.reported.connect(func(text: String) -> void: said.append(text))
+	_expect(actions.run_shortcut(KEY_A), "Select All dispatches from the registry with no panel built")
+	_expect(said.size() == 1 and said[0] == "No solid selected.", "the dispatch reports the missing solid, got %s" % [said])
+	_expect(not actions.run_shortcut(KEY_B), "Bevel does not dispatch in Face mode")
+	_expect(not actions.run_shortcut(KEY_E), "Extrude does not dispatch with no face selected")
 
 
 func _check_catalog(actions: RefCounted, rows: Array[Dictionary]) -> void:
