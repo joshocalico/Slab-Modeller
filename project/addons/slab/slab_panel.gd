@@ -51,6 +51,9 @@ func _font(px: int) -> int:
 
 
 func _fit_columns() -> void:
+	# Before the first layout the panel has no width, and one column would drag its minimum width down.
+	if size.x <= 0.0:
+		return
 	var stride: float = _scaled(BUTTON_SIZE.x + GRID_SEPARATION)
 	var columns: int = maxi(1, int(size.x / stride))
 	for grid in _grids:
