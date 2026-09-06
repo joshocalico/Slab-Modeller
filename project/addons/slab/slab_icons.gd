@@ -31,12 +31,22 @@ static func _bundled(name: String, raster: float) -> Texture2D:
 	if file == null:
 		_bundle[key] = null
 		return null
+	var svg: String = file.get_as_text()
 	var img := Image.new()
-	var err: int = img.load_svg_from_string(file.get_as_text(), raster)
+	var err: int = img.load_svg_from_string(svg, 1.0)
 	if err != OK or img.is_empty():
 		_bundle[key] = null
 		return null
 	var edge: int = maxi(1, int(round(16.0 * raster)))
+	# RASTER_SCALE is for 16 px canvases. 10 px and 12 px Godot icons would
+	# bilinear-upscale if we only multiplied that scale.
+	var native: int = maxi(img.get_width(), img.get_height())
+	var fit: float = float(edge) / float(maxi(1, native))
+	if not is_equal_approx(fit, 1.0):
+		err = img.load_svg_from_string(svg, fit)
+		if err != OK or img.is_empty():
+			_bundle[key] = null
+			return null
 	if img.get_width() != edge or img.get_height() != edge:
 		img.resize(edge, edge, Image.INTERPOLATE_BILINEAR)
 	var tex := ImageTexture.create_from_image(img)

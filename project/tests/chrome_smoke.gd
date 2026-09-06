@@ -124,6 +124,25 @@ func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
 	panel.free()
 
 
+func case_a_twelve_px_svg_vector_rasters_to_the_cell() -> void:
+	var svg := FileAccess.get_file_as_string("res://addons/slab/icons/CurveIn.svg")
+	expect(svg != "", "CurveIn.svg reads")
+	var native := Image.new()
+	expect(native.load_svg_from_string(svg, 1.0) == OK and native.get_width() == 12,
+		"CurveIn canvas is 12 px, got %d" % native.get_width())
+	var stretched := Image.new()
+	stretched.load_svg_from_string(svg, SlabIcons.RASTER_SCALE)
+	expect(stretched.get_width() == 24, "scale 2 of a 12 px canvas is 24 px, got %d" % stretched.get_width())
+	stretched.resize(int(16.0 * SlabIcons.RASTER_SCALE), int(16.0 * SlabIcons.RASTER_SCALE), Image.INTERPOLATE_BILINEAR)
+	var vector := Image.new()
+	vector.load_svg_from_string(svg, 16.0 * SlabIcons.RASTER_SCALE / 12.0)
+	expect(vector.get_data() != stretched.get_data(),
+		"a bilinear stretch of 24 px is not the same as a 32 px SVG raster")
+	var got: Image = SlabIcons.texture("CurveIn").get_image()
+	expect(got != null and got.get_data() == vector.get_data(),
+		"CurveIn matches the 32 px vector raster, not a stretch")
+
+
 func case_every_command_icon_rasterizes_outside_the_editor() -> void:
 	var fallback: Texture2D = SlabIcons.texture(SlabIcons.FALLBACK)
 	expect(fallback != null, "the Node3D fallback rasterizes")
