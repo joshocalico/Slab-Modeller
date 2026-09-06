@@ -1,0 +1,3 @@
+These SVG files are Godot Engine editor icons from git commit ed1daf0bf (4.7.2.stable).
+Copyright (c) 2014-present Godot Engine contributors, from https://godotengine.org/license.
+CSGCombiner3D, CSGBox3D, and CSGMesh3D come from modules/csg/icons. The rest come from editor/icons.

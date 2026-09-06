@@ -5,9 +5,9 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 
-const BUTTON_SIZE := Vector2(156.0, 36.0)
+const BUTTON_SIZE := Vector2(40.0, 36.0)
 const SPIN_WIDTH := 104.0
-const PANEL_HEIGHT := 440.0
+const PANEL_HEIGHT := 320.0
 const GRID_SEPARATION := 4.0
 const DEFAULT_COLUMNS := 6
 const ACCENT := Color(0.86, 0.72, 0.34)
@@ -77,9 +77,10 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 		spin.value_changed.emit(spin.value)
 	_buttons.clear()
 	_grids.clear()
-	# Nothing in the command column can change the mode, so no freed control is mid-signal here,
-	# and freeing now rather than at idle keeps the outgoing buttons out of the tree at once.
+	# Immediate free keeps outgoing buttons out of the tree for the headless smokes.
+	# block_signals so a pressed handler cannot run while its button is leaving.
 	for child in _command_column.get_children():
+		child.set_block_signals(true)
 		_command_column.remove_child(child)
 		child.free()
 	for section in sections:
@@ -228,12 +229,14 @@ func _section_grid(rows: Array[Dictionary]) -> GridContainer:
 func _action_button(row: Dictionary) -> Button:
 	var id: String = row["id"]
 	var button := Button.new()
+	button.name = id
 	button.icon = SlabIcons.texture(row["icon"])
-	button.text = row["label"]
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.custom_minimum_size = Vector2(_scaled(BUTTON_SIZE.x), _scaled(BUTTON_SIZE.y))
 	button.add_theme_font_size_override("font_size", _font(15))
-	button.clip_text = true
 	button.focus_mode = Control.FOCUS_NONE
+	button.set_meta("slab_label", row["label"])
 	button.tooltip_text = _tooltip_of(row)
 	button.pressed.connect(func() -> void: _actions.run(id))
 	_buttons[id] = button
@@ -241,11 +244,14 @@ func _action_button(row: Dictionary) -> Button:
 
 
 func _tooltip_of(row: Dictionary) -> String:
-	var text: String = _actions.tooltip_of(row)
+	var lines := PackedStringArray([row["label"]])
+	var body: String = _actions.tooltip_of(row)
+	if body != "":
+		lines.append(body)
 	var shortcut: int = row["shortcut"]
 	if shortcut != 0:
-		text += "\nShortcut %s." % OS.get_keycode_string(shortcut)
-	return text
+		lines.append("Shortcut %s." % OS.get_keycode_string(shortcut))
+	return "\n".join(lines)
 
 
 func _spins_under(node: Node) -> Array[SpinBox]:

@@ -46,16 +46,6 @@ func find(id: String) -> Dictionary:
 	return {}
 
 
-func sections() -> PackedStringArray:
-	var out := PackedStringArray()
-	for name in SECTION_ORDER:
-		for row in _rows:
-			if section_of(row) == name:
-				out.append(name)
-				break
-	return out
-
-
 # Each element is { "heading": String, "rows": Array[Dictionary], "fields": Array[Dictionary] }.
 # "fields" is shapes.fields() on Create and empty elsewhere. Headings with no rows are omitted.
 func command_sections_for(mode: int) -> Array[Dictionary]:

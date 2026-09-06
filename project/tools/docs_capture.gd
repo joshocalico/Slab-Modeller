@@ -6,7 +6,7 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 
 const VIEW := Vector2i(1280, 720)
-const PANEL_VIEW := Vector2i(1280, 460)
+const PANEL_VIEW := Vector2i(1280, 340)
 const ROOM := Vector3(4, 3, 4)
 const INSET := 0.45
 const INWARD := -2.4

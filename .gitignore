@@ -29,4 +29,5 @@ scripts/slab-window
 project/tests/dump_box_data.gd
 project/tests/dump_box_data.gd.uid
 project/addons/slab/gizmos/slab_block_gizmo.gd.uid
+project/addons/slab/icons/*.import
 

@@ -6,6 +6,7 @@ const SlabPanel := preload("res://addons/slab/slab_panel.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 const SlabPick := preload("res://addons/slab/slab_pick.gd")
+const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 
 const ADDON_DIR := "res://addons/slab"
 
@@ -98,6 +99,33 @@ func case_create_tooltips_follow_the_fields() -> void:
 	panel.free()
 
 
+func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
+	var panel := _build_panel(1.0)
+	var stair: Button = _button_for(panel, "Stair")
+	expect(stair != null, "Object mode still has Stair")
+	expect(stair.text == "", "Stair has no caption")
+	expect(stair.icon != null, "Stair has an icon outside the editor")
+	expect(stair.tooltip_text.begins_with("Stair"), "the tooltip leads with the command name, got %s" % stair.tooltip_text)
+	expect(stair.tooltip_text.contains("8 steps"), "the tooltip still carries the live shape phrase")
+	expect(is_equal_approx(stair.custom_minimum_size.x, SlabPanel.BUTTON_SIZE.x),
+		"the cell is the icon size, got %s" % stair.custom_minimum_size)
+	panel.free()
+
+
+func case_every_command_icon_rasterizes_outside_the_editor() -> void:
+	var seen := {}
+	for row in SlabActions.new().rows():
+		var name: String = row["icon"]
+		if seen.has(name):
+			continue
+		seen[name] = true
+		expect(SlabIcons.texture(name) != null, "row %s rasterizes %s" % [row["id"], name])
+	for mode in SlabModeStrip.MODE_ICONS:
+		var name: String = SlabModeStrip.MODE_ICONS[mode]
+		expect(SlabIcons.texture(name) != null,
+			"mode %s rasterizes %s" % [SlabSelection.MODE_LABELS[mode], name])
+
+
 func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
@@ -119,7 +147,7 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 		"Extrude stays on the dock, disabled for count, with the old wording")
 	var before: PackedStringArray = _command_tree_signature(panel)
 	panel.refresh()
-	expect(_command_tree_signature(panel) == before, "a second Face refresh leaves the command tree as it was")
+	expect(_command_tree_signature(panel) == before, "a second Face refresh keeps the same class and label order")
 	selection.set_ids(PackedInt64Array([7]))
 	expect(_button_for(panel, "Extrude") == extrude and not extrude.disabled,
 		"picking a face enables the same Extrude button instead of rebuilding the column")
@@ -154,10 +182,11 @@ func case_command_grids_fit_once_the_panel_has_a_width() -> void:
 	expect(grid.columns == SlabPanel.DEFAULT_COLUMNS,
 		"a detached panel keeps the default column count, got %d" % grid.columns)
 	root.add_child(panel)
-	panel.size = Vector2(1600.0, 440.0)
+	panel.size = Vector2(1600.0, 320.0)
 	# Setting size on a SceneTree harness does not emit resized.
 	panel.resized.emit()
-	expect(grid.columns == 10, "1600 px fits ten 156 px buttons, got %d" % grid.columns)
+	expect(grid.columns == int(1600.0 / (SlabPanel.BUTTON_SIZE.x + SlabPanel.GRID_SEPARATION)),
+		"1600 px fits as many icon cells as the stride allows, got %d" % grid.columns)
 	panel.free()
 
 
@@ -257,9 +286,9 @@ func _spins(node: Node) -> Array[SpinBox]:
 	return out
 
 
-func _button_for(node: Node, text: String) -> Button:
+func _button_for(node: Node, label: String) -> Button:
 	for button in _buttons(node):
-		if button.text == text:
+		if String(button.get_meta("slab_label", "")) == label:
 			return button
 	return null
 
@@ -296,8 +325,10 @@ func _sign(node: Node, depth: int, out: PackedStringArray) -> void:
 	var bits: PackedStringArray = [str(depth), node.get_class()]
 	if not String(node.name).begins_with("@"):
 		bits.append(node.name)
-	if node is Label or node is Button:
+	if node is Label:
 		bits.append(node.text)
+	if node is Button:
+		bits.append(String(node.get_meta("slab_label", "")))
 	out.append(" ".join(bits))
 	for child in node.get_children():
 		_sign(child, depth + 1, out)

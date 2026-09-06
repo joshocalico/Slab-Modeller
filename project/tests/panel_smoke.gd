@@ -97,7 +97,7 @@ func _init() -> void:
 	_check_count_disable_wording(actions, selection)
 	_check_shortcuts_without_a_panel(actions, selection)
 
-	print("panel_smoke rows=%d sections=%s" % [rows.size(), ", ".join(actions.sections())])
+	print("panel_smoke rows=%d" % rows.size())
 	_finish()
 
 
