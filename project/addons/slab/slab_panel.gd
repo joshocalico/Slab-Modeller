@@ -75,12 +75,12 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for spin in _spins_under(_command_column):
 		spin.apply()
 		spin.value_changed.emit(spin.value)
-	_buttons.clear()
-	_grids.clear()
 	# Immediate free keeps outgoing buttons out of the tree for the headless smokes.
 	# block_signals on the buttons themselves. It does not propagate from the heading or grid.
 	for id in _buttons:
 		_buttons[id].set_block_signals(true)
+	_buttons.clear()
+	_grids.clear()
 	for child in _command_column.get_children():
 		_command_column.remove_child(child)
 		child.free()

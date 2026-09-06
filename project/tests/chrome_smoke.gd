@@ -99,6 +99,15 @@ func case_create_tooltips_follow_the_fields() -> void:
 	panel.free()
 
 
+func case_rebuild_blocks_button_signals_before_it_clears_them() -> void:
+	var source: String = _source_of("slab_panel.gd")
+	var rebuild: int = source.find("func _rebuild_commands")
+	var block: int = source.find("set_block_signals", rebuild)
+	var clear: int = source.find("_buttons.clear()", rebuild)
+	expect(rebuild != -1 and block != -1 and clear != -1 and block < clear,
+		"rebuild blocks button signals before it clears _buttons")
+
+
 func case_command_buttons_are_icons_named_in_the_tooltip() -> void:
 	var panel := _build_panel(1.0)
 	var stair: Button = _button_for(panel, "Stair")
