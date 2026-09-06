@@ -9,9 +9,10 @@ Use this when the scene has no `SlabSolid` yet, or when you want a second volume
 ## Make a box
 
 1. Press <kbd>1</kbd> for Object mode.
-2. Click **Box** on the Slab panel.
+2. Leave Width, Height, and Depth at 2 m, or set them first.
+3. Click **Box** on the Slab panel.
 
-A `SlabSolid` appears at the origin. The default size is 2 m on a side.
+A `SlabSolid` appears at the origin. The fields only shape that click. Changing them later does not resize the box.
 
 <Figure
   src="/img/solid-box.png"
@@ -21,16 +22,16 @@ A `SlabSolid` appears at the origin. The default size is 2 m on a side.
 
 ## Other Create buttons
 
-Each button adds a closed `SlabSolid` at the origin. None of them need a selection.
+Each button adds a closed `SlabSolid` at the origin. None of them need a selection. Set the Create fields first. Defaults match the old fixed numbers.
 
 | Button | What you get |
 | --- | --- |
-| **Plane** | A flat slab. Thickness is one grid step. |
-| **Stair** | A straight run of 8 steps. |
-| **Cylinder** | A 16-sided cylinder. |
-| **Arch** | A thick half-tube. 8 segments. Thickness 0.25 m. |
-| **Poly Shape** | A square outline extruded into a prism. |
-| **Curve Sweep** | A corridor profile swept along a three-point path. |
+| **Plane** | A Width × Depth slab. Thickness is one grid step. |
+| **Stair** | A straight run of Steps steps. Default 8. |
+| **Cylinder** | A cylinder with Sides sides. Width is the diameter. Default 16 sides. |
+| **Arch** | A band swept through Arc. Default 180°, 8 segments, 0.25 m thick. A 90° arch is narrower than Width. |
+| **Poly Shape** | A Width × Depth square extruded to Height. |
+| **Curve Sweep** | A Width × Height profile swept along a path. |
 
 To size a box after you create it, switch to Face mode and use the Move gizmo. See [Pull a wall](/guide/how-to/pull-a-wall).
 

@@ -14,7 +14,9 @@ The panel is the bottom dock named **Slab**. A button disables when the mode or 
 
 The header status line repeats the selection, for example `Box, 1 face.`
 
-## Fields
+## Edit fields
+
+The top row. These shape the next edit, not an existing solid's recipe.
 
 | Field | Role |
 | --- | --- |
@@ -24,21 +26,36 @@ The header status line repeats the selection, for example `Box, 1 face.`
 | UV rotation | Degrees on the panel. The solid stores radians. |
 | Material slot | Integer 0 to 31 for Set Material. |
 
-Create buttons use a 2 m default size. That size is not a panel field.
+## Create fields
+
+Under the Create heading, above those buttons. They shape the next click. Changing one never rewrites a solid that already exists.
+
+| Field | Default | Range | Read by |
+| --- | --- | --- | --- |
+| Width | 2 m | 0.05 to 64 | Every Create button. Cylinder reads it as diameter. Arch reads it as the outer sweep diameter. |
+| Height | 2 m | 0.05 to 64 | Box, Stair, Cylinder, Poly Shape, Curve Sweep. Plane and Arch ignore it. |
+| Depth | 2 m | 0.05 to 64 | Every Create button except Cylinder. Curve Sweep uses it as path length. |
+| Steps | 8 | 1 to 32 | Stair. |
+| Sides | 16 | 3 to 32 | Cylinder. |
+| Segments | 8 | 4 to 32 | Arch. |
+| Thickness | 0.25 m | 0.05 to 8 | Arch. Must stay under half of Width. |
+| Arc | 180° | 15 to 345 | Arch. Sweep centered on the crown. |
+
+**Arc.** At 180° you get a half tube as wide as Width, both feet on the floor. Below 180° the band is narrower and shallower than Width. Above 180° you get a horseshoe. Near 345° you get a pipe with a slot. Height is not an input. It follows Width and Arc.
 
 ## Create
 
-Object mode. No selection required.
+Object mode. No selection required. Set the Create fields, then click.
 
 | Button | Result |
 | --- | --- |
-| Box | A cube at the origin. |
-| Plane | A flat slab one grid step thick. |
-| Stair | A straight run of 8 steps. |
-| Cylinder | A cylinder with 16 sides. |
-| Arch | A thick half-tube. 8 segments. Thickness 0.25 m. |
-| Poly Shape | A square outline extruded into a prism. |
-| Curve Sweep | A corridor profile swept along a three-point path. |
+| Box | A box of Width × Height × Depth at the origin. |
+| Plane | A Width × Depth slab one grid step thick. |
+| Stair | A straight run of Steps steps. |
+| Cylinder | A cylinder with Sides sides. Width is the diameter. |
+| Arch | A thick band swept through Arc. Width is the outer diameter. Depth is the extrusion. |
+| Poly Shape | A Width × Depth square extruded to Height. |
+| Curve Sweep | A Width × Height profile swept along a path whose length follows Depth. |
 
 See [Create a solid](/guide/how-to/create-a-solid).
 
