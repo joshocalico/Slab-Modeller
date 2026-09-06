@@ -19,6 +19,7 @@ var _wait := 0
 
 
 func _initialize() -> void:
+	DisplayServer.mouse_set_mode(DisplayServer.MOUSE_MODE_HIDDEN)
 	_out = OS.get_environment("SLAB_DOCS_ASSETS")
 	if _out == "":
 		_out = ProjectSettings.globalize_path("res://").path_join("../website/public/img")

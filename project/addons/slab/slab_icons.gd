@@ -3,6 +3,7 @@ extends RefCounted
 
 const FALLBACK := "Node3D"
 const ICON_DIR := "res://addons/slab/icons"
+const RASTER_SCALE := 2.0
 
 static var _bundle: Dictionary = {}
 
@@ -47,7 +48,7 @@ static func _bundled(name: String) -> Texture2D:
 		_bundle[name] = null
 		return null
 	var img := Image.new()
-	var err: int = img.load_svg_from_string(file.get_as_text(), 1.0)
+	var err: int = img.load_svg_from_string(file.get_as_text(), RASTER_SCALE)
 	if err != OK or img.is_empty():
 		_bundle[name] = null
 		return null
