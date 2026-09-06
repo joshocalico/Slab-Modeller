@@ -221,7 +221,6 @@ func _overlay_wires(solid: Node3D) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = Color(0.93, 0.88, 0.72)
-	mat.no_depth_test = true
 	mat.render_priority = 1
 	var mi := MeshInstance3D.new()
 	mi.name = "DocsWires"
@@ -243,7 +242,6 @@ func _overlay_face(solid: Node3D, face: int) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = Color(1.0, 0.62, 0.18)
-	mat.no_depth_test = true
 	mat.render_priority = 2
 	var mi := MeshInstance3D.new()
 	mi.name = "DocsFace"

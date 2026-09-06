@@ -81,8 +81,8 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		const int32_t m = int32_t(corners.size());
 		for (int32_t i = 1; i + 1 < m; i++) {
 			r_out.indices.push_back(base);
-			r_out.indices.push_back(base + i);
 			r_out.indices.push_back(base + i + 1);
+			r_out.indices.push_back(base + i);
 			r_out.provenance.push_back(id);
 		}
 	}

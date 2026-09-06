@@ -147,6 +147,21 @@ SLAB_TEST(emit_box_is_twelve_triangles) {
 	}
 }
 
+SLAB_TEST(emit_winds_clockwise_against_the_outward_normal) {
+	const Mesh mesh = make_box();
+	EmitOut out;
+	emit_arrays(mesh, out);
+	expect(out.indices.size() >= 3, "emitted triangles");
+	for (size_t i = 0; i + 2 < out.indices.size(); i += 3) {
+		const godot::Vector3 a = out.verts[size_t(out.indices[i])];
+		const godot::Vector3 b = out.verts[size_t(out.indices[i + 1])];
+		const godot::Vector3 c = out.verts[size_t(out.indices[i + 2])];
+		const godot::Vector3 n = out.normals[size_t(out.indices[i])];
+		const godot::Vector3 geo = (b - a).cross(c - a);
+		expect(geo.dot(n) < 0.0f, "Godot front faces are clockwise when looking along the outward normal");
+	}
+}
+
 SLAB_TEST(emit_applies_face_uv_scale_and_offset) {
 	MeshEdit edit = MeshEdit::empty();
 	expect(ops::box(edit, godot::Vector3(2, 3, 2)).ok(), "box op");
