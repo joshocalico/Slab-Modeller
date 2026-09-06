@@ -1,6 +1,7 @@
+import type { ReactNode } from "react";
 import { GuideNav } from "@/components/GuideNav";
 
-export default function GuideLayout({ children }) {
+export default function GuideLayout({ children }: { children: ReactNode }) {
   return (
     <div className="guide-shell">
       <GuideNav />

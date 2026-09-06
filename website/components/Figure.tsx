@@ -1,4 +1,10 @@
-export function Figure({ src, alt, caption }) {
+type FigureProps = {
+  src: string;
+  alt: string;
+  caption?: string;
+};
+
+export function Figure({ src, alt, caption }: FigureProps) {
   return (
     <figure className="shot">
       <img src={src} alt={alt} />
