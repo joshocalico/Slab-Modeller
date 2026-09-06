@@ -80,6 +80,24 @@ func _init() -> void:
 		if mesh_node.mesh != null:
 			_expect(mesh_node.mesh.get_surface_count() >= 1, "emitted mesh has a surface")
 
+	var body: StaticBody3D = solid.get_node_or_null("__body")
+	_expect(body != null, "solid owns a StaticBody3D")
+	var shape_node: CollisionShape3D = null
+	if body != null:
+		shape_node = body.get_node_or_null("__shape")
+	_expect(shape_node != null, "body owns a CollisionShape3D")
+	_expect(solid.get("collision_enabled") == true, "collision is on by default")
+	if shape_node != null:
+		_expect(shape_node.shape is ConcavePolygonShape3D, "collision is a triangle soup")
+		if shape_node.shape is ConcavePolygonShape3D:
+			_expect(shape_node.shape.get_faces().size() >= 3, "soup has triangles")
+		_expect(shape_node.disabled == false, "collider is enabled")
+		solid.set("collision_enabled", false)
+		_expect(shape_node.disabled == true, "toggle disables the collider")
+		_expect(solid.call("face_count") == 10, "toggle does not rebuild the mesh")
+		solid.set("collision_enabled", true)
+		_expect(shape_node.disabled == false, "re-enable restores the collider")
+
 	_expect(solid.call("inset_faces", PackedInt64Array([top]), 0.25) == 0, "inset_faces succeeds")
 	_expect(solid.call("is_alive", top), "inset keeps the center face id")
 

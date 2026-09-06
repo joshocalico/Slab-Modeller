@@ -184,8 +184,20 @@ TypedArray<Material> SlabSolid::get_materials() const {
 }
 
 void SlabSolid::set_collision_enabled(bool p_enabled) {
+	if (collision_enabled == p_enabled) {
+		return;
+	}
 	collision_enabled = p_enabled;
-	_rebuild();
+	if (collider == nullptr) {
+		return;
+	}
+	collider->set_disabled(!collision_enabled);
+	if (body != nullptr) {
+		body->set_visible(collision_enabled);
+	}
+	if (collision_enabled && collider->get_shape().is_null() && live_mesh.face_count() > 0) {
+		_rebuild();
+	}
 }
 
 bool SlabSolid::is_collision_enabled() const {
@@ -931,7 +943,7 @@ void SlabSolid::_rebuild() {
 		mesh_instance->set_surface_override_material(i, mat);
 	}
 
-	if (indices.size() >= 3) {
+	if (collision_enabled && indices.size() >= 3) {
 		PackedVector3Array soup;
 		soup.resize(indices.size());
 		for (int64_t i = 0; i < indices.size(); i++) {
@@ -944,6 +956,6 @@ void SlabSolid::_rebuild() {
 	} else {
 		collider->set_shape(Ref<Shape3D>());
 	}
-	body->set_visible(collision_enabled);
 	collider->set_disabled(!collision_enabled);
+	body->set_visible(collision_enabled);
 }
