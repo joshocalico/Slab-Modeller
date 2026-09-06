@@ -70,15 +70,16 @@ func case_every_declared_field_renders_one_spin() -> void:
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	var spins: Array[SpinBox] = _spins(panel)
-	var expected: int = 7 + actions.shapes.fields().size()
-	expect(spins.size() == expected, "panel renders %d spins for 7 edit fields plus the shape catalog, got %d" % [expected, spins.size()])
-	for field in actions.shapes.fields():
+	var box_fields: Array[Dictionary] = actions.shapes.fields_for(&"make_box")
+	expect(spins.size() == box_fields.size(), "Object mode starts with the Box fields only, got %d" % spins.size())
+	for field in box_fields:
 		var named: Node = panel.find_child(String(field["key"]), true, false)
 		expect(named != null, "the %s field has a spin" % field["key"])
 		if named != null:
 			var spin: SpinBox = _spins(named)[0]
 			expect(is_equal_approx(spin.value, field["value"]), "the %s spin starts at %s" % [field["key"], field["value"]])
 			expect(spin.tooltip_text == field["tooltip"], "the %s spin carries the field tooltip" % field["key"])
+	expect(panel.find_child("stair_steps", true, false) == null, "Box focus hides the Stair steps field")
 	panel.free()
 
 
@@ -87,6 +88,7 @@ func case_create_tooltips_follow_the_fields() -> void:
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	panel.focus_create(&"make_stair")
 	var stair: Button = _button_for(panel, "Stair")
 	expect(stair != null and stair.tooltip_text.contains("8 steps"), "the Stair button starts by saying 8 steps")
 	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
@@ -234,7 +236,7 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel).size() == 7, "Face mode keeps the 7 edit spins, got %d" % _spins(panel).size())
+	expect(_spins(panel).size() == 6, "Face mode keeps Amount and the five UV spins, got %d" % _spins(panel).size())
 	expect(_label_for(panel, "FACE") != null and _label_for(panel, "SELECTION") != null,
 		"Face mode renders the Face and Selection headings")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
@@ -259,6 +261,7 @@ func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	root.add_child(panel)
+	panel.focus_create(&"make_stair")
 	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
 	var hits := {"n": 0}
 	steps.value_changed.connect(func(_v: float) -> void: hits["n"] += 1)
@@ -271,6 +274,36 @@ func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 	var stair: Button = _button_for(panel, "Stair")
 	expect(stair != null and stair.tooltip_text.contains("20 steps"),
 		"the rebuilt Stair tooltip follows the committed steps, got %s" % stair.tooltip_text)
+	panel.free()
+
+
+func case_stair_sits_on_the_create_row() -> void:
+	var panel := _build_panel(1.0)
+	var grid: GridContainer = _first_grid(panel)
+	expect(grid != null, "Object mode has a Create grid")
+	var labels: PackedStringArray = PackedStringArray()
+	for child in grid.get_children():
+		if child is Button:
+			labels.append(String(child.get_meta("slab_label", "")))
+	expect(labels.has("Stair"), "Create lists Stair, got %s" % [labels])
+	expect(labels.find("Stair") == 2, "Stair stays the third Create icon after Box and Plane, got %s" % [labels])
+	var stair: Button = _button_for(panel, "Stair")
+	expect(stair.icon != null, "Stair has a glyph")
+	panel.focus_create(&"make_stair")
+	expect(panel.find_child("stair_steps", true, false) != null, "focusing Stair shows Steps")
+	expect(panel.find_child("arch_arc", true, false) == null, "Stair focus hides Arch's Arc")
+	panel.free()
+
+
+func case_create_icons_sit_above_the_settings() -> void:
+	var panel := _build_panel(1.0)
+	var commands: Node = panel.find_child("Commands", true, false)
+	var settings: Node = panel.find_child("Settings", true, false)
+	expect(commands != null and settings != null, "the dock has Commands and Settings")
+	expect(commands.get_parent().get_index() < settings.get_index(),
+		"command icons sit above the settings strip")
+	expect(_button_for(panel, "Stair").get_parent().get_parent() == commands,
+		"Stair lives in the command column, not the settings strip")
 	panel.free()
 
 

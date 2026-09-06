@@ -25,7 +25,7 @@ const CATALOG: Dictionary = {
 		"params": [&"size_x", &"size_z"], "derives": "Thickness is the solid's grid step.",
 	},
 	&"make_stair": {
-		"label": "Stair", "icon": "ArrayMesh", "tooltip": "Creates a straight run of steps.",
+		"label": "Stair", "icon": "Stair", "tooltip": "Creates a straight run of steps.",
 		"params": [&"size_x", &"size_y", &"size_z", &"stair_steps"], "derives": "",
 	},
 	&"make_cylinder": {
@@ -85,17 +85,30 @@ func plan(id: StringName) -> Dictionary:
 func fields() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for key in PARAMS:
-		var param: Dictionary = PARAMS[key]
-		out.append({
-			"key": key,
-			"label": param["label"],
-			"min": param["min"],
-			"max": param["max"],
-			"step": param["step"],
-			"value": _values[key],
-			"tooltip": _field_tooltip(key),
-		})
+		out.append(_field(key))
 	return out
+
+
+func fields_for(id: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not CATALOG.has(id):
+		return out
+	for key in CATALOG[id]["params"]:
+		out.append(_field(key))
+	return out
+
+
+func _field(key: StringName) -> Dictionary:
+	var param: Dictionary = PARAMS[key]
+	return {
+		"key": key,
+		"label": param["label"],
+		"min": param["min"],
+		"max": param["max"],
+		"step": param["step"],
+		"value": _values[key],
+		"tooltip": _field_tooltip(key),
+	}
 
 
 func set_value(key: StringName, value: float) -> void:
