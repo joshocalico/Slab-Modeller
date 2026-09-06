@@ -239,6 +239,50 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	expect(back.smooth, "smooth");
 }
 
+SLAB_TEST(serialize_round_trips_a_material_slot_past_255) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::box(edit, godot::Vector3(2, 3, 2)).ok(), "box op");
+	Mesh box;
+	expect(std::move(edit).commit(box).ok(), "box commit");
+	const FaceId top = top_face(box);
+	FaceAttrs attrs;
+	attrs.material_slot = 400;
+	MeshEdit painted(box);
+	painted.set_attrs(top, attrs);
+	Mesh mesh;
+	expect(std::move(painted).commit(mesh).ok(), "attrs commit");
+	Mesh loaded;
+	expect(deserialize(serialize(mesh), loaded).ok(), "deserialize ok");
+	expect_eq(int(loaded.attrs(top).material_slot), 400, "slot 400 survives");
+}
+
+SLAB_TEST(emit_records_a_material_slot_per_triangle) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::box(edit, godot::Vector3(2, 3, 2)).ok(), "box op");
+	Mesh box;
+	expect(std::move(edit).commit(box).ok(), "box commit");
+	const FaceId top = top_face(box);
+	FaceAttrs attrs;
+	attrs.material_slot = 2;
+	MeshEdit painted(box);
+	painted.set_attrs(top, attrs);
+	Mesh mesh;
+	expect(std::move(painted).commit(mesh).ok(), "attrs commit");
+	EmitOut out;
+	emit_arrays(mesh, out);
+	expect_eq(int(out.slots.size()), int(out.provenance.size()), "one slot per triangle");
+	int painted_tris = 0;
+	for (size_t i = 0; i < out.provenance.size(); i++) {
+		if (out.provenance[i].slot == top.slot && out.provenance[i].gen == top.gen) {
+			expect_eq(int(out.slots[i]), 2, "painted face keeps slot 2");
+			painted_tris++;
+		} else {
+			expect_eq(int(out.slots[i]), 0, "other faces stay on slot 0");
+		}
+	}
+	expect(painted_tris == 2, "top face two triangles");
+}
+
 SLAB_TEST(box_vertex_star) {
 	const Mesh mesh = make_box();
 	std::vector<VertexId> verts;

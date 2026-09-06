@@ -55,6 +55,7 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 	r_out.uvs.clear();
 	r_out.indices.clear();
 	r_out.provenance.clear();
+	r_out.slots.clear();
 
 	std::vector<FaceId> faces;
 	p_mesh.all_faces(faces);
@@ -84,6 +85,7 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 			r_out.indices.push_back(base + i + 1);
 			r_out.indices.push_back(base + i);
 			r_out.provenance.push_back(id);
+			r_out.slots.push_back(attrs.material_slot);
 		}
 	}
 }

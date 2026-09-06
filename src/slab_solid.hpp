@@ -14,6 +14,7 @@
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 
 #include <vector>
 
@@ -38,6 +39,9 @@ public:
 
 	void set_material(const Ref<Material> &p_material);
 	Ref<Material> get_material() const;
+
+	void set_materials(const TypedArray<Material> &p_materials);
+	TypedArray<Material> get_materials() const;
 
 	void set_collision_enabled(bool p_enabled);
 	bool is_collision_enabled() const;
@@ -100,7 +104,7 @@ private:
 	slab::Mesh live_mesh;
 	float grid_step = 0.5f;
 	Color prototype_color = Color(0.62f, 0.64f, 0.68f);
-	Ref<Material> material;
+	TypedArray<Material> materials;
 	bool collision_enabled = true;
 
 	MeshInstance3D *mesh_instance = nullptr;

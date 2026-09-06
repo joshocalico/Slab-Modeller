@@ -65,7 +65,7 @@ int32_t _snap_coord(int32_t p_v, int32_t p_step) {
 
 } // namespace
 
-MeshFault set_face_material(MeshEdit &p_edit, const std::vector<FaceId> &p_faces, uint8_t p_slot) {
+MeshFault set_face_material(MeshEdit &p_edit, const std::vector<FaceId> &p_faces, uint32_t p_slot) {
 	if (!faces_alive(p_edit.scratch(), p_faces)) {
 		return _bad(MeshError::STALE_HANDLE);
 	}

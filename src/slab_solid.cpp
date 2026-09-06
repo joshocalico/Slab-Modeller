@@ -15,12 +15,14 @@
 #include "kernel/quantize.hpp"
 #include "kernel/serialize.hpp"
 
+#include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/shape3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/math.hpp>
 
 #include <cstring>
+#include <map>
 #include <utility>
 
 using namespace godot;
@@ -34,6 +36,8 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_prototype_color"), &SlabSolid::get_prototype_color);
 	ClassDB::bind_method(D_METHOD("set_material", "material"), &SlabSolid::set_material);
 	ClassDB::bind_method(D_METHOD("get_material"), &SlabSolid::get_material);
+	ClassDB::bind_method(D_METHOD("set_materials", "materials"), &SlabSolid::set_materials);
+	ClassDB::bind_method(D_METHOD("get_materials"), &SlabSolid::get_materials);
 	ClassDB::bind_method(D_METHOD("set_collision_enabled", "enabled"), &SlabSolid::set_collision_enabled);
 	ClassDB::bind_method(D_METHOD("is_collision_enabled"), &SlabSolid::is_collision_enabled);
 
@@ -94,7 +98,8 @@ void SlabSolid::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_data", "get_data");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_step", PROPERTY_HINT_RANGE, "0.05,8,0.05,suffix:m"), "set_grid_step", "get_grid_step");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "prototype_color"), "set_prototype_color", "get_prototype_color");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_material", "get_material");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "materials", PROPERTY_HINT_ARRAY_TYPE, "Material"), "set_materials", "get_materials");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Material", PROPERTY_USAGE_NO_EDITOR | PROPERTY_USAGE_STORAGE), "set_material", "get_material");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "collision_enabled"), "set_collision_enabled", "is_collision_enabled");
 
 	ADD_SIGNAL(MethodInfo("topology_changed"));
@@ -155,12 +160,27 @@ Color SlabSolid::get_prototype_color() const {
 }
 
 void SlabSolid::set_material(const Ref<Material> &p_material) {
-	material = p_material;
+	if (materials.size() < 1) {
+		materials.resize(1);
+	}
+	materials[0] = p_material;
 	_rebuild();
 }
 
 Ref<Material> SlabSolid::get_material() const {
-	return material;
+	if (materials.size() < 1) {
+		return Ref<Material>();
+	}
+	return materials[0];
+}
+
+void SlabSolid::set_materials(const TypedArray<Material> &p_materials) {
+	materials = p_materials;
+	_rebuild();
+}
+
+TypedArray<Material> SlabSolid::get_materials() const {
+	return materials;
 }
 
 void SlabSolid::set_collision_enabled(bool p_enabled) {
@@ -531,7 +551,7 @@ int SlabSolid::merge_faces(const PackedInt64Array &p_faces) {
 }
 
 int SlabSolid::set_face_material(const PackedInt64Array &p_faces, int p_slot) {
-	if (p_slot < 0 || p_slot > 255) {
+	if (p_slot < 0) {
 		return int(slab::MeshError::INVALID_SELECTION);
 	}
 	std::vector<slab::FaceId> ids;
@@ -539,7 +559,7 @@ int SlabSolid::set_face_material(const PackedInt64Array &p_faces, int p_slot) {
 		return int(slab::MeshError::STALE_HANDLE);
 	}
 	slab::MeshEdit edit(live_mesh);
-	const slab::MeshFault fault = slab::ops::set_face_material(edit, ids, uint8_t(p_slot));
+	const slab::MeshFault fault = slab::ops::set_face_material(edit, ids, uint32_t(p_slot));
 	if (!fault.ok()) {
 		return int(fault.code);
 	}
@@ -853,28 +873,62 @@ void SlabSolid::_rebuild() {
 
 	Ref<ArrayMesh> array_mesh;
 	array_mesh.instantiate();
-	if (indices.size() >= 3) {
-		Array arrays;
-		arrays.resize(Mesh::ARRAY_MAX);
-		arrays[Mesh::ARRAY_VERTEX] = verts;
-		arrays[Mesh::ARRAY_NORMAL] = normals;
-		arrays[Mesh::ARRAY_TEX_UV] = uvs;
-		arrays[Mesh::ARRAY_INDEX] = indices;
-		array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+	std::vector<uint32_t> surface_slots;
+	if (emitted.provenance.size() > 0 && emitted.indices.size() >= 3) {
+		struct Bucket {
+			PackedVector3Array verts;
+			PackedVector3Array normals;
+			PackedVector2Array uvs;
+			PackedInt32Array indices;
+			std::map<int32_t, int32_t> remap;
+		};
+		std::map<uint32_t, Bucket> buckets;
+		std::vector<uint32_t> order;
+		for (size_t t = 0; t < emitted.provenance.size(); t++) {
+			const uint32_t slot = t < emitted.slots.size() ? emitted.slots[t] : 0;
+			if (buckets.find(slot) == buckets.end()) {
+				order.push_back(slot);
+			}
+			Bucket &bucket = buckets[slot];
+			for (int k = 0; k < 3; k++) {
+				const int32_t src = emitted.indices[t * 3 + size_t(k)];
+				if (bucket.remap.find(src) == bucket.remap.end()) {
+					bucket.remap[src] = int32_t(bucket.verts.size());
+					bucket.verts.append(emitted.verts[size_t(src)]);
+					bucket.normals.append(emitted.normals[size_t(src)]);
+					bucket.uvs.append(emitted.uvs[size_t(src)]);
+				}
+				bucket.indices.append(bucket.remap[src]);
+			}
+		}
+		for (uint32_t slot : order) {
+			const Bucket &bucket = buckets[slot];
+			Array arrays;
+			arrays.resize(Mesh::ARRAY_MAX);
+			arrays[Mesh::ARRAY_VERTEX] = bucket.verts;
+			arrays[Mesh::ARRAY_NORMAL] = bucket.normals;
+			arrays[Mesh::ARRAY_TEX_UV] = bucket.uvs;
+			arrays[Mesh::ARRAY_INDEX] = bucket.indices;
+			array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+			surface_slots.push_back(slot);
+		}
 	}
 	mesh_instance->set_mesh(array_mesh);
-
-	if (array_mesh->get_surface_count() > 0) {
-		if (material.is_valid()) {
-			mesh_instance->set_surface_override_material(0, material);
-		} else {
+	for (int i = 0; i < int(surface_slots.size()); i++) {
+		const uint32_t slot = surface_slots[size_t(i)];
+		Ref<Material> mat;
+		if (slot < uint32_t(materials.size())) {
+			mat = materials[slot];
+		}
+		if (mat.is_null()) {
 			Ref<StandardMaterial3D> proto;
 			proto.instantiate();
 			proto->set_albedo(prototype_color);
 			proto->set_roughness(0.7f);
 			proto->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
-			mesh_instance->set_surface_override_material(0, proto);
+			mat = proto;
 		}
+		mesh_instance->set_surface_override_material(i, mat);
 	}
 
 	if (indices.size() >= 3) {

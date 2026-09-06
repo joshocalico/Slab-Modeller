@@ -8,7 +8,8 @@ namespace slab {
 namespace {
 
 constexpr uint32_t MAGIC = 0x31424C53u;
-constexpr uint32_t VERSION = 1;
+constexpr uint32_t VERSION = 2;
+constexpr uint32_t VERSION_SLOT_U8 = 1;
 
 MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
 	MeshFault f;
@@ -140,9 +141,10 @@ std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 		write_f32(out, f.attrs.uv_offset.y);
 		write_f32(out, f.attrs.uv_rotation);
 		write_u8(out, uint8_t(f.attrs.uv_axis));
-		write_u8(out, f.attrs.material_slot);
 		write_u8(out, f.attrs.smooth ? 1 : 0);
 		write_u8(out, 0);
+		write_u8(out, 0);
+		write_u32(out, f.attrs.material_slot);
 	}
 
 	write_free_list(out, p_mesh.free_vertices);
@@ -161,7 +163,7 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 
 	const uint32_t magic = r.u32();
 	const uint32_t version = r.u32();
-	if (!r.ok || magic != MAGIC || version != VERSION) {
+	if (!r.ok || magic != MAGIC || (version != VERSION && version != VERSION_SLOT_U8)) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
 
@@ -171,8 +173,9 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 	if (!r.ok) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
+	const uint64_t face_bytes = version == VERSION_SLOT_U8 ? 32u : 36u;
 	const uint64_t left = uint64_t(r.end - r.p);
-	const uint64_t need = uint64_t(vcount) * 20u + uint64_t(hcount) * 20u + uint64_t(fcount) * 32u + 12u;
+	const uint64_t need = uint64_t(vcount) * 20u + uint64_t(hcount) * 20u + uint64_t(fcount) * face_bytes + 12u;
 	if (need > left) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
@@ -213,9 +216,16 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 		f.attrs.uv_offset.y = r.f32();
 		f.attrs.uv_rotation = r.f32();
 		const uint8_t axis = r.u8();
-		f.attrs.material_slot = r.u8();
-		f.attrs.smooth = r.u8() != 0;
-		(void)r.u8();
+		if (version == VERSION_SLOT_U8) {
+			f.attrs.material_slot = r.u8();
+			f.attrs.smooth = r.u8() != 0;
+			(void)r.u8();
+		} else {
+			f.attrs.smooth = r.u8() != 0;
+			(void)r.u8();
+			(void)r.u8();
+			f.attrs.material_slot = r.u32();
+		}
 		if (!r.ok || axis > uint8_t(UvAxis::Z) || !in_bound(f.he.i, hcount)) {
 			return fault(MeshError::CORRUPT_DATA, i);
 		}

@@ -24,7 +24,7 @@ struct FaceAttrs {
 	godot::Vector2 uv_offset = godot::Vector2(0, 0);
 	float uv_rotation = 0.0f;
 	UvAxis uv_axis = UvAxis::AUTO;
-	uint8_t material_slot = 0;
+	uint32_t material_slot = 0;
 	bool smooth = false;
 };
 

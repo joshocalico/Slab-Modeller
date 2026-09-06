@@ -97,6 +97,7 @@ func _init() -> void:
 
 	_check_arch()
 	_check_shapes_stay_off_the_solid()
+	_check_two_materials()
 	_finish()
 
 
@@ -139,6 +140,32 @@ func _check_shapes_stay_off_the_solid() -> void:
 	_expect(stair.get("data") == edited, "changing the Steps field leaves the built solid alone")
 	for prop in ["steps", "segments", "arc", "thickness", "sides", "size"]:
 		_expect(not _has_property(stair, prop), "the solid stores no %s property" % prop)
+
+
+func _check_two_materials() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 3, 2)) == 0, "paint box builds")
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.albedo_color = Color(0.55, 0.38, 0.22)
+	var wall_mat := StandardMaterial3D.new()
+	wall_mat.albedo_color = Color(0.82, 0.8, 0.74)
+	var mats: Array = []
+	mats.append(floor_mat)
+	mats.append(wall_mat)
+	solid.set("materials", mats)
+	var top: int = _top_face(solid)
+	_expect(solid.call("set_face_material", PackedInt64Array([top]), 1) == 0, "the cap takes material 1")
+	_expect(solid.call("set_face_material", PackedInt64Array([top]), 400) == 0, "slot 400 is legal")
+	var painted: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(painted)
+	_expect(painted.call("make_box", Vector3(2, 3, 2)) == 0, "two-surface box builds")
+	painted.set("materials", mats)
+	_expect(painted.call("set_face_material", PackedInt64Array([_top_face(painted)]), 1) == 0, "paint one face")
+	var mesh_node: MeshInstance3D = painted.get_node_or_null("Mesh")
+	_expect(mesh_node != null and mesh_node.mesh != null, "painted solid still emits")
+	if mesh_node != null and mesh_node.mesh != null:
+		_expect(mesh_node.mesh.get_surface_count() == 2, "two used slots emit two surfaces, got %d" % mesh_node.mesh.get_surface_count())
 
 
 func _has_property(node: Object, prop: String) -> bool:
