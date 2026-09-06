@@ -90,7 +90,7 @@ func case_create_tooltips_follow_the_fields() -> void:
 	var stair: Button = _button_for(panel, "Stair")
 	expect(stair != null and stair.tooltip_text.contains("8 steps"), "the Stair button starts by saying 8 steps")
 	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
-	# Range only emits value_changed inside the tree, and this harness runs in _init.
+	# Range only emits value_changed inside the tree. This case never adds the panel to it.
 	steps.value = 20.0
 	steps.value_changed.emit(steps.value)
 	expect(stair.tooltip_text.contains("20 steps") and not stair.tooltip_text.contains("8 steps"),
@@ -238,8 +238,11 @@ func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	root.add_child(panel)
 	var steps: SpinBox = _spins(panel.find_child("stair_steps", true, false))[0]
+	var hits := {"n": 0}
+	steps.value_changed.connect(func(_v: float) -> void: hits["n"] += 1)
 	steps.get_line_edit().text = "20"
 	selection.mode = SlabSelection.Mode.FACE
+	expect(hits["n"] == 1, "leaving Object mode commits Steps once, got %d" % hits["n"])
 	expect(is_equal_approx(actions.shapes.value_of(&"stair_steps"), 20.0),
 		"leaving Object mode applies a half-typed Steps value, got %s" % actions.shapes.value_of(&"stair_steps"))
 	selection.mode = SlabSelection.Mode.OBJECT
@@ -480,6 +483,10 @@ func _source_of(file_name: String) -> String:
 
 
 func _init() -> void:
+	call_deferred("_run")
+
+
+func _run() -> void:
 	for case_name in _case_names():
 		call(case_name)
 		_ran += 1

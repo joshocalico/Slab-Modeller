@@ -70,11 +70,12 @@ func refresh() -> void:
 
 
 func _rebuild_commands(sections: Array[Dictionary]) -> void:
-	# apply() writes the LineEdit into the Range and does not emit value_changed, so the
-	# catalog store would otherwise keep the last committed number.
+	# apply() writes the LineEdit into the Range. Out of the tree it does not emit, so the
+	# catalog store would otherwise keep the last committed number. In the dock it already emits.
 	for spin in _spins_under(_command_column):
 		spin.apply()
-		spin.value_changed.emit(spin.value)
+		if not spin.is_inside_tree():
+			spin.value_changed.emit(spin.value)
 	# Immediate free keeps outgoing buttons out of the tree for the headless smokes.
 	# block_signals on the buttons themselves. It does not propagate from the heading or grid.
 	for id in _buttons:
