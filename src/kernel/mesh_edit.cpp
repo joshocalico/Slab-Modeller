@@ -793,6 +793,17 @@ MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
 				verts[loop[i]] = vs[i];
 			}
 		}
+		bool dup_edge = false;
+		for (size_t i = 0; i < loop.size(); i++) {
+			const size_t n = (i + 1) % loop.size();
+			if (directed.find(key(vs[i].i, vs[n].i)) != directed.end()) {
+				dup_edge = true;
+				break;
+			}
+		}
+		if (dup_edge) {
+			continue;
+		}
 
 		std::vector<HalfEdgeIdx> hes(loop.size());
 		const FaceIdx face = _alloc_face();
@@ -808,12 +819,82 @@ MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
 			he.twin = HalfEdgeIdx{ INVALID_IDX };
 			he.face = face;
 			work.vertices[vs[i].i].out = hes[i];
-			const uint64_t k = key(vs[i].i, vs[n].i);
-			if (directed.find(k) != directed.end()) {
-				fault.code = MeshError::NON_MANIFOLD_VERTEX;
+			directed[key(vs[i].i, vs[n].i)] = hes[i];
+		}
+	}
+
+	auto add_face = [&](const std::vector<VertexIdx> &vs) -> bool {
+		if (vs.size() < 3) {
+			return false;
+		}
+		for (size_t i = 0; i < vs.size(); i++) {
+			const size_t n = (i + 1) % vs.size();
+			if (directed.find(key(vs[i].i, vs[n].i)) != directed.end()) {
+				return false;
+			}
+		}
+		std::vector<HalfEdgeIdx> hes(vs.size());
+		const FaceIdx face = _alloc_face();
+		for (size_t i = 0; i < vs.size(); i++) {
+			hes[i] = _alloc_half_edge();
+		}
+		work.faces[face.i].he = hes[0];
+		for (size_t i = 0; i < vs.size(); i++) {
+			const size_t n = (i + 1) % vs.size();
+			HalfEdge &he = work.half_edges[hes[i].i];
+			he.origin = vs[i];
+			he.next = hes[n];
+			he.twin = HalfEdgeIdx{ INVALID_IDX };
+			he.face = face;
+			work.vertices[vs[i].i].out = hes[i];
+			directed[key(vs[i].i, vs[n].i)] = hes[i];
+		}
+		return true;
+	};
+
+	std::unordered_map<uint32_t, uint32_t> unmatched_next;
+	for (const auto &kv : directed) {
+		const uint32_t a = uint32_t(kv.first >> 32);
+		const uint32_t b = uint32_t(kv.first);
+		if (directed.find(key(b, a)) == directed.end()) {
+			unmatched_next[a] = b;
+		}
+	}
+	while (!unmatched_next.empty()) {
+		std::vector<VertexIdx> cycle;
+		uint32_t start = unmatched_next.begin()->first;
+		uint32_t cur = start;
+		while (true) {
+			cycle.push_back(VertexIdx{ cur });
+			const auto found = unmatched_next.find(cur);
+			if (found == unmatched_next.end()) {
+				fault.code = MeshError::NOT_CLOSED;
 				return fault;
 			}
-			directed[k] = hes[i];
+			const uint32_t nxt = found->second;
+			unmatched_next.erase(found);
+			cur = nxt;
+			if (cur == start) {
+				break;
+			}
+			if (cycle.size() > work.vertices.size() + 2) {
+				fault.code = MeshError::NOT_CLOSED;
+				return fault;
+			}
+		}
+		if (cycle.size() < 3) {
+			fault.code = MeshError::NOT_CLOSED;
+			return fault;
+		}
+		std::vector<VertexIdx> rev;
+		rev.reserve(cycle.size());
+		rev.push_back(cycle[0]);
+		for (size_t i = cycle.size() - 1; i > 0; i--) {
+			rev.push_back(cycle[i]);
+		}
+		if (!add_face(rev)) {
+			fault.code = MeshError::NOT_CLOSED;
+			return fault;
 		}
 	}
 
@@ -821,7 +902,6 @@ MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
 		fault.code = MeshError::RESULT_EMPTY;
 		return fault;
 	}
-
 	for (const auto &kv : directed) {
 		const uint32_t a = uint32_t(kv.first >> 32);
 		const uint32_t b = uint32_t(kv.first);

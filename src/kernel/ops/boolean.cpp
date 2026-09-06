@@ -120,18 +120,23 @@ bool _face_plane(const Mesh &p_mesh, FaceId p_face, Plane &r_out) {
 IVec3 _hit(const IVec3 &p_a, const IVec3 &p_b, const Plane &p_pl) {
 	const __int128 sa = _side(p_a, p_pl);
 	const __int128 sb = _side(p_b, p_pl);
-	const __int128 den = sb - sa;
+	__int128 den = sb - sa;
 	if (den == 0) {
 		return p_a;
 	}
-	const double t = double(-sa) / double(den);
-	const godot::Vector3 a = dequantize(p_a);
-	const godot::Vector3 b = dequantize(p_b);
-	IVec3 q;
-	if (!quantize(a + (b - a) * float(t), q)) {
-		return p_a;
-	}
-	return q;
+	auto lerp = [&](int32_t p_av, int32_t p_bv) -> int32_t {
+		__int128 d = den;
+		__int128 num = __int128(p_av) * d + __int128(int64_t(p_bv) - int64_t(p_av)) * (-sa);
+		if (d < 0) {
+			num = -num;
+			d = -d;
+		}
+		if (num >= 0) {
+			return int32_t((num + d / 2) / d);
+		}
+		return int32_t((num - d / 2) / d);
+	};
+	return IVec3{ lerp(p_a.x, p_b.x), lerp(p_a.y, p_b.y), lerp(p_a.z, p_b.z) };
 }
 
 bool _split_by_plane(const std::vector<IVec3> &p_poly, const Plane &p_pl, std::vector<IVec3> &r_pos, std::vector<IVec3> &r_neg) {
@@ -325,7 +330,8 @@ bool _on_open_segment(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_p) {
 	if (!_collinear(p_a, p_b, p_p)) {
 		return false;
 	}
-	return _dist2(p_a, p_p) + _dist2(p_p, p_b) == _dist2(p_a, p_b);
+	const __int128 ab = _dist2(p_a, p_b);
+	return _dist2(p_a, p_p) < ab && _dist2(p_p, p_b) < ab;
 }
 
 void _snap_near(std::vector<std::vector<IVec3>> &p_loops) {
@@ -393,6 +399,54 @@ void _imprint(std::vector<std::vector<IVec3>> &p_loops) {
 	}
 }
 
+void _split_at_repeats(const std::vector<IVec3> &p_loop, std::vector<std::vector<IVec3>> &r_out) {
+	const int n = int(p_loop.size());
+	for (int i = 0; i < n; i++) {
+		for (int j = i + 2; j < n; j++) {
+			if (i == 0 && j == n - 1) {
+				continue;
+			}
+			if (p_loop[size_t(i)] != p_loop[size_t(j)]) {
+				continue;
+			}
+			std::vector<IVec3> a;
+			for (int k = i; k <= j; k++) {
+				a.push_back(p_loop[size_t(k)]);
+			}
+			std::vector<IVec3> b;
+			for (int k = j; k < n; k++) {
+				b.push_back(p_loop[size_t(k)]);
+			}
+			for (int k = 0; k <= i; k++) {
+				b.push_back(p_loop[size_t(k)]);
+			}
+			_clean(a);
+			_clean(b);
+			if (a.size() >= 3) {
+				_split_at_repeats(a, r_out);
+			}
+			if (b.size() >= 3) {
+				_split_at_repeats(b, r_out);
+			}
+			return;
+		}
+	}
+	if (p_loop.size() >= 3) {
+		r_out.push_back(p_loop);
+	}
+}
+
+void _break_bowties(std::vector<std::vector<IVec3>> &p_loops) {
+	std::vector<std::vector<IVec3>> next;
+	for (std::vector<IVec3> loop : p_loops) {
+		std::vector<std::vector<IVec3>> one;
+		one.push_back(std::move(loop));
+		_imprint(one);
+		_split_at_repeats(one[0], next);
+	}
+	p_loops.swap(next);
+}
+
 void _reverse(std::vector<IVec3> &p_loop) {
 	if (p_loop.size() < 3) {
 		return;
@@ -445,7 +499,7 @@ bool _on_surface(const Mesh &p_mesh, const godot::Vector3 &p_p, godot::Vector3 &
 	return false;
 }
 
-void _keep(const Mesh &p_other, const std::vector<Frag> &p_frags, bool p_inside, bool p_flip, std::vector<std::vector<IVec3>> &r_out) {
+void _keep(const Mesh &p_other, const std::vector<Frag> &p_frags, bool p_inside, bool p_flip, bool p_skip_same_dir_coplanar, std::vector<std::vector<IVec3>> &r_out) {
 	for (const Frag &f : p_frags) {
 		const godot::Vector3 n = _normal(f.loop);
 		if (n.length_squared() == 0.0f) {
@@ -457,7 +511,7 @@ void _keep(const Mesh &p_other, const std::vector<Frag> &p_frags, bool p_inside,
 			if (p_inside && n.dot(other_n) >= 0.0f) {
 				continue;
 			}
-			if (!p_inside && n.dot(other_n) > 0.0f) {
+			if (!p_inside && p_skip_same_dir_coplanar && n.dot(other_n) > 0.0f) {
 				continue;
 			}
 		} else {
@@ -496,19 +550,20 @@ MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 
 	std::vector<std::vector<IVec3>> loops;
 	if (p_mode == 0) {
-		_keep(p_other, bits_a, false, false, loops);
-		_keep(p_edit.scratch(), bits_b, false, false, loops);
+		_keep(p_other, bits_a, false, false, false, loops);
+		_keep(p_edit.scratch(), bits_b, false, false, true, loops);
 	} else if (p_mode == 1) {
-		_keep(p_other, bits_a, false, false, loops);
-		_keep(p_edit.scratch(), bits_b, true, true, loops);
+		_keep(p_other, bits_a, false, false, true, loops);
+		_keep(p_edit.scratch(), bits_b, true, true, true, loops);
 	} else {
-		_keep(p_other, bits_a, true, false, loops);
-		_keep(p_edit.scratch(), bits_b, true, false, loops);
+		_keep(p_other, bits_a, true, false, true, loops);
+		_keep(p_edit.scratch(), bits_b, true, false, true, loops);
 	}
 	if (loops.empty()) {
 		return _bad(MeshError::RESULT_EMPTY);
 	}
 	_snap_near(loops);
+	_break_bowties(loops);
 	_imprint(loops);
 	return p_edit.assemble(loops);
 }

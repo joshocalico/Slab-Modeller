@@ -52,6 +52,76 @@ SLAB_TEST(boolean_subtract_of_an_inner_box_is_a_watertight_cavity) {
 	expect(validate(out).ok(), "cavity is watertight");
 }
 
+static Mesh shifted_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc, const godot::Vector3 &p_delta) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::arch(edit, p_span, p_depth, p_segments, p_thickness, p_arc).ok(), "arch builds");
+	Mesh mesh;
+	expect(std::move(edit).commit(mesh).ok(), "arch commit");
+	std::vector<VertexId> verts;
+	mesh.all_vertices(verts);
+	MeshEdit moved(mesh);
+	expect(ops::move_vertices(moved, verts, p_delta).ok(), "shift arch");
+	expect(std::move(moved).commit(mesh).ok(), "shifted arch commit");
+	return mesh;
+}
+
+SLAB_TEST(boolean_union_of_overlapping_boxes_is_a_watertight_solid) {
+	const Mesh a = unit_box();
+	MeshEdit b_edit = MeshEdit::empty();
+	expect(ops::box(b_edit, godot::Vector3(2, 3, 2)).ok(), "second box");
+	Mesh b;
+	expect(std::move(b_edit).commit(b).ok(), "second box commit");
+	std::vector<VertexId> verts;
+	b.all_vertices(verts);
+	MeshEdit shifted(b);
+	expect(ops::move_vertices(shifted, verts, godot::Vector3(1, 0, 0)).ok(), "overlap the boxes by 1 m");
+	expect(std::move(shifted).commit(b).ok(), "shifted overlap");
+
+	MeshEdit joined(a);
+	const MeshFault fault = ops::boolean(joined, b, 0);
+	expect_eq(int(fault.code), int(MeshError::OK), "overlapping union op");
+	Mesh out;
+	expect(std::move(joined).commit(out).ok(), "overlapping union commit");
+	expect(validate(out).ok(), "overlapping union is watertight");
+	expect(out.signed_volume() > 12.0, "union is larger than one box");
+	expect(out.signed_volume() < 24.0, "union is smaller than two boxes");
+}
+
+SLAB_TEST(boolean_union_of_an_arch_on_a_box_is_a_watertight_house) {
+	MeshEdit body_edit = MeshEdit::empty();
+	expect(ops::box(body_edit, godot::Vector3(4, 2.2f, 4)).ok(), "house body");
+	Mesh body;
+	expect(std::move(body_edit).commit(body).ok(), "house body commit");
+	const Mesh roof = shifted_arch(4.0f, 4.0f, 12, 0.4f, Math_PI, godot::Vector3(0, 2.05f, 0));
+
+	MeshEdit joined(body);
+	const MeshFault fault = ops::boolean(joined, roof, 0);
+	expect_eq(int(fault.code), int(MeshError::OK), "house union op");
+	Mesh out;
+	const MeshFault committed = std::move(joined).commit(out);
+	expect(committed.ok(), "house union commit");
+	expect(validate(out).ok(), "house is watertight");
+	expect(out.signed_volume() > body.signed_volume(), "the roof adds volume");
+	expect(out.face_count() > 6, "the vault adds faces");
+
+	MeshEdit door_edit = MeshEdit::empty();
+	expect(ops::box(door_edit, godot::Vector3(0.9f, 1.6f, 1.2f)).ok(), "door cutter");
+	Mesh door;
+	expect(std::move(door_edit).commit(door).ok(), "door commit");
+	std::vector<VertexId> door_verts;
+	door.all_vertices(door_verts);
+	MeshEdit shifted_door(door);
+	expect(ops::move_vertices(shifted_door, door_verts, godot::Vector3(1.55f, 0.0f, -0.2f)).ok(), "shift door through the front wall");
+	expect(std::move(shifted_door).commit(door).ok(), "shifted door");
+	const double before_door = out.signed_volume();
+	MeshEdit cut(out);
+	expect(ops::boolean(cut, door, 1).ok(), "house door subtract");
+	expect(std::move(cut).commit(out).ok(), "house door commit");
+	expect(validate(out).ok(), "house with a door is watertight");
+	expect(out.signed_volume() > 0.0, "house with a door still has volume");
+	expect(out.signed_volume() < before_door, "the door removes volume");
+}
+
 SLAB_TEST(boolean_union_of_disjoint_boxes_concatenates) {
 	const Mesh a = unit_box();
 	MeshEdit b_edit = MeshEdit::empty();
