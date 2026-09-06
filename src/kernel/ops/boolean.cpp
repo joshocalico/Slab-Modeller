@@ -528,6 +528,96 @@ void _keep(const Mesh &p_other, const std::vector<Frag> &p_frags, bool p_inside,
 	}
 }
 
+void _dissolve_coplanar(MeshEdit &p_edit) {
+	for (;;) {
+		std::vector<EdgeId> edges;
+		p_edit.scratch().all_edges(edges);
+		bool did = false;
+		for (const EdgeId id : edges) {
+			if (!p_edit.scratch().alive(id)) {
+				continue;
+			}
+			FaceId fa;
+			FaceId fb;
+			p_edit.scratch().edge_faces(id, fa, fb);
+			if (!p_edit.scratch().alive(fa) || !p_edit.scratch().alive(fb)) {
+				continue;
+			}
+			if (p_edit.scratch().face_normal(fa).dot(p_edit.scratch().face_normal(fb)) <= 0.999f) {
+				continue;
+			}
+			if (p_edit.dissolve_edge(id).ok()) {
+				did = true;
+				break;
+			}
+			p_edit.replace_with(p_edit.scratch());
+		}
+		if (!did) {
+			return;
+		}
+	}
+}
+
+bool _collinear_on_face(const Mesh &p_mesh, FaceId p_face, VertexId p_v) {
+	std::vector<VertexId> corners;
+	p_mesh.face_corners(p_face, corners);
+	const int n = int(corners.size());
+	for (int i = 0; i < n; i++) {
+		if (corners[size_t(i)].slot != p_v.slot || corners[size_t(i)].gen != p_v.gen) {
+			continue;
+		}
+		return _collinear(p_mesh.position_i(corners[size_t((i + n - 1) % n)]), p_mesh.position_i(corners[size_t(i)]),
+				p_mesh.position_i(corners[size_t((i + 1) % n)]));
+	}
+	return false;
+}
+
+void _strip_collinear(MeshEdit &p_edit) {
+	for (;;) {
+		std::vector<VertexId> verts;
+		p_edit.scratch().all_vertices(verts);
+		bool did = false;
+		for (const VertexId v : verts) {
+			if (!p_edit.scratch().alive(v)) {
+				continue;
+			}
+			std::vector<FaceId> faces;
+			p_edit.scratch().vertex_faces(v, faces);
+			if (faces.size() < 2) {
+				continue;
+			}
+			bool all_col = true;
+			for (const FaceId f : faces) {
+				if (!_collinear_on_face(p_edit.scratch(), f, v)) {
+					all_col = false;
+					break;
+				}
+			}
+			if (!all_col) {
+				continue;
+			}
+			std::vector<EdgeId> edges;
+			p_edit.scratch().vertex_edges(v, edges);
+			for (const EdgeId id : edges) {
+				if (!p_edit.scratch().alive(id)) {
+					continue;
+				}
+				if (p_edit.collapse_edge(id).ok()) {
+					did = true;
+					break;
+				}
+				p_edit.replace_with(p_edit.scratch());
+			}
+			if (did) {
+				break;
+			}
+		}
+		if (!did) {
+			return;
+		}
+	}
+}
+
 MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	std::vector<Plane> planes_a;
 	std::vector<Plane> planes_b;
@@ -565,7 +655,13 @@ MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	_snap_near(loops);
 	_break_bowties(loops);
 	_imprint(loops);
-	return p_edit.assemble(loops);
+	const MeshFault assembled = p_edit.assemble(loops);
+	if (!assembled.ok()) {
+		return assembled;
+	}
+	_dissolve_coplanar(p_edit);
+	_strip_collinear(p_edit);
+	return p_edit.last_fault();
 }
 
 } // namespace
