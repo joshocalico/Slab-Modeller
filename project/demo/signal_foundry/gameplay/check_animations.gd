@@ -58,6 +58,33 @@ func run() -> void:
 	platform._physics_process(1.0)
 	await physics_frame
 	expect(is_equal_approx(platform.position.z, 2.0), "shuttle reverses toward its start, z=%s" % platform.position.z)
+	platform.queue_free()
+	await process_frame
+
+	var lift: AnimatableBody3D = platform_scene.instantiate()
+	lift.position = Vector3(29, 0.45, 4)
+	lift.local_travel = Vector3(0, 6, 0)
+	lift.travel_duration = 5.0
+	lift.endpoint_pause = 0.0
+	var lift_slab: Node3D = ClassDB.instantiate("SlabSolid")
+	expect(int(lift_slab.call("make_box", Vector3(2, 0.3, 4))) == 0, "test lift deck builds")
+	lift_slab.scale = Vector3(1, 1, 0.5)
+	lift.get_node("PlaceSlabChildrenHere").add_child(lift_slab)
+	world.add_child(lift)
+	await physics_frame
+	var rider_scene: PackedScene = load("res://demo/signal_foundry/gameplay/player.tscn")
+	var rider: CharacterBody3D = rider_scene.instantiate()
+	rider.position = Vector3(30, 0.8, 5)
+	world.add_child(rider)
+	for i in 12:
+		await physics_frame
+	expect(rider.is_on_floor(), "player settles on adopted Slab platform collision")
+	var lift_start_y := lift.position.y
+	var rider_start_y := rider.position.y
+	for i in 60:
+		await physics_frame
+	expect(lift.position.y > lift_start_y + 0.4, "live authored-size lift moves upward through physics ticks")
+	expect(rider.position.y > rider_start_y + 0.4, "AnimatableBody lift carries player from reported spawn")
 
 	var hazard_scene: PackedScene = load("res://demo/signal_foundry/gameplay/hazard_reset.tscn")
 	expect(hazard_scene != null, "hazard reset scene loads")
