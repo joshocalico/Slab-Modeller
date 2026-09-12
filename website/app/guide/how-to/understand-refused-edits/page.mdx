@@ -1,0 +1,27 @@
+export const metadata = { title: "Understand refused edits" };
+
+# Understand refused edits
+
+Slab keeps the last valid mesh when an operation would produce invalid geometry. The red diagnostic belongs to the rejected attempt, so it may appear where a face would have moved even though the visible solid did not change.
+
+## Read the highlight
+
+- A face fault outlines the affected face. A self-intersection outlines both faces that collided.
+- An edge fault draws the exact edge segment.
+- A vertex fault draws every edge incident to that vertex.
+
+Change the amount or selection, then retry the operation. A successful edit clears the diagnostic. Undo, redo, or restoring the solid's `data` also clears it because the rejected attempt no longer describes the current mesh.
+
+## Read it from a tool script
+
+Call `get_edit_diagnostic()` on the `SlabSolid`. The dictionary contains:
+
+| Key | Meaning |
+| --- | --- |
+| `code` | Numeric mesh error code returned by the operation. |
+| `element` | `1` for a vertex, `2` for a half-edge, `3` for a face, or `0` when no location type is known. |
+| `slot` | Location in the rejected scratch mesh. |
+| `related_slot` | Second location when the fault involves a pair, such as two intersecting faces. |
+| `segments` | Paired local-space points used for the red highlight. |
+
+An unknown location has `element == 0` and no segments. Do not interpret an untyped slot as a face, edge, or vertex.

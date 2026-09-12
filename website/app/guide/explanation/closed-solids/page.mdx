@@ -27,3 +27,19 @@ A legal `SlabSolid` is a closed, consistently oriented, positive-volume 2-manifo
 Inset a face, then extrude the inner cap to hollow a room. Keep the cap above the floor. That mesh still embeds. Extrude a whole face through the opposite face. Commit refuses with `SELF_INTERSECTION`. An inward extrude with no inset is the same fault.
 
 Do not punch an opening by driving a face into itself. Cut a hole with Subtract.
+
+## Read a refused edit
+
+Slab keeps the last valid mesh when an edit fails. The red diagnostic lines belong to the rejected attempt, so they can appear where the face would have moved even though the solid itself did not change.
+
+The shape of the highlight tells you where validation stopped:
+
+- A face fault outlines the affected face. A self-intersection outlines both faces that collided.
+- An edge fault draws the exact edge segment.
+- A vertex fault draws the edges incident to that vertex.
+
+Fix the amount or selection and try the operation again. A successful edit clears the diagnostic. Restoring `data` also clears it because the saved mesh and the rejected attempt no longer describe the same state.
+
+Code that provides its own editing controls can inspect `get_edit_diagnostic()`. The dictionary contains the numeric `code`, typed `element`, source `slot`, optional `related_slot`, and paired points in `segments`. An unknown location has `element == 0` and no segments; Slab does not guess what an untyped slot means.
+
+See [Understand refused edits](/guide/how-to/understand-refused-edits) for the highlight and scripting fields.

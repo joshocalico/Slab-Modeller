@@ -36,6 +36,12 @@ export const GUIDE_NAV: NavGroup[] = [
   {
     title: "How to",
     items: [
+      { href: "/guide/how-to/cut-edge-loops", label: "Cut and slide edge loops" },
+      { href: "/guide/how-to/create-linear-radial-arrays", label: "Create linear and radial arrays" },
+      { href: "/guide/how-to/snap-and-align", label: "Snap vertices and align faces" },
+      { href: "/guide/how-to/round-beveled-edges", label: "Round beveled edges" },
+      { href: "/guide/how-to/unwrap-uvs", label: "Mark seams and unwrap UVs" },
+      { href: "/guide/how-to/understand-refused-edits", label: "Understand refused edits" },
       {
         href: "/guide/how-to/create-a-solid",
         label: "Create a solid",
@@ -45,7 +51,9 @@ export const GUIDE_NAV: NavGroup[] = [
         label: "Select in the 3D view",
       },
       { href: "/guide/how-to/pull-a-wall", label: "Pull a wall" },
+      { href: "/guide/how-to/edit-face-regions", label: "Edit face regions" },
       { href: "/guide/how-to/punch-a-cavity", label: "Punch a cavity" },
+      { href: "/guide/how-to/cut-with-a-plane", label: "Cut with a plane" },
       {
         href: "/guide/how-to/paint-texture-pixels",
         label: "Paint texture pixels",

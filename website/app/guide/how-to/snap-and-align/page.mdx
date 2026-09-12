@@ -1,0 +1,25 @@
+export const metadata = { title: "Snap and align" };
+
+# Snap and align
+
+Use snapping to place selected mesh elements on an exact vertex. Use face alignment to seat one whole solid on another.
+
+## Snap elements to a vertex
+
+1. Select vertices, edges, or faces on the source solid.
+2. Start **Snap to Vertex**.
+3. Point at a vertex on another `SlabSolid`.
+4. Click to apply. Escape or right-click cancels.
+
+Slab resolves the selection to actual mesh vertices and uses the first resolved vertex as the source anchor. For a single selected vertex, that vertex is always the anchor. For edges or faces, the cyan preview highlights the chosen vertex before you apply. Its line joins that exact anchor to the target vertex. Parent transforms are accounted for before Slab writes local vertex positions. Mesh coordinates use Slab's 1/1024 m local lattice, so a target transformed off that lattice lands on the nearest representable point.
+
+## Align one solid by a face
+
+1. Select a face on the source solid.
+2. Start **Align Face**.
+3. Point at a face on another `SlabSolid`.
+4. Click to apply. Escape or right-click cancels.
+
+The source moves as a rigid object. Its selected face centre lands on the target face centre, and its normal turns to oppose the target normal. Geometry inside the solid does not change. The preview exposes the complete target transform before you apply it.
+
+Each applied snap or alignment is one undo action. Targets must belong to another solid.

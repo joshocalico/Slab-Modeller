@@ -15,6 +15,10 @@ export const metadata = { title: "Nodes and output" };
 
 `build_mesh()` returns the current `ArrayMesh`. It preserves the solid's material-slot surfaces.
 
+Editing methods return `0` on success and a mesh error code when refused. The current API includes region-aware `extrude_faces()` and `inset_faces()`, segmented `bevel_edges()`, `insert_loops()`, `plane_cut()`, seam marking and UV unwrapping. `preview_bevel()`, `preview_loop_cuts()`, and `preview_plane_cut()` return validated scratch results without mutating `data`.
+
+After a refusal, `get_edit_diagnostic()` returns the typed rejected location and local-space highlight segments. See [Understand refused edits](/guide/how-to/understand-refused-edits).
+
 ## SlabModule
 
 `SlabModule` groups direct `SlabSolid` children and `SlabSocket` descriptions. `cell_size` defaults to 2 m. `get_footprint()` rounds the combined bounds up to whole cells. `module_id` defaults to `module`.

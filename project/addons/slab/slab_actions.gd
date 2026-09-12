@@ -6,6 +6,28 @@ const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 
 signal reported(text: String)
+signal loop_requested
+signal loop_settings_changed
+signal loop_values_updated
+signal plane_requested
+signal plane_settings_changed
+signal plane_state_changed
+signal plane_apply_requested
+signal plane_cancel_requested
+signal array_requested
+signal array_settings_changed
+signal array_state_changed
+signal array_apply_requested
+signal array_cancel_requested
+signal snap_vertex_requested
+signal align_face_requested
+signal snap_align_settings_changed
+signal snap_align_state_changed
+signal snap_align_cancel_requested
+signal bevel_requested
+signal bevel_settings_changed
+signal bevel_apply_requested
+signal bevel_cancel_requested
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -15,6 +37,11 @@ const SECTION_ORDER: Array = [SECTION_CREATE, "Object", "Vertex", "Edge", "Face"
 const BOOLEAN_UNION := 0
 const BOOLEAN_SUBTRACT := 1
 const BOOLEAN_INTERSECT := 2
+const ARRAY_LINEAR := 0
+const ARRAY_RADIAL := 1
+const SNAP_NONE := 0
+const SNAP_VERTEX := 1
+const SNAP_FACE := 2
 
 const AMOUNT_FLOOR := 0.05
 const AMOUNT_CEILING := 64.0
@@ -37,10 +64,33 @@ const ERR_CORRUPT_DATA := 14
 const ERR_INVALID_SELECTION := 15
 const ERR_SELF_INTERSECTION := 16
 
+var loop_count: int = 1
+var loop_position: float = 0.5
+var plane_normal := Vector3.RIGHT
+var plane_offset: float = 1.0
+var plane_keep_positive: bool = false
+var plane_cap_material: int = 0
+var plane_active: bool = false
+var array_active: bool = false
+var array_mode: int = ARRAY_LINEAR
+var array_count: int = 2
+var array_linear_step := Vector3(2, 0, 0)
+var array_radial_center := Vector3.ZERO
+var array_radial_axis := Vector3.UP
+var array_radial_angle_degrees := 45.0
+var array_rotate_copies := true
+var snap_align_active: bool = false
+var snap_align_mode: int = SNAP_NONE
+var align_oppose_normals := true
+var bevel_active := false
+var bevel_segments: int = 1
+
 var amount: float = 0.5
 var uv_scale := Vector2.ONE
 var uv_offset := Vector2.ZERO
 var uv_rotation_degrees: float = 0.0
+var uv_pixels_per_meter: float = 256.0
+var uv_texture_resolution: int = 1024
 var material_slot: int = 0
 
 var shapes: RefCounted
@@ -167,6 +217,7 @@ func _apply(row: Dictionary, plan: Dictionary) -> void:
 
 func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -> void:
 	var before: PackedByteArray = target.get("data")
+	var before_ids := PackedInt64Array(_selection.ids)
 	var err: int = target.callv(method, args)
 	if err != OK:
 		_report("%s failed. %s" % [row["label"], describe_error(err, row["id"])])
@@ -175,10 +226,17 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 	if after == before:
 		_report("%s did not change the solid." % row["label"])
 		return
+	var after_ids := before_ids
+	if before_ids.size() > 1 and (method == "extrude_faces" or method == "inset_faces"):
+		after_ids = PackedInt64Array(target.call("get_last_edited_faces"))
+		_selection.set_ids(after_ids)
 	if _undo != null:
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
 		_undo.add_undo_property(target, "data", before)
+		if after_ids != before_ids:
+			_undo.add_do_property(_selection, "ids", after_ids)
+			_undo.add_undo_property(_selection, "ids", before_ids)
 		_undo.commit_action(false)
 	_report("%s applied. %s now has %d faces." % [row["label"], target.name, int(target.call("face_count"))])
 
@@ -251,6 +309,14 @@ func _ids_op(method: String) -> Dictionary:
 	return { "method": method, "args": [_selection.ids] }
 
 
+func _seam_op(marked: bool) -> Dictionary:
+	return { "method": "mark_uv_seams", "args": [_selection.ids, marked] }
+
+
+func _unwrap_op() -> Dictionary:
+	return { "run": _unwrap_target }
+
+
 func _amount_op(method: String) -> Dictionary:
 	return { "method": method, "args": [_selection.ids, amount] }
 
@@ -303,7 +369,9 @@ static func describe_error(code: int, action_id: String = "") -> String:
 	if code == ERR_NOT_CLOSED and action_id == "delete_faces":
 		return "Deleting this face would leave an open solid. Inset, then extrude the inner cap to hollow a room, or Subtract a second solid to cut a hole."
 	if code == ERR_SELF_INTERSECTION:
-		return "That edit would pierce the solid. Inset first, then extrude, and keep the cap inside the volume."
+		if action_id == "extrude_faces":
+			return "The extrusion would cross another face. Inset before extruding inward, and stop before the opposite wall."
+		return "Faces in the result would cross or overlap. Reduce the edit or move the intersecting parts apart."
 	match code:
 		ERR_STALE_HANDLE:
 			return "That handle is stale. Select the solid again."
@@ -312,11 +380,11 @@ static func describe_error(code: int, action_id: String = "") -> String:
 		ERR_TWIN_MISMATCH:
 			return "An edge does not meet its twin."
 		ERR_NON_MANIFOLD_VERTEX:
-			return "A vertex is no longer a simple disk."
+			return "Surfaces would meet only at a pinched vertex. Keep a continuous wall around each vertex."
 		ERR_DEGENERATE_FACE:
-			return "A face became degenerate."
+			return "A face would collapse to a line or point. Use a smaller edit or leave more space between vertices."
 		ERR_LOOP_TOO_SHORT:
-			return "A face loop is too short."
+			return "A face would have fewer than three distinct corners. Keep enough corners to enclose an area."
 		ERR_INCONSISTENT_ORIENTATION:
 			return "Neighbouring faces disagree on direction."
 		ERR_INVERTED_VOLUME:
@@ -369,11 +437,37 @@ func _material_op() -> Dictionary:
 
 
 func _loop_op() -> Dictionary:
-	return { "method": "insert_loop", "args": [_selection.ids[0], 0.5] }
+	loop_requested.emit()
+	return { "status": "Loop Cut: hover an edge, click to slide, then click or Enter to apply. Wheel adds cuts; type a percentage. Esc cancels." }
 
 
 func _boolean_op(mode: int) -> Dictionary:
 	return { "method": "boolean_with", "args": [_selection.objects[1], mode] }
+
+
+func _plane_op() -> Dictionary:
+	plane_requested.emit()
+	return { "status": "Plane Cut: set a local-space normal and offset, preview the capped result, then Apply or press Enter." }
+
+
+func _array_op() -> Dictionary:
+	array_requested.emit()
+	return { "status": "Array: set exact linear spacing or radial centre, axis, and angle. Enter or Apply confirms; Escape cancels." }
+
+
+func _snap_vertex_op() -> Dictionary:
+	snap_vertex_requested.emit()
+	return { "status": "Snap to Vertex: the highlighted source vertex will land on the target vertex you click. Escape cancels." }
+
+
+func _align_face_op() -> Dictionary:
+	align_face_requested.emit()
+	return { "status": "Align Face: point at a face on another solid, preview the rigid placement, then click to apply. Escape cancels." }
+
+
+func _bevel_op() -> Dictionary:
+	bevel_requested.emit()
+	return { "status": "Bevel: adjust Amount and Segments, then Apply or press Enter." }
 
 
 func _mirror_op(axis: Vector3) -> Dictionary:
@@ -404,6 +498,11 @@ func _pick_grown(target: Node3D) -> String:
 	return _selection.describe()
 
 
+func _pick_coplanar(target: Node3D) -> String:
+	_selection.set_ids(SlabTopology.connected_coplanar_faces(target, _selection.ids))
+	return _selection.describe()
+
+
 func _pick_loop(target: Node3D) -> String:
 	_selection.set_ids(SlabTopology.edge_loop(target, _selection.ids[0]))
 	return _selection.describe()
@@ -412,6 +511,22 @@ func _pick_loop(target: Node3D) -> String:
 func _pick_ring(target: Node3D) -> String:
 	_selection.set_ids(SlabTopology.edge_ring(target, _selection.ids[0]))
 	return _selection.describe()
+
+
+func _unwrap_target(target: Node3D) -> String:
+	var before: PackedByteArray = target.get("data")
+	var result: Dictionary = target.call("unwrap_uv", _selection.ids, uv_pixels_per_meter, uv_texture_resolution)
+	var err: int = int(result.get("error", ERR_INVALID_SELECTION))
+	if err != OK:
+		return "Unwrap failed. %s" % describe_error(err, "uv_unwrap")
+	var after: PackedByteArray = target.get("data")
+	if _undo != null and after != before:
+		_undo.create_action("Slab Unwrap UV", UndoRedo.MERGE_DISABLE, target)
+		_undo.add_do_property(target, "data", after)
+		_undo.add_undo_property(target, "data", before)
+		_undo.commit_action(false)
+	var automatic := PackedInt64Array(result.get("auto_seams", PackedInt64Array()))
+	return "Unwrapped %d island(s); added %d automatic cut(s)." % [int(result.get("islands", 0)), automatic.size()]
 
 
 func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable) -> Dictionary:
@@ -441,6 +556,8 @@ func _build() -> Array[Dictionary]:
 		_row("boolean_union", "Union", "CSGCombiner3D", object, 2, "Adds the second solid into the first.", 0, _boolean_op.bind(BOOLEAN_UNION)),
 		_row("boolean_subtract", "Subtract", "CSGBox3D", object, 2, "Cuts the second solid out of the first.", 0, _boolean_op.bind(BOOLEAN_SUBTRACT)),
 		_row("boolean_intersect", "Intersect", "CSGSphere3D", object, 2, "Keeps only the overlap of two solids.", 0, _boolean_op.bind(BOOLEAN_INTERSECT)),
+		_row("plane_cut", "Plane Cut", "PlaneCut", object, 1, "Cuts the solid by an exact local-space plane and closes every section loop with caps.", 0, _plane_op),
+		_row("array", "Array", "GridLayout", object, 1, "Previews exact linear or radial copies and creates them as one undo action.", 0, _array_op),
 		_row("mirror_x", "Mirror X", "MirrorX", object, 1, "Mirrors the solid across its local X axis.", 0, _mirror_op.bind(Vector3(-1.0, 1.0, 1.0))),
 		_row("mirror_y", "Mirror Y", "MirrorY", object, 1, "Mirrors the solid across its local Y axis.", 0, _mirror_op.bind(Vector3(1.0, -1.0, 1.0))),
 		_row("mirror_z", "Mirror Z", "Object", object, 1, "Mirrors the solid across its local Z axis.", 0, _mirror_op.bind(Vector3(1.0, 1.0, -1.0))),
@@ -451,29 +568,35 @@ func _build() -> Array[Dictionary]:
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
 		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Cuts an edge between the selected vertices.", KEY_K, _ids_op.bind("connect_vertices")),
 
-		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Chamfers the edge by the amount field.", KEY_B, _positive_amount_op.bind("bevel_edges")),
+		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _bevel_op),
 		_row("bridge_edges", "Bridge", "CurveIn", edge, 2, "Builds a face between two open edges.", KEY_G, _ids_op.bind("bridge_edges")),
 		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Cuts a new edge between edge midpoints.", KEY_K, _ids_op.bind("connect_edges")),
-		_row("insert_loop", "Insert Loop", "AnimationTrackGroup", edge, 1, "Inserts an edge loop across the first edge.", KEY_L, _loop_op),
+		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
 		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes the edge and merges its faces.", KEY_X, _ids_op.bind("dissolve_edges")),
+		_row("mark_uv_seam", "Mark Seam", "MaterialPreviewCube", edge, 1, "Marks selected edges as UV island boundaries.", 0, _seam_op.bind(true)),
+		_row("clear_uv_seam", "Clear Seam", "Save", edge, 1, "Removes UV seam marks from selected edges.", 0, _seam_op.bind(false)),
 
-		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls the face along its normal. Positive is outward. Negative is inward.", KEY_E, _amount_op.bind("extrude_faces")),
-		_row("inset_faces", "Inset", "ToolScale", face, 1, "Shrinks a copy of the face inside itself.", KEY_I, _positive_amount_op.bind("inset_faces")),
+		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _amount_op.bind("extrude_faces")),
+		_row("inset_faces", "Inset", "ToolScale", face, 1, "Shrinks one face, or one connected coplanar face region, inside its shared boundary.", KEY_I, _positive_amount_op.bind("inset_faces")),
 		_row("delete_faces", "Delete", "Remove", face, 1, "Deletes the selected faces. A closed solid cannot open.", KEY_DELETE, _ids_op.bind("delete_faces")),
 		_row("flip_faces", "Flip Normals", "QuadMesh", face, 1, "Reverses which way the faces point.", KEY_N, _ids_op.bind("flip_faces")),
 		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each face into four.", KEY_U, _ids_op.bind("subdivide_faces")),
 		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins coplanar faces into one.", KEY_M, _ids_op.bind("merge_faces")),
+		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
+		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),
 		_row("uv_scale_up", "UV Larger", "ZoomMore", face, 1, "Doubles the UV scale and applies it.", 0, _uv_scaled.bind(2.0)),
 		_row("uv_scale_down", "UV Smaller", "ZoomLess", face, 1, "Halves the UV scale and applies it.", 0, _uv_scaled.bind(0.5)),
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
+		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),
 
 		_row("select_all", "Select All", "ListSelect", elements, 0, "Selects every element in the current mode.", KEY_A, _select_op.bind(_pick_all)),
 		_row("select_none", "Select None", "Clear", elements, 1, "Clears the element selection.", KEY_D, _select_op.bind(_pick_none)),
 		_row("select_invert", "Invert", "Duplicate", elements, 1, "Swaps selected elements for unselected ones.", 0, _select_op.bind(_pick_inverted)),
 		_row("select_grow", "Grow", "Add", elements, 1, "Adds the neighbours of the selection.", 0, _select_op.bind(_pick_grown)),
+		_row("snap_vertex", "Snap to Vertex", "Curve3D", elements, 1, "Moves selected element vertices so the highlighted source vertex coincides with a target vertex on another solid.", 0, _snap_vertex_op),
 		_row("select_loop", "Select Loop", "Path3D", edge, 1, "Follows the edge loop around the solid.", 0, _select_op.bind(_pick_loop)),
 		_row("select_ring", "Select Ring", "AnimationTrackList", edge, 1, "Follows the parallel edges across quads.", 0, _select_op.bind(_pick_ring)),
 	])

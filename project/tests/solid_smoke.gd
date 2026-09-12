@@ -255,6 +255,7 @@ func _check_fallback_lighting() -> void:
 			"prototype albedo keeps the graybox color, got %s" % fallback.albedo_color)
 	solid.set("prototype_color", Color(0.2, 0.35, 0.55))
 	var retinted: Material = mesh_node.get_surface_override_material(0)
+	_expect(retinted == fallback, "rebuilding keeps one stable fallback material")
 	_expect(retinted is StandardMaterial3D and (retinted as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL,
 		"retinting the prototype keeps per-pixel lighting")
 	_expect(retinted is StandardMaterial3D and (retinted as StandardMaterial3D).albedo_color.is_equal_approx(Color(0.2, 0.35, 0.55)),
@@ -301,7 +302,7 @@ func _check_signed_extrude_after_inset() -> void:
 	actions.amount = -4.0
 	said.clear()
 	actions.run("extrude_faces")
-	_expect(not said.is_empty() and said[0].contains("pierce"),
+	_expect(not said.is_empty() and said[0].contains("cross another face") and said[0].contains("opposite wall"),
 		"a numeric stab still refuses at commit with the embedding copy, got %s" % [said])
 
 

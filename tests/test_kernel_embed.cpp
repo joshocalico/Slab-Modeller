@@ -51,10 +51,25 @@ SLAB_TEST(extrude_through_the_floor_cannot_commit) {
 	const FaceId top = top_face(box);
 	MeshEdit stabbed(box);
 	expect(ops::extrude(stabbed, { top }, -4.0f).ok(), "extrude op still runs");
+	const MeshFault preview_fault = validate(stabbed.scratch());
+	expect(preview_fault.element == FaultElement::FACE, "embedding diagnostic identifies faces");
+	expect(preview_fault.slot != INVALID_IDX && preview_fault.related_slot != INVALID_IDX,
+			"embedding diagnostic includes both colliding faces");
+	expect(preview_fault.slot != preview_fault.related_slot, "colliding faces are distinct");
+	std::vector<FaceId> attempted_faces;
+	stabbed.scratch().all_faces(attempted_faces);
+	int diagnostic_faces = 0;
+	for (const FaceId face : attempted_faces) {
+		if (face.slot == preview_fault.slot || face.slot == preview_fault.related_slot) {
+			diagnostic_faces++;
+		}
+	}
+	expect_eq(diagnostic_faces, 2, "both diagnostic faces exist in rejected geometry");
 	Mesh out;
 	const MeshFault committed = std::move(stabbed).commit(out);
 	expect(!committed.ok(), "a cap through the floor is not a solid");
 	expect_eq(int(committed.code), int(MeshError::SELF_INTERSECTION), "self intersection code");
+	expect_eq(committed.related_slot, preview_fault.related_slot, "commit preserves collision diagnostic");
 }
 
 SLAB_TEST(inward_extrude_without_an_inset_cannot_commit) {

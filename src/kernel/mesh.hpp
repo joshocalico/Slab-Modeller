@@ -8,6 +8,7 @@
 #include <godot_cpp/variant/vector3.hpp>
 
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace slab {
@@ -26,6 +27,11 @@ struct FaceAttrs {
 	UvAxis uv_axis = UvAxis::AUTO;
 	uint32_t material_slot = 0;
 	bool smooth = false;
+	// An unfolded planar face maps positions using these two covectors.
+	bool uv_unwrapped = false;
+	godot::Vector3 uv_u = godot::Vector3(1, 0, 0);
+	godot::Vector3 uv_v = godot::Vector3(0, 1, 0);
+	godot::Vector2 uv_origin;
 };
 
 struct Vertex {
@@ -35,6 +41,7 @@ struct Vertex {
 };
 
 struct HalfEdge {
+	bool uv_seam = false;
 	uint32_t gen = 0;
 	HalfEdgeIdx next;
 	HalfEdgeIdx twin;
@@ -68,9 +75,14 @@ enum class MeshError : uint8_t {
 	SELF_INTERSECTION,
 };
 
+enum class FaultElement : uint8_t { NONE, VERTEX, HALF_EDGE, FACE };
+
 struct MeshFault {
 	MeshError code = MeshError::OK;
 	uint32_t slot = INVALID_IDX;
+	// Diagnostic locations belong to the rejected scratch mesh, not the live mesh.
+	FaultElement element = FaultElement::NONE;
+	uint32_t related_slot = INVALID_IDX;
 
 	bool ok() const {
 		return code == MeshError::OK;
@@ -98,6 +110,7 @@ public:
 
 	void edge_vertices(EdgeId p_id, VertexId &r_a, VertexId &r_b) const;
 	void edge_faces(EdgeId p_id, FaceId &r_a, FaceId &r_b) const;
+	bool edge_uv_seam(EdgeId p_id) const;
 	void face_edges(FaceId p_id, std::vector<EdgeId> &r_out) const;
 	void vertex_edges(VertexId p_id, std::vector<EdgeId> &r_out) const;
 	void vertex_faces(VertexId p_id, std::vector<FaceId> &r_out) const;
@@ -120,6 +133,8 @@ private:
 	friend MeshFault validate(const Mesh &p_mesh);
 	friend std::vector<uint8_t> serialize(const Mesh &p_mesh);
 	friend MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out);
+	friend void diagnostic_segments(const Mesh &p_mesh, const MeshFault &p_fault,
+			std::vector<std::pair<IVec3, IVec3>> &r_out);
 
 	bool _vertex_live(uint32_t p_slot) const;
 	bool _face_live(uint32_t p_slot) const;
@@ -128,5 +143,10 @@ private:
 };
 
 MeshFault validate(const Mesh &p_mesh);
+
+// Extracts locations from the mesh that produced the fault. Unknown or stale
+// locations intentionally produce no segments.
+void diagnostic_segments(const Mesh &p_mesh, const MeshFault &p_fault,
+		std::vector<std::pair<IVec3, IVec3>> &r_out);
 
 } // namespace slab

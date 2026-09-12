@@ -9,9 +9,11 @@
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
+#include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -30,6 +32,7 @@ protected:
 public:
 	void set_data(const PackedByteArray &p_data);
 	PackedByteArray get_data() const;
+	Dictionary get_edit_diagnostic() const;
 
 	void set_grid_step(float p_step);
 	float get_grid_step() const;
@@ -47,6 +50,7 @@ public:
 	bool is_collision_enabled() const;
 
 	PackedInt64Array get_faces() const;
+	PackedInt64Array get_last_edited_faces() const;
 	PackedInt64Array get_edges() const;
 	PackedInt64Array get_vertices() const;
 	bool is_alive(int64_t p_id) const;
@@ -60,6 +64,7 @@ public:
 	PackedInt64Array edge_faces(int64_t p_edge) const;
 	PackedInt64Array edge_vertices(int64_t p_edge) const;
 	Dictionary face_uv(int64_t p_face) const;
+	PackedInt64Array get_uv_seams() const;
 	int face_count() const;
 	int edge_count() const;
 	int vertex_count() const;
@@ -82,12 +87,17 @@ public:
 	int subdivide_faces(const PackedInt64Array &p_faces);
 	int merge_faces(const PackedInt64Array &p_faces);
 	int set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation);
+	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
+	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
 	int set_face_material(const PackedInt64Array &p_faces, int p_slot);
 
-	int bevel_edges(const PackedInt64Array &p_edges, float p_amount);
+	int bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1);
+	Dictionary preview_bevel(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1) const;
 	int bridge_edges(const PackedInt64Array &p_edges);
 	int connect_edges(const PackedInt64Array &p_edges);
 	int insert_loop(int64_t p_edge, float p_t);
+	int insert_loops(int64_t p_edge, const PackedFloat32Array &p_positions);
+	Dictionary preview_loop_cuts(int64_t p_edge, const PackedFloat32Array &p_positions) const;
 	int dissolve_edges(const PackedInt64Array &p_edges);
 
 	int weld_vertices(const PackedInt64Array &p_vertices, float p_radius);
@@ -96,6 +106,8 @@ public:
 	int move_vertices(const PackedInt64Array &p_vertices, const Vector3 &p_delta);
 
 	int boolean_with(SlabSolid *p_other, int p_mode);
+	int plane_cut(const Vector3 &p_origin, const Vector3 &p_normal, bool p_keep_positive, int p_cap_material);
+	Dictionary preview_plane_cut(const Vector3 &p_origin, const Vector3 &p_normal, bool p_keep_positive, int p_cap_material) const;
 	int mirror(const Vector3 &p_axis);
 	int center_pivot();
 	int snap_to_grid();
@@ -104,8 +116,11 @@ private:
 	slab::Mesh live_mesh;
 	float grid_step = 0.5f;
 	Color prototype_color = Color(0.62f, 0.64f, 0.68f);
+	Ref<StandardMaterial3D> prototype_material;
 	TypedArray<Material> materials;
 	bool collision_enabled = true;
+	PackedInt64Array last_edited_faces;
+	Dictionary edit_diagnostic;
 
 	MeshInstance3D *mesh_instance = nullptr;
 	StaticBody3D *body = nullptr;
@@ -113,6 +128,9 @@ private:
 
 	void _ensure_children();
 	void _rebuild();
+	int _reject(const slab::Mesh &p_mesh, slab::MeshFault p_fault,
+			slab::FaultElement p_fallback_element = slab::FaultElement::NONE,
+			uint32_t p_fallback_slot = slab::INVALID_IDX);
 	int _commit(slab::MeshEdit &&p_edit);
 	int _unimplemented() const;
 	bool _face_ids(const PackedInt64Array &p_ids, std::vector<slab::FaceId> &r_out) const;

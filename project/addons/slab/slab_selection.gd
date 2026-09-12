@@ -36,6 +36,12 @@ var objects: Array[Node3D] = []
 
 var ids: PackedInt64Array = PackedInt64Array()
 
+var preview_solid: Node3D = null
+var preview_lines := PackedVector3Array()
+var array_preview_solid: Node3D = null
+var array_preview_transforms: Array[Transform3D] = []
+var snap_align_preview: Dictionary = {}
+
 var hover_solid: Node3D = null
 
 var hover_id: int = 0

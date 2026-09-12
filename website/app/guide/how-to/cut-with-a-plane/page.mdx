@@ -1,0 +1,19 @@
+export const metadata = { title: "Cut with a plane — Slab" }
+
+# Cut with a plane
+
+Plane Cut keeps one side of an exact plane and closes the cut with new faces. It works on a single selected `SlabSolid`, including concave solids and sections that pass through cavities.
+
+1. Switch to **Object** mode and select one solid.
+2. Click **Plane Cut**.
+3. Enter the local-space **Normal X**, **Normal Y**, and **Normal Z**. The normal sets the plane direction; it does not need to have length one.
+4. Set **Offset m**. The offset is measured from the solid's local origin along the normalized normal.
+5. Choose **Keep negative** or **Keep positive**.
+6. Choose the **Cap material** slot.
+7. Inspect the preview, then click **Apply** or press Enter.
+
+The preview shows the edges of the complete result, including the automatic caps. It does not alter the saved solid. Press Escape, right-click, or click **Cancel** to discard it.
+
+**Local space.** The normal and offset follow the solid's own axes. Rotating the node rotates the cutting plane with it.
+
+Apply records one undo step. If the retained side has no volume, Slab refuses the cut and leaves the original bytes unchanged.

@@ -268,6 +268,7 @@ FaceId MeshEdit::lift_loop(FaceId p_face) {
 		side_d[i] = _alloc_half_edge();
 		sides[i] = _alloc_face();
 		work.faces[sides[i].i].attrs = attrs;
+		work.faces[sides[i].i].attrs.uv_unwrapped = false;
 		work.faces[sides[i].i].he = side_a[i];
 	}
 
@@ -285,6 +286,7 @@ FaceId MeshEdit::lift_loop(FaceId p_face) {
 		b.next = side_a[i];
 		b.twin = loop[i];
 		b.face = sides[i];
+		b.uv_seam = cap.uv_seam;
 
 		HalfEdge &a = work.half_edges[side_a[i].i];
 		a.origin = nv[i];
@@ -297,6 +299,7 @@ FaceId MeshEdit::lift_loop(FaceId p_face) {
 		d.next = side_c[i];
 		d.twin = old_twin[i];
 		d.face = sides[i];
+		d.uv_seam = work.half_edges[old_twin[i].i].uv_seam;
 
 		HalfEdge &c = work.half_edges[side_c[i].i];
 		c.origin = old_v[nxi];
@@ -341,11 +344,13 @@ VertexId MeshEdit::split_edge(EdgeId p_edge, IVec3 p_pos) {
 	ha2.next = ha.next;
 	ha2.twin = b;
 	ha2.face = ha.face;
+	ha2.uv_seam = ha.uv_seam;
 
 	hb2.origin = m;
 	hb2.next = hb.next;
 	hb2.twin = a;
 	hb2.face = hb.face;
+	hb2.uv_seam = hb.uv_seam;
 
 	ha.next = a2;
 	ha.twin = b2;
@@ -660,6 +665,16 @@ void MeshEdit::move_vertex(VertexId p_v, IVec3 p_pos) {
 	work.vertices[p_v.slot].pos = p_pos;
 }
 
+void MeshEdit::set_uv_seam(EdgeId p_edge, bool p_marked) {
+	if (!work.alive(p_edge)) {
+		fault.code = MeshError::STALE_HANDLE;
+		return;
+	}
+	work.half_edges[p_edge.slot].uv_seam = p_marked;
+	const HalfEdgeIdx twin = work.half_edges[p_edge.slot].twin;
+	if (twin.i != INVALID_IDX) work.half_edges[twin.i].uv_seam = p_marked;
+}
+
 void MeshEdit::set_attrs(FaceId p_face, const FaceAttrs &p_attrs) {
 	if (!work.alive(p_face)) {
 		fault.code = MeshError::STALE_HANDLE;
@@ -714,6 +729,7 @@ MeshFault MeshEdit::append(const Mesh &p_other, bool p_flip) {
 		dst.twin = HalfEdgeIdx{ hmap[src.twin.i] };
 		dst.origin = VertexIdx{ vmap[src.origin.i] };
 		dst.face = FaceIdx{ fmap[src.face.i] };
+		dst.uv_seam = src.uv_seam;
 	}
 	for (const auto &kv : vmap) {
 		const uint32_t out = p_other.vertices[kv.first].out.i;
@@ -744,6 +760,17 @@ MeshFault MeshEdit::append(const Mesh &p_other, bool p_flip) {
 
 MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
 	fault = MeshFault{};
+	std::map<std::pair<IVec3, IVec3>, bool> seams;
+	std::vector<EdgeId> old_edges;
+	work.all_edges(old_edges);
+	for (const EdgeId edge : old_edges) {
+		if (!work.edge_uv_seam(edge)) continue;
+		VertexId a, b;
+		work.edge_vertices(edge, a, b);
+		IVec3 pa = work.position_i(a), pb = work.position_i(b);
+		if (pb < pa) std::swap(pa, pb);
+		seams[{pa, pb}] = true;
+	}
 	work = Mesh();
 	if (p_loops.empty()) {
 		fault.code = MeshError::RESULT_EMPTY;
@@ -911,6 +938,11 @@ MeshFault MeshEdit::assemble(const std::vector<std::vector<IVec3>> &p_loops) {
 			return fault;
 		}
 		work.half_edges[kv.second.i].twin = twin->second;
+		const HalfEdge &he = work.half_edges[kv.second.i];
+		IVec3 pa = work.vertices[he.origin.i].pos;
+		IVec3 pb = work.vertices[work.half_edges[he.next.i].origin.i].pos;
+		if (pb < pa) std::swap(pa, pb);
+		work.half_edges[kv.second.i].uv_seam = seams.count({pa, pb}) != 0;
 	}
 	return fault;
 }

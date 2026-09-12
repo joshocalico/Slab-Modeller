@@ -32,6 +32,10 @@ static func project_uv(point: Vector3, axis: int) -> Vector2:
 
 static func apply_uv(point: Vector3, centroid: Vector2, scale: Vector2, offset: Vector2, rotation: float, axis: int) -> Vector2:
 	var uv: Vector2 = project_uv(point, axis)
+	return apply_projected_uv(uv, centroid, scale, offset, rotation)
+
+
+static func apply_projected_uv(uv: Vector2, centroid: Vector2, scale: Vector2, offset: Vector2, rotation: float) -> Vector2:
 	uv.x *= scale.x
 	uv.y *= scale.y
 	var c: Vector2 = centroid
@@ -61,6 +65,15 @@ static func resolved_axis(solid: Node3D, face: int) -> int:
 
 static func point_uv(solid: Node3D, face: int, local_point: Vector3) -> Vector2:
 	var attrs: Dictionary = attrs_of(solid, face)
+	if bool(attrs.get("unwrapped", false)):
+		var u: Vector3 = attrs["u"]
+		var v: Vector3 = attrs["v"]
+		var origin: Vector2 = attrs["origin"]
+		var center: Vector3 = solid.face_centroid(face)
+		return apply_projected_uv(Vector2(local_point.dot(u), local_point.dot(v)) + origin,
+			Vector2(center.dot(u), center.dot(v)) + origin,
+			attrs.get("scale", Vector2.ONE), attrs.get("offset", Vector2.ZERO),
+			float(attrs.get("rotation", 0.0)))
 	var axis: int = resolved_axis(solid, face)
 	var centroid: Vector2 = project_uv(solid.face_centroid(face), axis)
 	return apply_uv(

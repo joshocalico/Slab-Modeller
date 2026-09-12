@@ -25,6 +25,7 @@ Under the commands. Click **UV** beside Distance to show the UV fields. The fiel
 | Amount | Vertex, Edge | Distance for Bevel and Weld. Default 0.5; range 0.05 to 64. |
 | Distance | Face | Distance for Extrude and Inset. Default 0.5; range -64 to 64. Extrude keeps the sign. Inset uses the absolute value. |
 | UV scale, offset, rotation | Face | Written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
+| Pixels / metre, Texture px | Face, with UV open | Set the physical density and normalization used by Unwrap. |
 | Material chips | Face, with a solid selected | Click a chip to pick the paint. The plus chip appends a material. **Set Material** writes that index onto the faces. |
 
 ## Create fields
@@ -72,6 +73,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | Mirror X, Mirror Y, Mirror Z | Mirrors across that local axis. |
 | Center Pivot | Moves the origin to the middle of the solid. |
 | Snap To Grid | Rounds every vertex onto the grid step. |
+| Plane Cut | Previews an exact local-space plane, keeps the chosen side, and caps every section loop. |
+| Array | Previews 2 to 256 total instances in a linear or radial layout, then creates the copies as one undo action. |
 
 ## Vertex
 
@@ -85,20 +88,22 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Bevel | 1 edge | Chamfers the edge by Amount. |
+| Bevel | 1 edge | Previews an Amount-wide bevel. Segments 1 is a chamfer; 2 to 16 form a rounded profile. |
 | Bridge | 2 edges | Builds a face between two open edges. |
 | Connect | 2 edges | Cuts a new edge between edge midpoints. |
-| Insert Loop | 1 edge | Splits across the first selected edge at t 0.5. |
+| Loop Cut | Edge mode | Previews cuts through a quad strip. Click to slide, wheel to change count, type a percentage, Enter to apply. |
 | Dissolve | 1 edge | Removes the edge and merges its faces. |
 | Select Loop | 1 edge | Follows the edge loop around the solid. |
 | Select Ring | 1 edge | Follows the parallel edges across quads. |
+| Mark Seam | 1 edge | Marks selected edges as UV island boundaries. |
+| Clear Seam | 1 edge | Removes UV seam marks from selected edges. |
 
 ## Face
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Extrude | 1 face | Pulls the face along its normal by Distance. Positive is outward; negative is inward. |
-| Inset | 1 face | Shrinks a copy of the face on the same plane. |
+| Extrude | 1 face | Pulls one face along its normal. A connected selection moves as one region and builds walls only around its boundary. |
+| Inset | 1 face | Shrinks one face, or a connected coplanar selection inside its shared boundary. |
 | Delete | 1 face | Deletes the selected faces. |
 | Flip Normals | 1 face | Reverses which way the faces point. |
 | Subdivide | 1 face | Splits each face into four. |
@@ -109,6 +114,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | UV Smaller | 1 face | Halves the UV scale and applies it. |
 | UV Rotate | 1 face | Turns the UV by 90 degrees. |
 | UV Reset | 1 face | Returns the UV to scale one and no rotation. |
+| Align Face | 1 face | Previews a rigid transform that seats the selected face on a face clicked on another solid. |
+| Unwrap | 1 face | Unfolds the selected region at the requested density using marked and automatic seams. |
 
 Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
 
@@ -142,3 +149,12 @@ Shown in Vertex, Edge, and Face mode. Each command works on the current mode's e
 | Select None | Clears the element selection. |
 | Invert | Swaps selected elements for unselected ones. |
 | Grow | Adds the neighbours of the selection. |
+| Snap to Vertex | Highlights an actual source vertex, then moves the selection to a vertex clicked on another solid. |
+
+## Loop cut settings
+
+In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the group centre along the starting edge. The group stops before its outer cuts leave the edge. See [Cut and slide edge loops](/guide/how-to/cut-edge-loops).
+
+## Modal settings
+
+**Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. **Bevel** exposes Amount and 1 to 16 Segments. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.

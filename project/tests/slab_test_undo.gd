@@ -32,12 +32,21 @@ func add_undo_property(object: Object, property: String, value: Variant) -> void
 	_open["undo"] = value
 
 
-func add_do_method(callable: Callable) -> void:
-	_open["do_ops"].append({ "callable": callable })
+func add_do_method(object: Object, method: StringName, arg1: Variant = null, arg2: Variant = null) -> void:
+	_open["do_ops"].append({ "callable": _method_callable(object, method, arg1, arg2) })
 
 
-func add_undo_method(callable: Callable) -> void:
-	_open["undo_ops"].append({ "callable": callable })
+func add_undo_method(object: Object, method: StringName, arg1: Variant = null, arg2: Variant = null) -> void:
+	_open["undo_ops"].append({ "callable": _method_callable(object, method, arg1, arg2) })
+
+
+func _method_callable(object: Object, method: StringName, arg1: Variant, arg2: Variant) -> Callable:
+	var callable := Callable(object, method)
+	if arg2 != null:
+		return callable.bind(arg1, arg2)
+	if arg1 != null:
+		return callable.bind(arg1)
+	return callable
 
 
 func commit_action(execute: bool = true) -> void:

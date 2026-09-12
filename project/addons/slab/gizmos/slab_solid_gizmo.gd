@@ -4,6 +4,12 @@ extends EditorNode3DGizmoPlugin
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 
+const PREVIEW := "loop_preview"
+const ARRAY_PREVIEW := "array_preview"
+const ALIGN_PREVIEW := "align_preview"
+const SNAP_ANCHOR := "snap_anchor"
+const UV_SEAM := "uv_seam"
+const REFUSED := "refused_edit"
 const HOT := "hot"
 const HOVER := "hover"
 const FILL := "fill"
@@ -20,6 +26,12 @@ var _rest_origin := Vector3.ZERO
 
 
 func _init() -> void:
+	create_material(PREVIEW, Color(0.2, 0.95, 0.85), false, true)
+	create_material(ARRAY_PREVIEW, Color(0.2, 0.95, 0.85, 0.28), false, true)
+	create_material(ALIGN_PREVIEW, Color(0.25, 0.9, 1.0, 0.25), false, true)
+	create_material(SNAP_ANCHOR, Color(0.25, 0.95, 1.0), false, true)
+	create_material(UV_SEAM, Color(0.95, 0.2, 0.85), false, true)
+	create_material(REFUSED, Color(1.0, 0.2, 0.3), false, true)
 	create_material(WIRE, Color(0.22, 0.24, 0.28, 0.85))
 	create_material(HOT, Color(1.0, 0.62, 0.18))
 	create_material(HOVER, Color(1.0, 0.82, 0.48, 0.9))
@@ -90,8 +102,30 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		wire.append_array(solid.edge_endpoints(edge))
 	if not wire.is_empty():
 		gizmo.add_lines(wire, get_material(WIRE, gizmo), false)
+	var seams := PackedVector3Array()
+	for edge in PackedInt64Array(solid.call("get_uv_seams")):
+		seams.append_array(solid.call("edge_endpoints", edge))
+	if not seams.is_empty():
+		gizmo.add_lines(seams, get_material(UV_SEAM, gizmo), false)
 	if _selection == null:
 		return
+	if _selection.objects.has(solid) and solid.has_method("get_edit_diagnostic"):
+		var diagnostic: Dictionary = solid.get_edit_diagnostic()
+		var refused_lines: PackedVector3Array = diagnostic.get("segments", PackedVector3Array())
+		if not refused_lines.is_empty():
+			gizmo.add_lines(refused_lines, get_material(REFUSED, gizmo), false)
+	if _selection.preview_solid == solid and not _selection.preview_lines.is_empty():
+		gizmo.add_lines(_selection.preview_lines, get_material(PREVIEW, gizmo), false)
+	if _selection.array_preview_solid == solid and not _selection.array_preview_transforms.is_empty():
+		var preview_mesh: ArrayMesh = solid.call("build_mesh")
+		if preview_mesh != null:
+			var parent_xform := Transform3D.IDENTITY
+			if solid.get_parent() is Node3D:
+				parent_xform = (solid.get_parent() as Node3D).global_transform
+			for preview_transform in _selection.array_preview_transforms:
+				var local_preview: Transform3D = solid.global_transform.affine_inverse() * parent_xform * preview_transform
+				gizmo.add_mesh(preview_mesh, get_material(ARRAY_PREVIEW, gizmo), local_preview)
+	_draw_snap_align_preview(gizmo, solid)
 	var mode: int = _selection.mode
 	var hovered: bool = _selection.hover_solid == solid
 	var selected: bool = _selection.objects.has(solid)
@@ -105,6 +139,25 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	if selected:
 		for id in _selection.ids:
 			_draw_element(gizmo, solid, mode, id, false)
+
+
+func _draw_snap_align_preview(gizmo: EditorNode3DGizmo, solid: Node3D) -> void:
+	var preview: Dictionary = _selection.snap_align_preview
+	if preview.is_empty() or preview.get("source") != solid:
+		return
+	var lines: PackedVector3Array = preview.get("lines", PackedVector3Array())
+	if int(preview.get("mode", 0)) == 1 and lines.size() >= 2:
+		var ticks := PackedVector3Array()
+		ticks.append_array(_vertex_ticks(lines[0]))
+		ticks.append_array(_vertex_ticks(lines[1]))
+		gizmo.add_lines(ticks, get_material(SNAP_ANCHOR, gizmo), false)
+		return
+	if int(preview.get("mode", 0)) == 2:
+		var preview_mesh: ArrayMesh = solid.call("build_mesh")
+		if preview_mesh != null:
+			var desired_global: Transform3D = preview.get("global_transform", solid.global_transform)
+			var local_preview := solid.global_transform.affine_inverse() * desired_global
+			gizmo.add_mesh(preview_mesh, get_material(ALIGN_PREVIEW, gizmo), local_preview)
 
 
 func _draw_idle_elements(gizmo: EditorNode3DGizmo, solid: Node3D, mode: int) -> void:

@@ -9,8 +9,11 @@
 #include "kernel/ops/inset.hpp"
 #include "kernel/ops/loop.hpp"
 #include "kernel/ops/offset_loop.hpp"
+#include "kernel/ops/plane_cut.hpp"
 #include "kernel/ops/primitives.hpp"
+#include "kernel/ops/region.hpp"
 #include "kernel/ops/subdivide.hpp"
+#include "kernel/ops/uv.hpp"
 #include "kernel/ops/weld.hpp"
 #include "kernel/quantize.hpp"
 #include "kernel/serialize.hpp"
@@ -30,6 +33,7 @@ using namespace godot;
 void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_data", "data"), &SlabSolid::set_data);
 	ClassDB::bind_method(D_METHOD("get_data"), &SlabSolid::get_data);
+	ClassDB::bind_method(D_METHOD("get_edit_diagnostic"), &SlabSolid::get_edit_diagnostic);
 	ClassDB::bind_method(D_METHOD("set_grid_step", "step"), &SlabSolid::set_grid_step);
 	ClassDB::bind_method(D_METHOD("get_grid_step"), &SlabSolid::get_grid_step);
 	ClassDB::bind_method(D_METHOD("set_prototype_color", "color"), &SlabSolid::set_prototype_color);
@@ -42,6 +46,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_collision_enabled"), &SlabSolid::is_collision_enabled);
 
 	ClassDB::bind_method(D_METHOD("get_faces"), &SlabSolid::get_faces);
+	ClassDB::bind_method(D_METHOD("get_last_edited_faces"), &SlabSolid::get_last_edited_faces);
 	ClassDB::bind_method(D_METHOD("get_edges"), &SlabSolid::get_edges);
 	ClassDB::bind_method(D_METHOD("get_vertices"), &SlabSolid::get_vertices);
 	ClassDB::bind_method(D_METHOD("is_alive", "id"), &SlabSolid::is_alive);
@@ -55,6 +60,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("edge_faces", "edge"), &SlabSolid::edge_faces);
 	ClassDB::bind_method(D_METHOD("edge_vertices", "edge"), &SlabSolid::edge_vertices);
 	ClassDB::bind_method(D_METHOD("face_uv", "face"), &SlabSolid::face_uv);
+	ClassDB::bind_method(D_METHOD("get_uv_seams"), &SlabSolid::get_uv_seams);
 	ClassDB::bind_method(D_METHOD("face_count"), &SlabSolid::face_count);
 	ClassDB::bind_method(D_METHOD("edge_count"), &SlabSolid::edge_count);
 	ClassDB::bind_method(D_METHOD("vertex_count"), &SlabSolid::vertex_count);
@@ -77,12 +83,17 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("subdivide_faces", "faces"), &SlabSolid::subdivide_faces);
 	ClassDB::bind_method(D_METHOD("merge_faces", "faces"), &SlabSolid::merge_faces);
 	ClassDB::bind_method(D_METHOD("set_face_uv", "faces", "scale", "offset", "rotation"), &SlabSolid::set_face_uv);
+	ClassDB::bind_method(D_METHOD("mark_uv_seams", "edges", "marked"), &SlabSolid::mark_uv_seams);
+	ClassDB::bind_method(D_METHOD("unwrap_uv", "faces", "pixels_per_meter", "texture_resolution"), &SlabSolid::unwrap_uv);
 	ClassDB::bind_method(D_METHOD("set_face_material", "faces", "slot"), &SlabSolid::set_face_material);
 
-	ClassDB::bind_method(D_METHOD("bevel_edges", "edges", "amount"), &SlabSolid::bevel_edges);
+	ClassDB::bind_method(D_METHOD("bevel_edges", "edges", "amount", "segments"), &SlabSolid::bevel_edges, DEFVAL(1));
+	ClassDB::bind_method(D_METHOD("preview_bevel", "edges", "amount", "segments"), &SlabSolid::preview_bevel, DEFVAL(1));
 	ClassDB::bind_method(D_METHOD("bridge_edges", "edges"), &SlabSolid::bridge_edges);
 	ClassDB::bind_method(D_METHOD("connect_edges", "edges"), &SlabSolid::connect_edges);
 	ClassDB::bind_method(D_METHOD("insert_loop", "edge", "t"), &SlabSolid::insert_loop);
+	ClassDB::bind_method(D_METHOD("insert_loops", "edge", "positions"), &SlabSolid::insert_loops);
+	ClassDB::bind_method(D_METHOD("preview_loop_cuts", "edge", "positions"), &SlabSolid::preview_loop_cuts);
 	ClassDB::bind_method(D_METHOD("dissolve_edges", "edges"), &SlabSolid::dissolve_edges);
 
 	ClassDB::bind_method(D_METHOD("weld_vertices", "vertices", "radius"), &SlabSolid::weld_vertices);
@@ -91,6 +102,8 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("move_vertices", "vertices", "delta"), &SlabSolid::move_vertices);
 
 	ClassDB::bind_method(D_METHOD("boolean_with", "other", "mode"), &SlabSolid::boolean_with);
+	ClassDB::bind_method(D_METHOD("plane_cut", "origin", "normal", "keep_positive", "cap_material"), &SlabSolid::plane_cut);
+	ClassDB::bind_method(D_METHOD("preview_plane_cut", "origin", "normal", "keep_positive", "cap_material"), &SlabSolid::preview_plane_cut);
 	ClassDB::bind_method(D_METHOD("mirror", "axis"), &SlabSolid::mirror);
 	ClassDB::bind_method(D_METHOD("center_pivot"), &SlabSolid::center_pivot);
 	ClassDB::bind_method(D_METHOD("snap_to_grid"), &SlabSolid::snap_to_grid);
@@ -116,6 +129,7 @@ void SlabSolid::_notification(int p_what) {
 }
 
 void SlabSolid::set_data(const PackedByteArray &p_data) {
+	edit_diagnostic.clear();
 	std::vector<uint8_t> bytes(size_t(p_data.size()));
 	if (!bytes.empty()) {
 		std::memcpy(bytes.data(), p_data.ptr(), bytes.size());
@@ -213,6 +227,10 @@ PackedInt64Array SlabSolid::get_faces() const {
 		out.set(i, slab::pack(ids[size_t(i)]));
 	}
 	return out;
+}
+
+PackedInt64Array SlabSolid::get_last_edited_faces() const {
+	return last_edited_faces;
 }
 
 PackedInt64Array SlabSolid::get_edges() const {
@@ -339,7 +357,21 @@ Dictionary SlabSolid::face_uv(int64_t p_face) const {
 	out["offset"] = attrs.uv_offset;
 	out["rotation"] = attrs.uv_rotation;
 	out["axis"] = int(attrs.uv_axis);
+	out["unwrapped"] = attrs.uv_unwrapped;
+	out["u"] = attrs.uv_u;
+	out["v"] = attrs.uv_v;
+	out["origin"] = attrs.uv_origin;
 	out["slot"] = int(attrs.material_slot);
+	return out;
+}
+
+PackedInt64Array SlabSolid::get_uv_seams() const {
+	std::vector<slab::EdgeId> edges;
+	live_mesh.all_edges(edges);
+	PackedInt64Array out;
+	for (const slab::EdgeId edge : edges) {
+		if (live_mesh.edge_uv_seam(edge)) out.push_back(slab::pack(edge));
+	}
 	return out;
 }
 
@@ -378,28 +410,51 @@ int SlabSolid::make_box(const Vector3 &p_size) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::box(edit, p_size);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
 
 int SlabSolid::extrude_faces(const PackedInt64Array &p_faces, float p_distance) {
+	last_edited_faces = PackedInt64Array();
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
-	const slab::MeshFault fault = slab::ops::extrude(edit, ids, p_distance);
-	if (!fault.ok()) {
-		return int(fault.code);
+	if (ids.size() == 1) {
+		const slab::MeshFault fault = slab::ops::extrude(edit, ids, p_distance);
+		if (!fault.ok()) {
+			return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids[0].slot);
+		}
+		const int err = _commit(std::move(edit));
+		if (err == 0) last_edited_faces = p_faces;
+		return err;
 	}
-	return _commit(std::move(edit));
+	std::vector<slab::FaceId> before;
+	live_mesh.all_faces(before);
+	std::vector<size_t> ordinals;
+	for (size_t i = 0; i < before.size(); i++) {
+		for (const slab::FaceId id : ids) if (before[i].slot == id.slot) ordinals.push_back(i);
+	}
+	const slab::MeshFault fault = slab::ops::extrude_region(edit, ids, p_distance);
+	if (!fault.ok()) {
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
+	}
+	const int err = _commit(std::move(edit));
+	if (err != 0) return err;
+	std::vector<slab::FaceId> after;
+	live_mesh.all_faces(after);
+	for (const size_t ordinal : ordinals) {
+		if (ordinal < after.size()) last_edited_faces.push_back(slab::pack(after[ordinal]));
+	}
+	return 0;
 }
 
 int SlabSolid::set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation) {
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	for (const slab::FaceId id : ids) {
@@ -415,11 +470,45 @@ int SlabSolid::set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_sca
 	return _commit(std::move(edit));
 }
 
+int SlabSolid::mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked) {
+	std::vector<slab::EdgeId> ids;
+	if (!_edge_ids(p_edges, ids)) return int(slab::MeshError::STALE_HANDLE);
+	slab::MeshEdit edit(live_mesh);
+	for (const slab::EdgeId edge : ids) edit.set_uv_seam(edge, p_marked);
+	if (!edit.last_fault().ok()) return int(edit.last_fault().code);
+	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution) {
+	Dictionary out;
+	std::vector<slab::FaceId> ids;
+	if (!_face_ids(p_faces, ids)) {
+		out["error"] = int(slab::MeshError::STALE_HANDLE);
+		return out;
+	}
+	slab::MeshEdit edit(live_mesh);
+	const slab::ops::UvUnwrapResult result = slab::ops::unwrap_uv(edit, ids, p_pixels_per_meter, p_texture_resolution);
+	if (!result.ok()) {
+		out["error"] = int(result.fault.code);
+		return out;
+	}
+	PackedInt64Array auto_seams;
+	for (const slab::EdgeId edge : result.auto_seams) auto_seams.push_back(slab::pack(edge));
+	const int error = _commit(std::move(edit));
+	out["error"] = error;
+	if (error == 0) {
+		out["islands"] = result.island_count;
+		out["auto_seams"] = auto_seams;
+		out["faces"] = p_faces;
+	}
+	return out;
+}
+
 int SlabSolid::make_plane(const Vector2 &p_size) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::plane(edit, p_size, grid_step);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -428,7 +517,7 @@ int SlabSolid::make_stair(const Vector3 &p_size, int p_steps) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::stair(edit, p_size, p_steps);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -437,7 +526,7 @@ int SlabSolid::make_cylinder(float p_radius, float p_height, int p_sides) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::cylinder(edit, p_radius, p_height, p_sides);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -446,7 +535,7 @@ int SlabSolid::make_arch(float p_span, float p_depth, int p_segments, float p_th
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::arch(edit, p_span, p_depth, p_segments, p_thickness, p_arc);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -465,7 +554,7 @@ int SlabSolid::make_prism(const PackedVector3Array &p_polygon, float p_height) {
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::prism(edit, loop.data(), int(loop.size()), height.y);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -493,33 +582,56 @@ int SlabSolid::make_sweep(const PackedVector3Array &p_path, const Vector2 &p_pro
 	slab::MeshEdit edit = slab::MeshEdit::empty();
 	const slab::MeshFault fault = slab::ops::sweep(edit, path.data(), int(path.size()), profile, 4, p_closed);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
 
 int SlabSolid::inset_faces(const PackedInt64Array &p_faces, float p_amount) {
+	last_edited_faces = PackedInt64Array();
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
-	const slab::MeshFault fault = slab::ops::inset(edit, ids, p_amount);
-	if (!fault.ok()) {
-		return int(fault.code);
+	if (ids.size() == 1) {
+		const slab::MeshFault fault = slab::ops::inset(edit, ids, p_amount);
+		if (!fault.ok()) {
+			return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids[0].slot);
+		}
+		const int err = _commit(std::move(edit));
+		if (err == 0) last_edited_faces = p_faces;
+		return err;
 	}
-	return _commit(std::move(edit));
+	std::vector<slab::FaceId> before;
+	live_mesh.all_faces(before);
+	std::vector<size_t> ordinals;
+	for (size_t i = 0; i < before.size(); i++) {
+		for (const slab::FaceId id : ids) if (before[i].slot == id.slot) ordinals.push_back(i);
+	}
+	const slab::MeshFault fault = slab::ops::inset_region(edit, ids, p_amount);
+	if (!fault.ok()) {
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
+	}
+	const int err = _commit(std::move(edit));
+	if (err != 0) return err;
+	std::vector<slab::FaceId> after;
+	live_mesh.all_faces(after);
+	for (const size_t ordinal : ordinals) {
+		if (ordinal < after.size()) last_edited_faces.push_back(slab::pack(after[ordinal]));
+	}
+	return 0;
 }
 
 int SlabSolid::delete_faces(const PackedInt64Array &p_faces) {
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::delete_faces(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -527,12 +639,12 @@ int SlabSolid::delete_faces(const PackedInt64Array &p_faces) {
 int SlabSolid::flip_faces(const PackedInt64Array &p_faces) {
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::flip_faces(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -540,12 +652,12 @@ int SlabSolid::flip_faces(const PackedInt64Array &p_faces) {
 int SlabSolid::subdivide_faces(const PackedInt64Array &p_faces) {
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::subdivide(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -553,12 +665,12 @@ int SlabSolid::subdivide_faces(const PackedInt64Array &p_faces) {
 int SlabSolid::merge_faces(const PackedInt64Array &p_faces) {
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::merge_faces(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -569,41 +681,82 @@ int SlabSolid::set_face_material(const PackedInt64Array &p_faces, int p_slot) {
 	}
 	std::vector<slab::FaceId> ids;
 	if (!_face_ids(p_faces, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_faces.is_empty() ? slab::INVALID_IDX : slab::unpack_face(p_faces[0]).slot, slab::FaultElement::FACE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::set_face_material(edit, ids, uint32_t(p_slot));
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
 
-int SlabSolid::bevel_edges(const PackedInt64Array &p_edges, float p_amount) {
+int SlabSolid::bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments) {
 	std::vector<slab::EdgeId> ids;
 	if (!_edge_ids(p_edges, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_edges.is_empty() ? slab::INVALID_IDX : slab::unpack_edge(p_edges[0]).slot, slab::FaultElement::HALF_EDGE });
 	}
 	slab::MeshEdit edit(live_mesh);
-	const slab::MeshFault fault = slab::ops::bevel(edit, ids, p_amount);
+	const slab::MeshFault fault = slab::ops::bevel(edit, ids, p_amount, p_segments);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::HALF_EDGE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::preview_bevel(const PackedInt64Array &p_edges, float p_amount, int p_segments) const {
+	Dictionary result;
+	std::vector<slab::EdgeId> ids;
+	if (!_edge_ids(p_edges, ids)) {
+		result["error"] = int(slab::MeshError::STALE_HANDLE);
+		return result;
+	}
+	slab::MeshEdit edit(live_mesh);
+	const slab::MeshFault beveled = slab::ops::bevel(edit, ids, p_amount, p_segments);
+	if (!beveled.ok()) {
+		result["error"] = int(beveled.code);
+		return result;
+	}
+	slab::Mesh preview;
+	const slab::MeshFault committed = std::move(edit).commit(preview);
+	result["error"] = int(committed.code);
+	if (!committed.ok()) {
+		return result;
+	}
+	const std::vector<uint8_t> bytes = slab::serialize(preview);
+	PackedByteArray data;
+	data.resize(int64_t(bytes.size()));
+	if (!bytes.empty()) {
+		std::memcpy(data.ptrw(), bytes.data(), bytes.size());
+	}
+	result["data"] = data;
+	PackedVector3Array lines;
+	std::vector<slab::EdgeId> edges;
+	preview.all_edges(edges);
+	for (const slab::EdgeId edge : edges) {
+		slab::VertexId a;
+		slab::VertexId b;
+		preview.edge_vertices(edge, a, b);
+		lines.push_back(preview.position(a));
+		lines.push_back(preview.position(b));
+	}
+	result["segments"] = lines;
+	return result;
 }
 
 int SlabSolid::bridge_edges(const PackedInt64Array &p_edges) {
 	std::vector<slab::EdgeId> ids;
 	if (!_edge_ids(p_edges, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_edges.is_empty() ? slab::INVALID_IDX : slab::unpack_edge(p_edges[0]).slot, slab::FaultElement::HALF_EDGE });
 	}
 	if (ids.size() != 2) {
-		return int(slab::MeshError::INVALID_SELECTION);
+		return _reject(live_mesh, { slab::MeshError::INVALID_SELECTION }, slab::FaultElement::HALF_EDGE,
+				ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::bridge(edit, ids[0], ids[1]);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::HALF_EDGE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -611,15 +764,16 @@ int SlabSolid::bridge_edges(const PackedInt64Array &p_edges) {
 int SlabSolid::connect_edges(const PackedInt64Array &p_edges) {
 	std::vector<slab::EdgeId> ids;
 	if (!_edge_ids(p_edges, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_edges.is_empty() ? slab::INVALID_IDX : slab::unpack_edge(p_edges[0]).slot, slab::FaultElement::HALF_EDGE });
 	}
 	if (ids.size() != 2) {
-		return int(slab::MeshError::INVALID_SELECTION);
+		return _reject(live_mesh, { slab::MeshError::INVALID_SELECTION }, slab::FaultElement::HALF_EDGE,
+				ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::connect_edges(edit, ids[0], ids[1]);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::HALF_EDGE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -632,20 +786,47 @@ int SlabSolid::insert_loop(int64_t p_edge, float p_t) {
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::insert_loop(edit, id, p_t);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
+}
+
+int SlabSolid::insert_loops(int64_t p_edge, const PackedFloat32Array &p_positions) {
+	std::vector<float> positions;
+	for (int i = 0; i < p_positions.size(); ++i) positions.push_back(p_positions[i]);
+	slab::MeshEdit edit(live_mesh);
+	const slab::MeshFault fault = slab::ops::insert_loops(edit, slab::unpack_edge(p_edge), positions);
+	if (!fault.ok()) return _reject(edit.scratch(), fault);
+	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::preview_loop_cuts(int64_t p_edge, const PackedFloat32Array &p_positions) const {
+	std::vector<float> positions;
+	for (int i = 0; i < p_positions.size(); ++i) positions.push_back(p_positions[i]);
+	std::vector<std::pair<slab::IVec3, slab::IVec3>> segments;
+	const slab::MeshFault fault = slab::ops::loop_segments(live_mesh, slab::unpack_edge(p_edge), positions, segments);
+	PackedVector3Array lines;
+	if (fault.ok()) {
+		for (const auto &segment : segments) {
+			lines.push_back(Vector3(segment.first.x, segment.first.y, segment.first.z) / float(slab::LATTICE));
+			lines.push_back(Vector3(segment.second.x, segment.second.y, segment.second.z) / float(slab::LATTICE));
+		}
+	}
+	Dictionary result;
+	result["error"] = int(fault.code);
+	result["segments"] = lines;
+	return result;
 }
 
 int SlabSolid::dissolve_edges(const PackedInt64Array &p_edges) {
 	std::vector<slab::EdgeId> ids;
 	if (!_edge_ids(p_edges, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_edges.is_empty() ? slab::INVALID_IDX : slab::unpack_edge(p_edges[0]).slot, slab::FaultElement::HALF_EDGE });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::dissolve_edges(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::HALF_EDGE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -653,12 +834,12 @@ int SlabSolid::dissolve_edges(const PackedInt64Array &p_edges) {
 int SlabSolid::weld_vertices(const PackedInt64Array &p_vertices, float p_radius) {
 	std::vector<slab::VertexId> ids;
 	if (!_vertex_ids(p_vertices, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_vertices.is_empty() ? slab::INVALID_IDX : slab::unpack_vertex(p_vertices[0]).slot, slab::FaultElement::VERTEX });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::weld(edit, ids, p_radius);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::VERTEX, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -666,12 +847,12 @@ int SlabSolid::weld_vertices(const PackedInt64Array &p_vertices, float p_radius)
 int SlabSolid::collapse_vertices(const PackedInt64Array &p_vertices) {
 	std::vector<slab::VertexId> ids;
 	if (!_vertex_ids(p_vertices, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_vertices.is_empty() ? slab::INVALID_IDX : slab::unpack_vertex(p_vertices[0]).slot, slab::FaultElement::VERTEX });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::collapse(edit, ids);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::VERTEX, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -679,15 +860,16 @@ int SlabSolid::collapse_vertices(const PackedInt64Array &p_vertices) {
 int SlabSolid::connect_vertices(const PackedInt64Array &p_vertices) {
 	std::vector<slab::VertexId> ids;
 	if (!_vertex_ids(p_vertices, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_vertices.is_empty() ? slab::INVALID_IDX : slab::unpack_vertex(p_vertices[0]).slot, slab::FaultElement::VERTEX });
 	}
 	if (ids.size() != 2) {
-		return int(slab::MeshError::INVALID_SELECTION);
+		return _reject(live_mesh, { slab::MeshError::INVALID_SELECTION }, slab::FaultElement::VERTEX,
+				ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::connect_vertices(edit, ids[0], ids[1]);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::VERTEX, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -695,12 +877,12 @@ int SlabSolid::connect_vertices(const PackedInt64Array &p_vertices) {
 int SlabSolid::move_vertices(const PackedInt64Array &p_vertices, const Vector3 &p_delta) {
 	std::vector<slab::VertexId> ids;
 	if (!_vertex_ids(p_vertices, ids)) {
-		return int(slab::MeshError::STALE_HANDLE);
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE, p_vertices.is_empty() ? slab::INVALID_IDX : slab::unpack_vertex(p_vertices[0]).slot, slab::FaultElement::VERTEX });
 	}
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::move_vertices(edit, ids, p_delta);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault, slab::FaultElement::VERTEX, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
 }
@@ -731,16 +913,78 @@ int SlabSolid::boolean_with(SlabSolid *p_other, int p_mode) {
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::boolean(edit, cutter, p_mode);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
+}
+
+int SlabSolid::plane_cut(const Vector3 &p_origin, const Vector3 &p_normal, bool p_keep_positive, int p_cap_material) {
+	if (p_cap_material < 0) return int(slab::MeshError::INVALID_SELECTION);
+	slab::IVec3 origin;
+	slab::IVec3 normal;
+	if (!slab::quantize(p_origin, origin) || !slab::quantize(p_normal, normal)) {
+		return int(slab::MeshError::COORD_OUT_OF_RANGE);
+	}
+	slab::FaceAttrs cap;
+	cap.material_slot = uint32_t(p_cap_material);
+	slab::MeshEdit edit(live_mesh);
+	const slab::MeshFault fault = slab::ops::plane_cut(edit, origin, normal,
+			p_keep_positive ? slab::ops::PlaneSide::POSITIVE : slab::ops::PlaneSide::NEGATIVE, cap);
+	if (!fault.ok()) return _reject(edit.scratch(), fault);
+	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::preview_plane_cut(const Vector3 &p_origin, const Vector3 &p_normal,
+		bool p_keep_positive, int p_cap_material) const {
+	Dictionary result;
+	if (p_cap_material < 0) {
+		result["error"] = int(slab::MeshError::INVALID_SELECTION);
+		return result;
+	}
+	slab::IVec3 origin;
+	slab::IVec3 normal;
+	if (!slab::quantize(p_origin, origin) || !slab::quantize(p_normal, normal)) {
+		result["error"] = int(slab::MeshError::COORD_OUT_OF_RANGE);
+		return result;
+	}
+	slab::FaceAttrs cap;
+	cap.material_slot = uint32_t(p_cap_material);
+	slab::MeshEdit edit(live_mesh);
+	const slab::MeshFault cut = slab::ops::plane_cut(edit, origin, normal,
+			p_keep_positive ? slab::ops::PlaneSide::POSITIVE : slab::ops::PlaneSide::NEGATIVE, cap);
+	if (!cut.ok()) {
+		result["error"] = int(cut.code);
+		return result;
+	}
+	slab::Mesh preview;
+	const slab::MeshFault committed = std::move(edit).commit(preview);
+	result["error"] = int(committed.code);
+	if (!committed.ok()) return result;
+	const std::vector<uint8_t> bytes = slab::serialize(preview);
+	PackedByteArray data;
+	data.resize(int64_t(bytes.size()));
+	if (!bytes.empty()) std::memcpy(data.ptrw(), bytes.data(), bytes.size());
+	result["data"] = data;
+
+	PackedVector3Array lines;
+	std::vector<slab::EdgeId> edges;
+	preview.all_edges(edges);
+	for (const slab::EdgeId id : edges) {
+		slab::VertexId a;
+		slab::VertexId b;
+		preview.edge_vertices(id, a, b);
+		lines.push_back(preview.position(a));
+		lines.push_back(preview.position(b));
+	}
+	result["segments"] = lines;
+	return result;
 }
 
 int SlabSolid::mirror(const Vector3 &p_axis) {
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::mirror(edit, p_axis);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -750,7 +994,7 @@ int SlabSolid::center_pivot() {
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::center_pivot(edit);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	const int err = _commit(std::move(edit));
 	if (err == 0) {
@@ -763,7 +1007,7 @@ int SlabSolid::snap_to_grid() {
 	slab::MeshEdit edit(live_mesh);
 	const slab::MeshFault fault = slab::ops::snap_to_grid(edit, grid_step);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
 }
@@ -814,14 +1058,43 @@ bool SlabSolid::_vertex_ids(const PackedInt64Array &p_ids, std::vector<slab::Ver
 	return true;
 }
 
+Dictionary SlabSolid::get_edit_diagnostic() const {
+	return edit_diagnostic.duplicate();
+}
+
 int SlabSolid::_commit(slab::MeshEdit &&p_edit) {
+	edit_diagnostic.clear();
 	const slab::MeshFault fault = std::move(p_edit).commit(live_mesh);
 	if (!fault.ok()) {
-		return int(fault.code);
+		return _reject(p_edit.scratch(), fault);
 	}
 	_rebuild();
 	emit_signal("topology_changed");
 	return 0;
+}
+
+int SlabSolid::_reject(const slab::Mesh &p_mesh, slab::MeshFault p_fault,
+		slab::FaultElement p_fallback_element, uint32_t p_fallback_slot) {
+	edit_diagnostic.clear();
+	if (p_fault.element == slab::FaultElement::NONE && p_fault.slot == slab::INVALID_IDX &&
+			p_fallback_element != slab::FaultElement::NONE && p_fallback_slot != slab::INVALID_IDX) {
+		p_fault.element = p_fallback_element;
+		p_fault.slot = p_fallback_slot;
+	}
+	edit_diagnostic["code"] = int(p_fault.code);
+	edit_diagnostic["element"] = int(p_fault.element);
+	edit_diagnostic["slot"] = int64_t(p_fault.slot);
+	if (p_fault.related_slot != slab::INVALID_IDX) edit_diagnostic["related_slot"] = int64_t(p_fault.related_slot);
+	std::vector<std::pair<slab::IVec3, slab::IVec3>> segments;
+	slab::diagnostic_segments(p_mesh, p_fault, segments);
+	PackedVector3Array lines;
+	for (const auto &segment : segments) {
+		lines.push_back(Vector3(segment.first.x, segment.first.y, segment.first.z) / float(slab::LATTICE));
+		lines.push_back(Vector3(segment.second.x, segment.second.y, segment.second.z) / float(slab::LATTICE));
+	}
+	edit_diagnostic["segments"] = lines;
+	update_gizmos();
+	return int(p_fault.code);
 }
 
 void SlabSolid::_ensure_children() {
@@ -934,12 +1207,13 @@ void SlabSolid::_rebuild() {
 			mat = materials[slot];
 		}
 		if (mat.is_null()) {
-			Ref<StandardMaterial3D> proto;
-			proto.instantiate();
-			proto->set_albedo(prototype_color);
-			proto->set_roughness(0.7f);
-			proto->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
-			mat = proto;
+			if (prototype_material.is_null()) {
+				prototype_material.instantiate();
+				prototype_material->set_roughness(0.7f);
+				prototype_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
+			}
+			prototype_material->set_albedo(prototype_color);
+			mat = prototype_material;
 		}
 		mesh_instance->set_surface_override_material(i, mat);
 	}

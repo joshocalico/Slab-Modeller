@@ -40,6 +40,31 @@ static func grow(solid: Node3D, mode: int, ids: PackedInt64Array) -> PackedInt64
 	return ids
 
 
+static func connected_coplanar_faces(solid: Node3D, seeds: PackedInt64Array, tolerance: float = 0.0001) -> PackedInt64Array:
+	if solid == null or seeds.is_empty():
+		return PackedInt64Array()
+	var out := PackedInt64Array(seeds)
+	var queued: Dictionary = {}
+	for face in seeds:
+		queued[face] = true
+	var cursor := 0
+	while cursor < out.size():
+		var face: int = out[cursor]
+		cursor += 1
+		var normal: Vector3 = solid.call("face_normal", face)
+		var plane_offset: float = normal.dot(solid.call("face_centroid", face))
+		for edge in solid.call("face_edges", face):
+			for neighbour in solid.call("edge_faces", edge):
+				if queued.has(neighbour):
+					continue
+				var other_normal: Vector3 = solid.call("face_normal", neighbour)
+				var other_offset: float = other_normal.dot(solid.call("face_centroid", neighbour))
+				if normal.dot(other_normal) >= 1.0 - tolerance and absf(plane_offset - other_offset) <= tolerance:
+					queued[neighbour] = true
+					out.append(neighbour)
+	return out
+
+
 static func edge_ring(solid: Node3D, start: int) -> PackedInt64Array:
 	var seen: Dictionary = { start: true }
 	var out := PackedInt64Array([start])

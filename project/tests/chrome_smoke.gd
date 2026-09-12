@@ -59,6 +59,25 @@ func case_every_panel_font_clears_the_floor_at_every_scale() -> void:
 		strip.free()
 
 
+func case_transform_previews_use_the_public_solid_mesh() -> void:
+	var gizmo_source := _source_of("slab_solid_gizmo.gd")
+	expect(gizmo_source.contains('solid.call("build_mesh")'), "array and align ghosts acquire geometry from SlabSolid.build_mesh")
+	expect(not gizmo_source.contains('get_node_or_null("__mesh")'), "ghost previews do not guess a private child name")
+
+
+func case_bevel_modal_exposes_exact_controls() -> void:
+	var selection := SlabSelection.new()
+	selection.mode = SlabSelection.Mode.EDGE
+	var actions := SlabActions.new(selection)
+	actions.bevel_active = true
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	expect(panel.find_child("bevel_amount", true, false) != null, "Bevel modal exposes exact Amount")
+	expect(panel.find_child("bevel_segments", true, false) != null, "Bevel modal exposes Segments")
+	expect(_button_for(panel, "Apply") != null and _button_for(panel, "Cancel") != null, "Bevel modal exposes Apply and Cancel")
+	panel.free()
+
+
 func case_every_text_control_declares_a_font_size() -> void:
 	for mode in MODES:
 		var panel := _build_panel(1.0, mode)
@@ -86,6 +105,45 @@ func case_every_declared_field_renders_one_spin() -> void:
 			expect(is_equal_approx(spin.value, field["value"]), "the %s spin starts at %s" % [field["key"], field["value"]])
 			expect(spin.tooltip_text == field["tooltip"], "the %s spin carries the field tooltip" % field["key"])
 	expect(panel.find_child("stair_steps", true, false) == null, "Box focus hides the Stair steps field")
+	panel.free()
+
+
+func case_plane_offset_preserves_precise_input() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	actions.plane_active = true
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var field: Node = panel.find_child("plane_offset", true, false)
+	expect(field != null, "Plane Cut exposes its offset field")
+	if field != null:
+		var spin: SpinBox = _spins(field)[0]
+		spin.value = sqrt(2.0)
+		spin.value_changed.emit(spin.value)
+		expect(absf(actions.plane_offset - sqrt(2.0)) < 0.000001,
+			"typed plane offset retains sub-lattice precision instead of rounding to centimetres")
+	panel.free()
+
+
+func case_array_settings_expose_exact_linear_and_radial_values() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	actions.array_active = true
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	expect(panel.find_child("array_linear", true, false) is Button and panel.find_child("array_radial", true, false) is Button, "Array exposes visible Linear and Radial mode buttons")
+	expect(panel.find_child("array_count", true, false) != null, "Array exposes total instance count")
+	expect(panel.find_child("array_step_x", true, false) != null, "Linear Array exposes exact X step")
+	var step_y: SpinBox = _spins(panel.find_child("array_step_y", true, false))[0]
+	step_y.value = 3.25
+	step_y.value_changed.emit(step_y.value)
+	expect(is_equal_approx(actions.array_linear_step.y, 3.25), "Linear Y step keeps typed precision")
+	actions.array_mode = SlabActions.ARRAY_RADIAL
+	panel._refresh_settings()
+	expect(panel.find_child("array_center_x", true, false) != null, "Radial Array exposes centre")
+	expect(panel.find_child("array_axis_z", true, false) != null, "Radial Array exposes axis")
+	expect(panel.find_child("array_angle", true, false) != null, "Radial Array exposes angle")
+	expect(panel.find_child("array_rotate", true, false) is CheckButton, "Radial Array exposes copy rotation")
 	panel.free()
 
 
@@ -254,7 +312,7 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel.find_child("Settings", true, false)).size() == 6, "Face mode keeps Distance and the five UV spins, got %d" % _spins(panel.find_child("Settings", true, false)).size())
+	expect(_spins(panel.find_child("Settings", true, false)).size() == 8, "Face mode keeps Distance, five transform spins, and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
 	expect(_label_for(panel, "FACE") != null and _label_for(panel, "SELECTION") != null,
@@ -430,9 +488,9 @@ func case_command_labels_fit_and_wrap() -> void:
 		_expect_label_fits(button, label)
 	face.free()
 	var edge := _build_panel(1.0, SlabSelection.Mode.EDGE)
-	var loop: Button = _button_for(edge, "Insert Loop")
-	expect(loop != null and not loop.clip_text, "Insert Loop does not clip its caption")
-	_expect_label_fits(loop, "Insert Loop")
+	var loop: Button = _button_for(edge, "Loop Cut")
+	expect(loop != null and not loop.clip_text, "Loop Cut does not clip its caption")
+	_expect_label_fits(loop, "Loop Cut")
 	edge.free()
 
 

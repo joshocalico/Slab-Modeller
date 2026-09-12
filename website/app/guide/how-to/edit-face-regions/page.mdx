@@ -1,0 +1,32 @@
+export const metadata = { title: "Edit face regions" };
+
+# Edit face regions
+
+Use this when adjacent faces should extrude or inset as one patch.
+
+## Extrude a region
+
+1. Press <kbd>4</kbd> for Face mode.
+2. Select adjacent faces on one solid.
+3. Set **Distance**. Positive moves outward. Negative moves inward.
+4. Press <kbd>E</kbd>.
+
+Slab moves every selected face in one shared direction. It keeps the edges between the cap faces and builds side walls around every boundary loop, including the boundary of an unselected hole. A bent selection uses an area-weighted average of its face normals.
+
+The faces must form one edge-connected region. Two patches that meet only at a vertex are disconnected. Extrude refuses a disconnected selection instead of extruding each patch separately.
+
+## Inset a region
+
+1. Select adjacent coplanar faces.
+2. Set a positive **Distance**.
+3. Press <kbd>I</kbd>.
+
+Inset moves the shared boundary inward. Internal cap edges stay in place as part of the new cap layout. A region can surround an unselected island; Slab treats that inner loop as another boundary.
+
+Inset requires every selected face to lie on one plane and face the same way. It refuses folded selections.
+
+## Hollow a divided cap
+
+Inset the connected cap first. The refreshed inner faces stay selected. Set a negative Distance, then press <kbd>E</kbd>. The whole inner region moves down and leaves one wall around its boundary.
+
+Undo restores both the geometry and the face selection. Redo selects the rebuilt caps again.

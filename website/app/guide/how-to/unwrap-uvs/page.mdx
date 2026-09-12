@@ -1,0 +1,21 @@
+export const metadata = { title: "Unwrap faces at a consistent texel density" };
+
+# Unwrap faces at a consistent texel density
+
+Use this when adjoining faces should paint continuously and keep texture pixels the same physical size.
+
+1. In Edge mode, select the edges where the texture may split and click **Mark Seam**. Use **Clear Seam** to remove a mark.
+2. Switch to Face mode and select the faces to unwrap.
+3. Open **UV**, then set **Pixels / metre** to the detail you need.
+4. Set **Texture px** to the material texture's width in pixels.
+5. Click **Unwrap**.
+
+Slab unfolds across edges that are not seams. Marked seams start separate islands. It packs the islands apart with a one-pixel gap.
+
+A closed or branching patch sometimes cannot lie flat without crossing itself. Slab adds seams where a cycle cannot close or two branches would overlap, and reports the automatically cut edges. Those seam marks persist with the solid, so review them before painting.
+
+Unwrap resets Repeat U, Repeat V, Offset and Rotation so the requested density is exact. Apply those placement controls afterward if the island needs to move, turn or repeat.
+
+For example, 256 pixels per metre on a 1024-pixel texture maps one metre of mesh surface to 0.25 UV units.
+
+Save the scene after unwrapping. Seam marks, unfolded coordinates, and the scale derived from **Pixels / metre** and **Texture px** are stored in the `SlabSolid` data and follow ordinary undo and redo.

@@ -227,6 +227,10 @@ void Mesh::edge_vertices(EdgeId p_id, VertexId &r_a, VertexId &r_b) const {
 	r_b = VertexId{ vb.i, vertices[vb.i].gen };
 }
 
+bool Mesh::edge_uv_seam(EdgeId p_id) const {
+	return alive(p_id) && half_edges[p_id.slot].uv_seam;
+}
+
 void Mesh::edge_faces(EdgeId p_id, FaceId &r_a, FaceId &r_b) const {
 	r_a = FaceId{};
 	r_b = FaceId{};

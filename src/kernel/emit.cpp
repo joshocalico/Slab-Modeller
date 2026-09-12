@@ -33,8 +33,15 @@ godot::Vector2 project_uv(const godot::Vector3 &p_p, UvAxis p_axis) {
 	}
 }
 
+godot::Vector2 face_projection(const godot::Vector3 &p_p, const FaceAttrs &p_attrs, UvAxis p_axis) {
+	if (p_attrs.uv_unwrapped) {
+		return godot::Vector2(p_p.dot(p_attrs.uv_u), p_p.dot(p_attrs.uv_v)) + p_attrs.uv_origin;
+	}
+	return project_uv(p_p, p_axis);
+}
+
 godot::Vector2 apply_uv(const godot::Vector3 &p_p, const godot::Vector2 &p_centroid, const FaceAttrs &p_attrs, UvAxis p_axis) {
-	godot::Vector2 uv = project_uv(p_p, p_axis);
+	godot::Vector2 uv = face_projection(p_p, p_attrs, p_axis);
 	uv.x *= p_attrs.uv_scale.x;
 	uv.y *= p_attrs.uv_scale.y;
 	godot::Vector2 c = p_centroid;
@@ -82,7 +89,7 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		if (axis == UvAxis::AUTO) {
 			axis = dominant_axis(n);
 		}
-		const godot::Vector2 centroid = project_uv(p_mesh.face_centroid(id), axis);
+		const godot::Vector2 centroid = face_projection(p_mesh.face_centroid(id), attrs, axis);
 		const int32_t base = int32_t(r_out.verts.size());
 		std::vector<IVec3> loop;
 		loop.reserve(corners.size());

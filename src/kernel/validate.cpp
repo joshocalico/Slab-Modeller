@@ -9,10 +9,13 @@ namespace slab {
 
 namespace {
 
-MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
+MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX,
+		FaultElement p_element = FaultElement::NONE, uint32_t p_related = INVALID_IDX) {
 	MeshFault f;
 	f.code = p_code;
 	f.slot = p_slot;
+	f.element = p_element;
+	f.related_slot = p_related;
 	return f;
 }
 
@@ -252,7 +255,8 @@ MeshFault _self_intersection(const Mesh &p_mesh, const std::vector<FaceId> &p_fa
 			for (const Tri &ta : geom[i].tris) {
 				for (const Tri &tb : geom[j].tris) {
 					if (_tris_improper(ta, tb)) {
-						return fault(MeshError::SELF_INTERSECTION, geom[i].id.slot);
+						return fault(MeshError::SELF_INTERSECTION, geom[i].id.slot,
+								FaultElement::FACE, geom[j].id.slot);
 					}
 				}
 			}
@@ -274,23 +278,23 @@ MeshFault validate(const Mesh &p_mesh) {
 		}
 		const HalfEdge &he = p_mesh.half_edges[i];
 		if (he.twin.i == INVALID_IDX || he.twin.i >= p_mesh.half_edges.size() || !p_mesh._he_live(he.twin.i)) {
-			return fault(MeshError::NOT_CLOSED, i);
+			return fault(MeshError::NOT_CLOSED, i, FaultElement::HALF_EDGE);
 		}
 		const HalfEdge &twin = p_mesh.half_edges[he.twin.i];
 		if (twin.twin.i != i || he.twin.i == i) {
-			return fault(MeshError::TWIN_MISMATCH, i);
+			return fault(MeshError::TWIN_MISMATCH, i, FaultElement::HALF_EDGE);
 		}
 		if (he.next.i == INVALID_IDX || he.next.i >= p_mesh.half_edges.size() || !p_mesh._he_live(he.next.i)) {
-			return fault(MeshError::LOOP_TOO_SHORT, i);
+			return fault(MeshError::LOOP_TOO_SHORT, i, FaultElement::HALF_EDGE);
 		}
 		if (he.face.i == INVALID_IDX || !p_mesh._face_live(he.face.i)) {
-			return fault(MeshError::NOT_CLOSED, i);
+			return fault(MeshError::NOT_CLOSED, i, FaultElement::HALF_EDGE);
 		}
 		if (he.origin.i == INVALID_IDX || !p_mesh._vertex_live(he.origin.i)) {
-			return fault(MeshError::DEGENERATE_FACE, i);
+			return fault(MeshError::DEGENERATE_FACE, i, FaultElement::HALF_EDGE);
 		}
 		if (p_mesh.half_edges[he.next.i].origin.i != twin.origin.i) {
-			return fault(MeshError::INCONSISTENT_ORIENTATION, i);
+			return fault(MeshError::INCONSISTENT_ORIENTATION, i, FaultElement::HALF_EDGE);
 		}
 	}
 
@@ -299,28 +303,28 @@ MeshFault validate(const Mesh &p_mesh) {
 	for (const FaceId id : faces) {
 		const Face &face = p_mesh.faces[id.slot];
 		if (face.he.i == INVALID_IDX || !p_mesh._he_live(face.he.i)) {
-			return fault(MeshError::LOOP_TOO_SHORT, id.slot);
+			return fault(MeshError::LOOP_TOO_SHORT, id.slot, FaultElement::FACE);
 		}
 		std::vector<VertexId> corners;
 		p_mesh.face_corners(id, corners);
 		if (corners.size() < 3) {
-			return fault(MeshError::LOOP_TOO_SHORT, id.slot);
+			return fault(MeshError::LOOP_TOO_SHORT, id.slot, FaultElement::FACE);
 		}
 		std::unordered_set<uint32_t> uniq;
 		for (const VertexId &v : corners) {
 			uniq.insert(v.slot);
 		}
 		if (uniq.size() < 3) {
-			return fault(MeshError::DEGENERATE_FACE, id.slot);
+			return fault(MeshError::DEGENERATE_FACE, id.slot, FaultElement::FACE);
 		}
 		HalfEdgeIdx he = face.he;
 		std::unordered_set<uint32_t> walked;
 		do {
 			if (!walked.insert(he.i).second) {
-				return fault(MeshError::LOOP_TOO_SHORT, id.slot);
+				return fault(MeshError::LOOP_TOO_SHORT, id.slot, FaultElement::FACE);
 			}
 			if (p_mesh.half_edges[he.i].face.i != id.slot) {
-				return fault(MeshError::INCONSISTENT_ORIENTATION, he.i);
+				return fault(MeshError::INCONSISTENT_ORIENTATION, he.i, FaultElement::HALF_EDGE);
 			}
 			he = p_mesh.half_edges[he.i].next;
 		} while (he.i != face.he.i);
@@ -331,19 +335,19 @@ MeshFault validate(const Mesh &p_mesh) {
 	for (const VertexId id : verts) {
 		const Vertex &v = p_mesh.vertices[id.slot];
 		if (v.out.i == INVALID_IDX || !p_mesh._he_live(v.out.i)) {
-			return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot);
+			return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot, FaultElement::VERTEX);
 		}
 		if (p_mesh.half_edges[v.out.i].origin.i != id.slot) {
-			return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot);
+			return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot, FaultElement::VERTEX);
 		}
 		std::unordered_set<uint32_t> ring;
 		HalfEdgeIdx he = v.out;
 		do {
 			if (p_mesh.half_edges[he.i].origin.i != id.slot) {
-				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot);
+				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot, FaultElement::VERTEX);
 			}
 			if (!ring.insert(he.i).second) {
-				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot);
+				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot, FaultElement::VERTEX);
 			}
 			const HalfEdgeIdx twin = p_mesh.half_edges[he.i].twin;
 			he = p_mesh.half_edges[twin.i].next;
@@ -354,7 +358,7 @@ MeshFault validate(const Mesh &p_mesh) {
 				continue;
 			}
 			if (p_mesh.half_edges[i].origin.i == id.slot && ring.count(i) == 0) {
-				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot);
+				return fault(MeshError::NON_MANIFOLD_VERTEX, id.slot, FaultElement::VERTEX);
 			}
 		}
 	}

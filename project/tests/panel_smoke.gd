@@ -22,13 +22,13 @@ const RANGES: Dictionary = {
 	&"size_x": [0.05, 64.0], &"size_y": [0.05, 64.0], &"size_z": [0.05, 64.0],
 }
 
-const SELECTION_IDS: Array = ["select_all", "select_none", "select_invert", "select_grow"]
+const SELECTION_IDS: Array = ["select_all", "select_none", "select_invert", "select_grow", "snap_vertex"]
 
 const SECTIONS_BY_MODE: Dictionary = {
 	SlabSelection.Mode.OBJECT: {
 		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
 		"Object": [
-			"boolean_union", "boolean_subtract", "boolean_intersect", "mirror_x", "mirror_y", "mirror_z",
+			"boolean_union", "boolean_subtract", "boolean_intersect", "plane_cut", "array", "mirror_x", "mirror_y", "mirror_z",
 			"center_pivot", "snap_to_grid",
 		],
 	},
@@ -37,15 +37,15 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.EDGE: {
-		"Edge": ["bevel_edges", "bridge_edges", "connect_edges", "insert_loop", "dissolve_edges", "select_loop", "select_ring"],
+		"Edge": ["bevel_edges", "bridge_edges", "connect_edges", "insert_loop", "dissolve_edges", "mark_uv_seam", "clear_uv_seam", "select_loop", "select_ring"],
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
 		"Face": [
-			"extrude_faces", "inset_faces", "delete_faces", "flip_faces", "subdivide_faces", "merge_faces",
+			"extrude_faces", "inset_faces", "delete_faces", "flip_faces", "subdivide_faces", "merge_faces", "select_coplanar", "align_face",
 		],
 		"UV": [
-			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset",
+			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset", "uv_unwrap",
 		],
 		"Selection": SELECTION_IDS,
 	},
@@ -77,6 +77,8 @@ func _init() -> void:
 		_expect(row["shortcut"] is int, "row %s shortcut is a keycode" % id)
 
 	_expect(actions.find("extrude_faces").has("id"), "find returns the extrude row")
+	_expect(actions.find("array").has("id"), "find returns the array row")
+	_expect(actions.array_count == 2 and actions.array_linear_step == Vector3(2, 0, 0), "array settings have useful exact defaults")
 	_expect(actions.find("no_such_action").is_empty(), "find returns nothing for an unknown id")
 
 	selection.mode = SlabSelection.Mode.FACE
@@ -230,13 +232,19 @@ func _check_phrasing(actions: RefCounted) -> void:
 	_expect(actions.tooltip_of(arch_row).contains("90 degrees"), "arch tooltip follows the arc field")
 	shapes.set_value(&"arch_arc", 180.0)
 	_expect(actions.tooltip_of(arch_row).begins_with(arch_row["tooltip"]), "arch tooltip starts with the row's sentence")
-	_expect(actions.tooltip_of(actions.find("extrude_faces")) == "Pulls the face along its normal. Positive is outward. Negative is inward.",
-		"edit rows keep their static tooltip")
+	_expect(actions.tooltip_of(actions.find("extrude_faces")).contains("connected face region"),
+		"Extrude tooltip describes connected regions")
+	_expect(actions.tooltip_of(actions.find("inset_faces")).contains("connected coplanar face region"),
+		"Inset tooltip states its coplanar region limit")
 	_expect(shapes.describe(&"extrude_faces") == "", "describe is empty for a non-shape id")
 	_expect(SlabActions.describe_error(SlabActions.ERR_NOT_CLOSED, "delete_faces").contains("open solid"),
 		"delete explains the closed-solid rule")
-	_expect(SlabActions.describe_error(SlabActions.ERR_SELF_INTERSECTION).contains("pierce"),
-		"a piercing edit explains the embedding rule")
+	_expect(SlabActions.describe_error(SlabActions.ERR_SELF_INTERSECTION).contains("cross or overlap"),
+		"an intersecting edit explains the embedding rule")
+	_expect(SlabActions.describe_error(SlabActions.ERR_SELF_INTERSECTION, "extrude_faces").contains("opposite wall"),
+		"refused extrusion explains how to avoid crossing the opposite wall")
+	_expect(not SlabActions.describe_error(SlabActions.ERR_SELF_INTERSECTION, "bevel_edges").contains("Inset"),
+		"other tools do not prescribe an unrelated inset workflow")
 	_expect(not SlabActions.describe_error(SlabActions.ERR_NOT_CLOSED, "delete_faces").contains("Mesh error"),
 		"delete does not fall back to a bare error number")
 	_expect(SlabActions.ERR_SELF_INTERSECTION == 16, "SELF_INTERSECTION stays last at 16")
@@ -248,8 +256,8 @@ func _check_phrasing(actions: RefCounted) -> void:
 		"coord errors name a range, not only a vertex")
 	_expect(SlabActions.describe_error(SlabActions.ERR_TWIN_MISMATCH).contains("twin"),
 		"twin mismatch names the twin")
-	_expect(SlabActions.describe_error(SlabActions.ERR_DEGENERATE_FACE).contains("degenerate"),
-		"degenerate faces are named as degenerate")
+	_expect(SlabActions.describe_error(SlabActions.ERR_DEGENERATE_FACE).contains("line or point"),
+		"collapsed faces explain the geometric problem in plain language")
 	for code in range(1, SlabActions.ERR_SELF_INTERSECTION + 1):
 		_expect(not SlabActions.describe_error(code).contains("Mesh error"),
 			"code %d has a named phrase, got %s" % [code, SlabActions.describe_error(code)])

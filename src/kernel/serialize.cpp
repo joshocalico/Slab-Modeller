@@ -1,6 +1,7 @@
 #include "serialize.hpp"
 
 #include <cstring>
+#include <cmath>
 #include <utility>
 
 namespace slab {
@@ -8,7 +9,7 @@ namespace slab {
 namespace {
 
 constexpr uint32_t MAGIC = 0x31424C53u;
-constexpr uint32_t VERSION = 2;
+constexpr uint32_t VERSION = 3;
 constexpr uint32_t VERSION_SLOT_U8 = 1;
 
 MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
@@ -150,6 +151,18 @@ std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 	write_free_list(out, p_mesh.free_vertices);
 	write_free_list(out, p_mesh.free_half_edges);
 	write_free_list(out, p_mesh.free_faces);
+	for (const HalfEdge &he : p_mesh.half_edges) write_u8(out, he.uv_seam ? 1 : 0);
+	for (const Face &f : p_mesh.faces) {
+		write_u8(out, f.attrs.uv_unwrapped ? 1 : 0);
+		write_f32(out, f.attrs.uv_u.x);
+		write_f32(out, f.attrs.uv_u.y);
+		write_f32(out, f.attrs.uv_u.z);
+		write_f32(out, f.attrs.uv_v.x);
+		write_f32(out, f.attrs.uv_v.y);
+		write_f32(out, f.attrs.uv_v.z);
+		write_f32(out, f.attrs.uv_origin.x);
+		write_f32(out, f.attrs.uv_origin.y);
+	}
 	return out;
 }
 
@@ -163,7 +176,7 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 
 	const uint32_t magic = r.u32();
 	const uint32_t version = r.u32();
-	if (!r.ok || magic != MAGIC || (version != VERSION && version != VERSION_SLOT_U8)) {
+	if (!r.ok || magic != MAGIC || (version != VERSION && version != 2 && version != VERSION_SLOT_U8)) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
 
@@ -243,6 +256,34 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 	fl = read_free_list(r, fcount, tmp.free_faces);
 	if (!fl.ok()) {
 		return fl;
+	}
+	if (version >= 3) {
+		for (HalfEdge &he : tmp.half_edges) {
+			const uint8_t flag = r.u8();
+			if (flag > 1) return fault(MeshError::CORRUPT_DATA);
+			he.uv_seam = flag != 0;
+		}
+		for (Face &f : tmp.faces) {
+			const uint8_t flag = r.u8();
+			if (flag > 1) return fault(MeshError::CORRUPT_DATA);
+			f.attrs.uv_unwrapped = flag != 0;
+			f.attrs.uv_u.x = r.f32();
+			f.attrs.uv_u.y = r.f32();
+			f.attrs.uv_u.z = r.f32();
+			f.attrs.uv_v.x = r.f32();
+			f.attrs.uv_v.y = r.f32();
+			f.attrs.uv_v.z = r.f32();
+			f.attrs.uv_origin.x = r.f32();
+			f.attrs.uv_origin.y = r.f32();
+			for (float value : {f.attrs.uv_u.x, f.attrs.uv_u.y, f.attrs.uv_u.z,
+					f.attrs.uv_v.x, f.attrs.uv_v.y, f.attrs.uv_v.z, f.attrs.uv_origin.x, f.attrs.uv_origin.y}) {
+				if (!std::isfinite(value)) return fault(MeshError::CORRUPT_DATA);
+			}
+		}
+		for (const HalfEdge &he : tmp.half_edges) {
+			if (he.twin.i != INVALID_IDX && he.uv_seam != tmp.half_edges[he.twin.i].uv_seam)
+				return fault(MeshError::CORRUPT_DATA);
+		}
 	}
 	if (!r.ok || r.p != r.end) {
 		return fault(MeshError::CORRUPT_DATA);

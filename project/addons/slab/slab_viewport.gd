@@ -2,10 +2,16 @@
 extends RefCounted
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPick := preload("res://addons/slab/slab_pick.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
+const SlabPlaneCut := preload("res://addons/slab/slab_plane_cut.gd")
+const SlabLoopCut := preload("res://addons/slab/slab_loop_cut.gd")
+const SlabArray := preload("res://addons/slab/slab_array.gd")
+const SlabSnapAlign := preload("res://addons/slab/slab_snap_align.gd")
+const SlabBevel := preload("res://addons/slab/slab_bevel.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 
 enum Verdict { PASS, STOP, CUSTOM }
@@ -52,6 +58,11 @@ var _host: RefCounted
 var _metrics: RefCounted
 var _selection: RefCounted
 var _actions: RefCounted
+var _plane: RefCounted
+var _loop: RefCounted
+var _array: RefCounted
+var _snap_align: RefCounted
+var _bevel: RefCounted
 var _paint: RefCounted
 var _gizmo_nodes: Array[Node3D] = []
 var _grab: Grab = Grab.idle()
@@ -65,10 +76,60 @@ func _init(host: RefCounted) -> void:
 
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
+	_actions.plane_requested.connect(func() -> void:
+		if _loop != null and _loop.active:
+			_loop.cancel()
+		_cancel_array()
+		_cancel_snap_align()
+		_cancel_bevel()
+		_exit_paint()
+	)
+	_actions.loop_requested.connect(func() -> void:
+		if _plane != null and _plane.active:
+			_plane.cancel()
+		_cancel_array()
+		_cancel_snap_align()
+		_cancel_bevel()
+		_exit_paint()
+	)
+	_plane = SlabPlaneCut.new(_selection, _actions, _host)
+	_loop = SlabLoopCut.new(_selection, _actions, _host)
+	_array = SlabArray.new(_host)
+	_array.preview_changed.connect(_on_array_preview)
+	_array.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_actions.array_requested.connect(_begin_array)
+	_actions.array_settings_changed.connect(_refresh_array)
+	_actions.array_apply_requested.connect(_confirm_array)
+	_actions.array_cancel_requested.connect(_cancel_array)
+	_selection.changed.connect(_array_selection_changed)
+	_snap_align = SlabSnapAlign.new(_selection, _host)
+	_snap_align.preview_changed.connect(_on_snap_align_preview)
+	_snap_align.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_actions.snap_vertex_requested.connect(_begin_vertex_snap)
+	_actions.align_face_requested.connect(_begin_face_align)
+	_actions.snap_align_settings_changed.connect(_refresh_snap_align)
+	_actions.snap_align_cancel_requested.connect(_cancel_snap_align)
+	_bevel = SlabBevel.new(_selection, _actions, _host)
+	_actions.bevel_requested.connect(_begin_bevel)
+	_actions.bevel_settings_changed.connect(_refresh_bevel)
+	_actions.bevel_apply_requested.connect(_confirm_bevel)
+	_actions.bevel_cancel_requested.connect(_cancel_bevel)
+	_selection.changed.connect(_sync_bevel_state)
 
 
 func bind_paint(paint: RefCounted) -> void:
 	_paint = paint
+	if _paint != null and _paint.has_signal("changed"):
+		_paint.changed.connect(func() -> void:
+			if _paint.active:
+				_cancel_array()
+				_cancel_snap_align()
+				_cancel_bevel()
+				if _plane != null and _plane.active:
+					_plane.cancel()
+				if _loop != null and _loop.active:
+					_loop.cancel()
+		)
 
 
 static func after_gui_input(verdict: int) -> int:
@@ -78,6 +139,18 @@ static func after_gui_input(verdict: int) -> int:
 func handle(camera: Camera3D, event: InputEvent) -> int:
 	if _selection == null:
 		return Verdict.PASS
+	if _snap_align != null and _snap_align.active:
+		return _snap_align.handle(camera, event)
+	if _bevel != null and _bevel.active:
+		var bevel_verdict: int = _bevel.handle(camera, event)
+		_sync_bevel_state()
+		return bevel_verdict
+	if _array != null and _array.active:
+		return _handle_array(event)
+	if _plane != null and _plane.active:
+		return _plane.handle(camera, event)
+	if _loop != null and _loop.active:
+		return _loop.handle(camera, event)
 	if _paint != null and _paint.active:
 		var verdict: int = _paint.handle_3d(camera, event, _host.scene_root() if _host != null else null)
 		if verdict == Verdict.STOP:
@@ -99,6 +172,13 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 
 
 func adopt_host_selection() -> void:
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_bevel()
 	if _grab.dragging():
 		_cancel()
 	_selection.set_objects(_host.selected_nodes())
@@ -111,6 +191,8 @@ func gizmo_targets() -> Array[Node3D]:
 	for node in _selection.objects:
 		_touch_gizmo(node, seen, current)
 	_touch_gizmo(_selection.hover_solid, seen, current)
+	_touch_gizmo(_selection.preview_solid, seen, current)
+	_touch_gizmo(_selection.array_preview_solid, seen, current)
 	var previous: Array[Node3D] = _gizmo_nodes
 	_gizmo_nodes = current
 	var next: Array[Node3D] = current.duplicate()
@@ -125,6 +207,180 @@ func state() -> RefCounted:
 
 func metrics() -> RefCounted:
 	return _metrics
+
+
+func _begin_array() -> void:
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_snap_align()
+	_cancel_bevel()
+	_exit_paint()
+	_sync_array_settings()
+	_actions.array_active = _array.begin(_selection.solid)
+	_actions.array_state_changed.emit()
+
+
+func _refresh_array() -> void:
+	if _array == null or not _array.active:
+		return
+	_sync_array_settings()
+	_array.refresh_preview()
+
+
+func _confirm_array() -> void:
+	if _array == null or not _array.active:
+		return
+	_array.confirm()
+	_actions.array_active = false
+	_actions.array_state_changed.emit()
+
+
+func _cancel_array() -> void:
+	if _array == null or not _array.active:
+		return
+	_array.cancel()
+	_actions.array_active = false
+	_actions.array_state_changed.emit()
+
+
+func _handle_array(event: InputEvent) -> int:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
+			_cancel_array()
+			_actions.reported.emit("Array cancelled.")
+		elif event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+			_confirm_array()
+		return Verdict.STOP
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+		_cancel_array()
+		_actions.reported.emit("Array cancelled.")
+		return Verdict.STOP
+	return Verdict.PASS
+
+
+func _sync_array_settings() -> void:
+	_array.mode = _actions.array_mode
+	_array.count = _actions.array_count
+	_array.linear_step = _actions.array_linear_step
+	_array.radial_center = _actions.array_radial_center
+	_array.radial_axis = _actions.array_radial_axis
+	_array.radial_angle_degrees = _actions.array_radial_angle_degrees
+	_array.rotate_radial_copies = _actions.array_rotate_copies
+
+
+func _on_array_preview(transforms: Array) -> void:
+	_selection.array_preview_solid = _selection.solid if _array != null and _array.active else null
+	var typed: Array[Transform3D] = []
+	typed.assign(transforms)
+	_selection.array_preview_transforms = typed
+	_selection.hover_changed.emit()
+
+
+func _array_selection_changed() -> void:
+	if _array != null and _array.active and (_selection.mode != SlabSelection.Mode.OBJECT or _selection.solid != _selection.array_preview_solid):
+		_cancel_array()
+
+
+func _exit_paint() -> void:
+	if _paint != null and _paint.active:
+		_paint.exit()
+
+
+func _begin_vertex_snap() -> void:
+	_cancel_bevel()
+	_cancel_other_modals_for_snap()
+	_actions.snap_align_active = _snap_align.begin_vertex_snap()
+	_actions.snap_align_mode = SlabActions.SNAP_VERTEX if _actions.snap_align_active else SlabActions.SNAP_NONE
+	_actions.snap_align_state_changed.emit()
+
+
+func _begin_face_align() -> void:
+	_cancel_bevel()
+	_cancel_other_modals_for_snap()
+	_snap_align.oppose_face_normals = _actions.align_oppose_normals
+	_actions.snap_align_active = _snap_align.begin_face_align()
+	_actions.snap_align_mode = SlabActions.SNAP_FACE if _actions.snap_align_active else SlabActions.SNAP_NONE
+	_actions.snap_align_state_changed.emit()
+
+
+func _cancel_other_modals_for_snap() -> void:
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_exit_paint()
+
+
+func _refresh_snap_align() -> void:
+	if _snap_align == null or not _snap_align.active:
+		return
+	_snap_align.oppose_face_normals = _actions.align_oppose_normals
+	_snap_align.refresh()
+
+
+func _cancel_snap_align() -> void:
+	if _snap_align == null or not _snap_align.active:
+		return
+	_snap_align.cancel()
+
+
+func _on_snap_align_preview(preview: Dictionary) -> void:
+	_selection.snap_align_preview = preview
+	var next_active: bool = _snap_align != null and _snap_align.active
+	var next_mode: int = _snap_align.mode if _snap_align != null else SlabActions.SNAP_NONE
+	if next_active != _actions.snap_align_active or next_mode != _actions.snap_align_mode:
+		_actions.snap_align_active = next_active
+		_actions.snap_align_mode = next_mode
+		_actions.snap_align_state_changed.emit()
+
+
+func _begin_bevel() -> void:
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_exit_paint()
+	_bevel.amount = _actions.amount
+	_bevel.segments = _actions.bevel_segments
+	_bevel.begin()
+	_actions.bevel_active = _bevel.active
+	_actions.snap_align_state_changed.emit()
+
+
+func _refresh_bevel() -> void:
+	if _bevel == null or not _bevel.active:
+		return
+	_bevel.set_amount(_actions.amount)
+	_bevel.set_segments(_actions.bevel_segments)
+
+
+func _confirm_bevel() -> void:
+	if _bevel != null and _bevel.active:
+		_bevel.confirm()
+	_actions.bevel_active = false
+	_actions.snap_align_state_changed.emit()
+
+
+func _cancel_bevel() -> void:
+	if _bevel != null and _bevel.active:
+		_bevel.cancel()
+	if _actions != null and _actions.bevel_active:
+		_actions.bevel_active = false
+		_actions.snap_align_state_changed.emit()
+
+
+func _sync_bevel_state() -> void:
+	if _actions == null or _bevel == null:
+		return
+	var next_active: bool = _bevel.active
+	if _actions.bevel_active != next_active:
+		_actions.bevel_active = next_active
+		_actions.snap_align_state_changed.emit()
 
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:

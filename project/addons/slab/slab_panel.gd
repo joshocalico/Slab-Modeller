@@ -59,6 +59,10 @@ var _brush_color: ColorPickerButton
 func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
 	_selection = selection
 	_actions = actions
+	_actions.loop_values_updated.connect(_sync_loop_values)
+	_actions.plane_state_changed.connect(_refresh_settings)
+	_actions.array_state_changed.connect(_refresh_settings)
+	_actions.snap_align_state_changed.connect(_refresh_settings)
 	_metrics = metrics if metrics != null else preload("res://addons/slab/slab_metrics.gd").at_scale(1.0)
 	name = "Slab"
 	clip_contents = true
@@ -187,46 +191,227 @@ func _refresh_settings() -> void:
 		child.queue_free()
 	var mode: int = _selection.mode
 	if mode == SlabSelection.Mode.OBJECT:
-		_settings_title.text = "New %s" % _create_label()
+		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else "New %s" % _create_label()))
 		_settings_title.visible = true
 		_uv_wrap = null
-		for field in _actions.shapes.fields_for(_create_focus):
-			_settings_fields.add_child(_shape_spin(field))
+		if _actions.snap_align_active:
+			_add_snap_align_settings()
+		elif _actions.array_active:
+			_add_array_settings()
+		elif _actions.plane_active:
+			_settings_fields.add_child(_spin("Normal X", -64.0, 64.0, 0.05, _actions.plane_normal.x, func(v: float) -> void:
+				_actions.plane_normal.x = v
+				_actions.plane_settings_changed.emit()
+			, "Local-space plane normal X.", &"plane_normal_x"))
+			_settings_fields.add_child(_spin("Normal Y", -64.0, 64.0, 0.05, _actions.plane_normal.y, func(v: float) -> void:
+				_actions.plane_normal.y = v
+				_actions.plane_settings_changed.emit()
+			, "Local-space plane normal Y.", &"plane_normal_y"))
+			_settings_fields.add_child(_spin("Normal Z", -64.0, 64.0, 0.05, _actions.plane_normal.z, func(v: float) -> void:
+				_actions.plane_normal.z = v
+				_actions.plane_settings_changed.emit()
+			, "Local-space plane normal Z.", &"plane_normal_z"))
+			_settings_fields.add_child(_spin("Offset m", -64.0, 64.0, 0.000001, _actions.plane_offset, func(v: float) -> void:
+				_actions.plane_offset = v
+				_actions.plane_settings_changed.emit()
+			, "Metres from the local origin along the normalized normal.", &"plane_offset"))
+			var side := OptionButton.new()
+			side.name = "plane_side"
+			side.add_item("Keep negative", 0)
+			side.add_item("Keep positive", 1)
+			side.select(1 if _actions.plane_keep_positive else 0)
+			side.tooltip_text = "Choose which closed half of the solid remains."
+			side.item_selected.connect(func(index: int) -> void:
+				_actions.plane_keep_positive = index == 1
+				_actions.plane_settings_changed.emit()
+			)
+			_settings_fields.add_child(side)
+			_settings_fields.add_child(_spin("Cap material", 0, 4096, 1, _actions.plane_cap_material, func(v: float) -> void:
+				_actions.plane_cap_material = int(v)
+				_actions.plane_settings_changed.emit()
+			, "Material slot assigned to every new cap.", &"plane_cap_material"))
+			_settings_fields.add_child(_named_action("Apply", "Apply", "Apply the preview as one undoable edit.", func() -> void:
+				_actions.plane_apply_requested.emit()
+			))
+			_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the preview and keep the original solid.", func() -> void:
+				_actions.plane_cancel_requested.emit()
+			))
+		else:
+			for field in _actions.shapes.fields_for(_create_focus):
+				_settings_fields.add_child(_shape_spin(field))
 	elif mode == SlabSelection.Mode.FACE:
-		_settings_title.text = "Distance"
+		_settings_title.text = "Align Face" if _actions.snap_align_active else "Distance"
 		_settings_title.visible = true
-		_settings_fields.add_child(_spin("Distance", SlabActions.EXTRUDE_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
-			_actions.amount = v
-		, "Positive extrudes outward. Negative extrudes inward. Inset uses the absolute value.", &"amount"))
-		_settings_fields.add_child(_uv_toggle())
-		_uv_wrap = HFlowContainer.new()
-		_uv_wrap.name = "UvFields"
-		_uv_wrap.add_theme_constant_override("h_separation", 10)
-		_uv_wrap.visible = _uv_open
-		_uv_wrap.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
-			_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
-		, "", &"uv_scale_x"))
-		_uv_wrap.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
-			_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
-		, "", &"uv_scale_y"))
-		_uv_wrap.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
-			_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
-		, "", &"uv_offset_x"))
-		_uv_wrap.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
-			_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
-		, "", &"uv_offset_y"))
-		_uv_wrap.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
-			_actions.uv_rotation_degrees = v
-		, "", &"uv_rotation"))
-		_settings_fields.add_child(_uv_wrap)
+		if _actions.snap_align_active:
+			_add_snap_align_settings()
+			_uv_wrap = null
+		else:
+			_settings_fields.add_child(_spin("Distance", SlabActions.EXTRUDE_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
+				_actions.amount = v
+			, "Positive extrudes outward. Negative extrudes inward. Inset uses the absolute value.", &"amount"))
+			_settings_fields.add_child(_uv_toggle())
+			_uv_wrap = HFlowContainer.new()
+			_uv_wrap.name = "UvFields"
+			_uv_wrap.add_theme_constant_override("h_separation", 10)
+			_uv_wrap.visible = _uv_open
+			_uv_wrap.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
+				_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
+			, "", &"uv_scale_x"))
+			_uv_wrap.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
+				_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
+			, "", &"uv_scale_y"))
+			_uv_wrap.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
+				_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
+			, "", &"uv_offset_x"))
+			_uv_wrap.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
+				_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
+			, "", &"uv_offset_y"))
+			_uv_wrap.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
+				_actions.uv_rotation_degrees = v
+			, "", &"uv_rotation"))
+			_uv_wrap.add_child(_spin("Pixels / metre", 1, 4096, 1, _actions.uv_pixels_per_meter, func(v: float) -> void:
+				_actions.uv_pixels_per_meter = v
+			, "Density used by Unwrap.", &"uv_pixels_per_meter"))
+			_uv_wrap.add_child(_spin("Texture px", 16, 16384, 1, _actions.uv_texture_resolution, func(v: float) -> void:
+				_actions.uv_texture_resolution = int(v)
+			, "Texture resolution used to convert density into normalized UV scale.", &"uv_texture_resolution"))
+			_settings_fields.add_child(_uv_wrap)
 	else:
-		_settings_title.text = "Amount"
+		_settings_title.text = "Bevel" if _actions.bevel_active else ("Snap to Vertex" if _actions.snap_align_active else "Amount")
 		_settings_title.visible = true
-		_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
-			_actions.amount = v
-		, "", &"amount"))
+		if _actions.bevel_active:
+			_add_bevel_settings()
+		elif _actions.snap_align_active:
+			_add_snap_align_settings()
+		else:
+			_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
+				_actions.amount = v
+			, "", &"amount"))
 		_uv_wrap = null
+	if mode == SlabSelection.Mode.EDGE and not _actions.snap_align_active and not _actions.bevel_active:
+		_settings_fields.add_child(_spin("Cuts", 1, 32, 1, _actions.loop_count, func(v: float) -> void:
+			_actions.loop_count = int(v)
+			_actions.loop_settings_changed.emit()
+		, "Number of evenly spaced loop cuts.", &"loop_count"))
+		_settings_fields.add_child(_spin("Centre %", 0.1, 99.9, 0.1, _actions.loop_position * 100.0, func(v: float) -> void:
+			_actions.loop_position = v / 100.0
+			_actions.loop_settings_changed.emit()
+		, "Centre of the loop group as a percentage along the starting edge.", &"loop_position"))
 	_refresh_material_chips()
+
+
+func _add_array_settings() -> void:
+	var kinds := HBoxContainer.new()
+	kinds.name = "array_mode"
+	kinds.add_theme_constant_override("separation", int(_scaled(6.0)))
+	for entry in [["Linear", SlabActions.ARRAY_LINEAR], ["Radial", SlabActions.ARRAY_RADIAL]]:
+		var kind := Button.new()
+		kind.name = "array_%s" % String(entry[0]).to_lower()
+		kind.text = entry[0]
+		kind.toggle_mode = true
+		kind.button_pressed = _actions.array_mode == entry[1]
+		kind.tooltip_text = "Use %s array spacing." % String(entry[0]).to_lower()
+		kind.add_theme_font_size_override("font_size", _font(14))
+		kind.pressed.connect(func() -> void:
+			_actions.array_mode = entry[1]
+			_actions.array_settings_changed.emit()
+			call_deferred("_refresh_settings")
+		)
+		kinds.add_child(kind)
+	_settings_fields.add_child(kinds)
+	_settings_fields.add_child(_spin("Count", 2, 256, 1, _actions.array_count, func(v: float) -> void:
+		_actions.array_count = int(v)
+		_actions.array_settings_changed.emit()
+	, "Total instances including the selected source.", &"array_count"))
+	if _actions.array_mode == SlabActions.ARRAY_LINEAR:
+		_add_array_vector("Step", "array_step", _actions.array_linear_step, func(value: Vector3) -> void:
+			_actions.array_linear_step = value
+		)
+	else:
+		_add_array_vector("Centre", "array_center", _actions.array_radial_center, func(value: Vector3) -> void:
+			_actions.array_radial_center = value
+		)
+		_add_array_vector("Axis", "array_axis", _actions.array_radial_axis, func(value: Vector3) -> void:
+			_actions.array_radial_axis = value
+		)
+		_settings_fields.add_child(_spin("Angle °", -360.0, 360.0, 0.1, _actions.array_radial_angle_degrees, func(v: float) -> void:
+			_actions.array_radial_angle_degrees = v
+			_actions.array_settings_changed.emit()
+		, "Exact angle between neighbouring instances.", &"array_angle"))
+		var rotate := CheckButton.new()
+		rotate.name = "array_rotate"
+		rotate.text = "Rotate copies"
+		rotate.button_pressed = _actions.array_rotate_copies
+		rotate.tooltip_text = "Turn each copy around the radial axis with its position."
+		rotate.add_theme_font_size_override("font_size", _font(14))
+		rotate.toggled.connect(func(on: bool) -> void:
+			_actions.array_rotate_copies = on
+			_actions.array_settings_changed.emit()
+		)
+		_settings_fields.add_child(rotate)
+	_settings_fields.add_child(_named_action("Apply", "Apply", "Create every previewed copy as one undo action.", func() -> void:
+		_actions.array_apply_requested.emit()
+	))
+	_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the preview without changing the scene.", func() -> void:
+		_actions.array_cancel_requested.emit()
+	))
+
+
+func _add_snap_align_settings() -> void:
+	var hint := Label.new()
+	hint.name = "snap_align_hint"
+	hint.text = "Hover another solid, then click its target vertex." if _actions.snap_align_mode == SlabActions.SNAP_VERTEX else "Hover another solid, then click its target face."
+	hint.tooltip_text = "The cyan preview shows the exact anchor pair or final rigid placement."
+	hint.add_theme_font_size_override("font_size", _font(14))
+	_settings_fields.add_child(hint)
+	if _actions.snap_align_mode == SlabActions.SNAP_FACE:
+		var oppose := CheckButton.new()
+		oppose.name = "align_oppose_normals"
+		oppose.text = "Oppose normals"
+		oppose.button_pressed = _actions.align_oppose_normals
+		oppose.tooltip_text = "Seat faces against each other. Disable to point their normals the same way."
+		oppose.add_theme_font_size_override("font_size", _font(14))
+		oppose.toggled.connect(func(on: bool) -> void:
+			_actions.align_oppose_normals = on
+			_actions.snap_align_settings_changed.emit()
+		)
+		_settings_fields.add_child(oppose)
+	_settings_fields.add_child(_named_action("Cancel", "Clear", "Leave the source unchanged and clear the target preview.", func() -> void:
+		_actions.snap_align_cancel_requested.emit()
+	))
+
+
+func _add_bevel_settings() -> void:
+	_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
+		_actions.amount = v
+		_actions.bevel_settings_changed.emit()
+	, "Exact bevel width in metres.", &"bevel_amount"))
+	_settings_fields.add_child(_spin("Segments", 1, 16, 1, _actions.bevel_segments, func(v: float) -> void:
+		_actions.bevel_segments = int(v)
+		_actions.bevel_settings_changed.emit()
+	, "One is a chamfer; higher values make a rounder profile.", &"bevel_segments"))
+	_settings_fields.add_child(_named_action("Apply", "Apply", "Commit the preview as one undoable bevel.", func() -> void:
+		_actions.bevel_apply_requested.emit()
+	))
+	_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the bevel preview.", func() -> void:
+		_actions.bevel_cancel_requested.emit()
+	))
+
+
+func _add_array_vector(label: String, key_prefix: String, value: Vector3, changed: Callable) -> void:
+	for component in ["x", "y", "z"]:
+		var axis: String = component
+		var index := Vector3.AXIS_X if axis == "x" else (Vector3.AXIS_Y if axis == "y" else Vector3.AXIS_Z)
+		_settings_fields.add_child(_spin("%s %s" % [label, axis.to_upper()], -1024.0, 1024.0, 0.01, value[index], func(v: float) -> void:
+			var next: Vector3 = _actions.array_linear_step
+			if key_prefix == "array_center":
+				next = _actions.array_radial_center
+			elif key_prefix == "array_axis":
+				next = _actions.array_radial_axis
+			next[index] = v
+			changed.call(next)
+			_actions.array_settings_changed.emit()
+		, "Parent-local %s %s component." % [label.to_lower(), axis.to_upper()], StringName("%s_%s" % [key_prefix, axis])))
 
 
 func _refresh_material_chips() -> void:
@@ -863,7 +1048,12 @@ func _named_action(text: String, icon: String, tip: String, on_press: Callable) 
 	button.custom_minimum_size = Vector2(0.0, _scaled(PAINT_ROW_HEIGHT))
 	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	button.set_meta("slab_label", text)
-	button.pressed.connect(on_press)
+	button.pressed.connect(func() -> void:
+		# Modal actions rebuild this settings row. Release keyboard focus first so
+		# editor shortcuts such as Undo work immediately after Apply.
+		button.release_focus()
+		on_press.call()
+	)
 	return button
 
 
@@ -1053,3 +1243,13 @@ func _spins_under(node: Node) -> Array[SpinBox]:
 	for child in node.get_children():
 		out.append_array(_spins_under(child))
 	return out
+
+
+func _sync_loop_values() -> void:
+	if _settings_fields == null:
+		return
+	for spin in _spins_under(_settings_fields):
+		if spin.get_parent().name == "loop_count":
+			spin.set_value_no_signal(_actions.loop_count)
+		elif spin.get_parent().name == "loop_position":
+			spin.set_value_no_signal(_actions.loop_position * 100.0)

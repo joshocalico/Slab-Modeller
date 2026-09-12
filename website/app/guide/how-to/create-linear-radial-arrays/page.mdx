@@ -1,0 +1,26 @@
+export const metadata = { title: "Create linear and radial arrays" };
+
+# Create linear and radial arrays
+
+Use an array to repeat one `SlabSolid` with exact spacing. **Count** ranges from 2 to 256 and includes the selected source: a count of 4 creates 3 copies.
+
+## Preview a linear array
+
+1. Select one solid in Object mode and start **Array**.
+2. Choose **Linear**.
+3. Set **Count** and **Step X/Y/Z**. The source transform and step both use the parent node's local space. The step is applied once between each instance.
+4. Check the ghost preview, then click **Apply** or press Enter.
+
+For example, a step of `(2.5, 0, 0)` places successive instances 2.5 units apart. The preview does not add nodes to the scene.
+
+## Preview a radial array
+
+Choose **Radial**, then set the centre, axis, and angle. The centre, axis, and source origin use the parent node's local space. **Angle** ranges from -360° to 360° and is the exact increment between neighboring instances rather than the total arc. A zero axis cannot produce a preview.
+
+Enable **Rotate copies** to turn each solid around the axis with its position. Disable it to keep every copy parallel to the source.
+
+## Apply or cancel
+
+Apply creates every copy as one undo action. Copies retain the source geometry, materials, collision setting, transform basis, and edited-scene ownership. Escape or **Cancel** clears the preview without adding or changing nodes.
+
+If the source geometry, transform, or parent changes while the preview is open, Slab cancels confirmation instead of committing a stale array.

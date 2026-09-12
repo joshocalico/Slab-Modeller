@@ -214,8 +214,15 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	attrs.uv_axis = UvAxis::Y;
 	attrs.material_slot = 7;
 	attrs.smooth = true;
+	attrs.uv_unwrapped = true;
+	attrs.uv_u = godot::Vector3(0.5f, 0, 0);
+	attrs.uv_v = godot::Vector3(0, 0, 0.5f);
+	attrs.uv_origin = godot::Vector2(0.125f, 0.25f);
 	MeshEdit painted(box);
 	painted.set_attrs(top, attrs);
+	std::vector<EdgeId> edges;
+	box.all_edges(edges);
+	painted.set_uv_seam(edges.front(), true);
 	Mesh mesh;
 	expect(std::move(painted).commit(mesh).ok(), "attrs commit");
 
@@ -237,6 +244,46 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	expect_eq(int(back.uv_axis), int(UvAxis::Y), "uv_axis");
 	expect_eq(int(back.material_slot), 7, "material_slot");
 	expect(back.smooth, "smooth");
+	expect(back.uv_unwrapped && back.uv_u == attrs.uv_u && back.uv_v == attrs.uv_v
+			&& back.uv_origin == attrs.uv_origin, "unfolded face mapping survives reload");
+	expect(loaded.edge_uv_seam(edges.front()), "marked seam survives reload");
+	EmitOut before_emit, after_emit;
+	emit_arrays(mesh, before_emit);
+	emit_arrays(loaded, after_emit);
+	expect(before_emit.uvs == after_emit.uvs, "rendered UVs survive serialization exactly");
+	std::vector<uint8_t> legacy = bytes;
+	legacy[4] = 2;
+	legacy.resize(legacy.size() - size_t(mesh.edge_count() * 2) - size_t(mesh.face_count() * 33));
+	Mesh legacy_mesh;
+	expect(deserialize(legacy, legacy_mesh).ok(), "version two solids still load");
+	expect(!legacy_mesh.attrs(top).uv_unwrapped && !legacy_mesh.edge_uv_seam(edges.front()),
+			"legacy solids retain automatic projection without marked seams");
+}
+
+SLAB_TEST(uv_seam_survives_edge_split_and_reload) {
+	Mesh mesh = make_box();
+	std::vector<EdgeId> edges;
+	mesh.all_edges(edges);
+	VertexId a, b;
+	mesh.edge_vertices(edges.front(), a, b);
+	const IVec3 pa = mesh.position_i(a), pb = mesh.position_i(b);
+	MeshEdit edit(mesh);
+	edit.set_uv_seam(edges.front(), true);
+	const VertexId midpoint = edit.split_edge(edges.front(),
+			IVec3{(pa.x + pb.x) / 2, (pa.y + pb.y) / 2, (pa.z + pb.z) / 2});
+	expect(midpoint.slot != INVALID_IDX, "split marked edge");
+	expect(std::move(edit).commit(mesh).ok(), "marked split commits");
+	Mesh loaded;
+	expect(deserialize(serialize(mesh), loaded).ok(), "split seam round-trips");
+	loaded.all_edges(edges);
+	int marked = 0;
+	for (const EdgeId edge : edges) if (loaded.edge_uv_seam(edge)) marked++;
+	expect_eq(marked, 2, "both child edges retain the seam");
+	auto damaged = serialize(mesh);
+	damaged.pop_back();
+	const auto before = serialize(loaded);
+	expect(!deserialize(damaged, loaded).ok(), "truncated UV extension is refused");
+	expect(serialize(loaded) == before, "bad UV data leaves target unchanged");
 }
 
 SLAB_TEST(serialize_round_trips_a_material_slot_past_255) {
