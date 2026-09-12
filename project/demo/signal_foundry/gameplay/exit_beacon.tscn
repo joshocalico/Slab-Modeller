@@ -1,0 +1,74 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://demo/signal_foundry/gameplay/exit_beacon.gd" id="1"]
+
+[sub_resource type="BoxShape3D" id="TriggerShape"]
+size = Vector3(2.4, 2.8, 1.2)
+
+[sub_resource type="StandardMaterial3D" id="FrameMaterial"]
+albedo_color = Color(0.06, 0.09, 0.13, 1)
+metallic = 0.85
+roughness = 0.25
+
+[sub_resource type="StandardMaterial3D" id="LockedMaterial"]
+shading_mode = 0
+transparency = 1
+albedo_color = Color(1, 0.12, 0.06, 0.45)
+emission_enabled = true
+emission = Color(1, 0.03, 0.01, 1)
+emission_energy_multiplier = 2.0
+
+[sub_resource type="StandardMaterial3D" id="PoweredMaterial"]
+shading_mode = 0
+transparency = 1
+albedo_color = Color(0.05, 1, 0.65, 0.5)
+emission_enabled = true
+emission = Color(0.02, 1, 0.46, 1)
+emission_energy_multiplier = 3.0
+
+[sub_resource type="BoxMesh" id="FrameMesh"]
+material = SubResource("FrameMaterial")
+size = Vector3(0.18, 2.8, 0.32)
+
+[sub_resource type="QuadMesh" id="FieldMesh"]
+size = Vector2(2.2, 2.55)
+
+[node name="ExitBeacon" type="Area3D"]
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+position = Vector3(0, 1.4, 0)
+shape = SubResource("TriggerShape")
+
+[node name="Visual" type="Node3D" parent="."]
+position = Vector3(0, 1.4, 0)
+
+[node name="Left" type="MeshInstance3D" parent="Visual"]
+position = Vector3(-1.15, 0, 0)
+mesh = SubResource("FrameMesh")
+
+[node name="Right" type="MeshInstance3D" parent="Visual"]
+position = Vector3(1.15, 0, 0)
+mesh = SubResource("FrameMesh")
+
+[node name="Top" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 1.31, 0)
+rotation = Vector3(0, 0, 1.5708)
+mesh = SubResource("FrameMesh")
+
+[node name="Locked" type="MeshInstance3D" parent="Visual"]
+material_override = SubResource("LockedMaterial")
+mesh = SubResource("FieldMesh")
+
+[node name="Powered" type="MeshInstance3D" parent="Visual"]
+visible = false
+material_override = SubResource("PoweredMaterial")
+mesh = SubResource("FieldMesh")
+
+[node name="Label3D" type="Label3D" parent="."]
+position = Vector3(0, 3.15, 0)
+text = "EXIT\n3 CELLS"
+font_size = 34
+outline_size = 8
+billboard = 1
+no_depth_test = true

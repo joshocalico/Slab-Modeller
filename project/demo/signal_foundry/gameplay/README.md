@@ -4,6 +4,18 @@ Reusable first-person controller. **Do not generate level layout here.** Instanc
 
 **Resource:** `res://demo/signal_foundry/gameplay/player.tscn`
 
+## Gameplay pieces
+
+Instance these scenes wherever they make sense in the editor. Their origins sit on the floor and they need no signal wiring:
+
+| Scene | Behavior |
+| --- | --- |
+| `res://demo/signal_foundry/gameplay/energy_cell.tscn` | Floating cyan pickup. Each instance adds one energy cell, flashes HUD feedback, then disappears. |
+| `res://demo/signal_foundry/gameplay/checkpoint_beacon.tscn` | Orange beacon that turns green on contact. R and fall recovery subsequently return the player to its origin and orientation. Set `checkpoint_title` in the Inspector for a useful HUD name. |
+| `res://demo/signal_foundry/gameplay/exit_beacon.tscn` | Red exit field that reports missing cells, or turns green and reports completion once powered. Its `required_cells` Inspector value defaults to 3. |
+
+The compact player HUD shows collected energy, the active checkpoint, and short interaction notices. Progress is session-local and requires no autoload or level script.
+
 ## Controls
 
 | Input | Action |
@@ -42,4 +54,5 @@ Headless check (does not load or write `signal_foundry.tscn`):
 
 ```sh
 scripts/godot --headless --path project --script res://demo/signal_foundry/gameplay/check_player.gd
+scripts/godot --headless --path project --script res://demo/signal_foundry/gameplay/check_interactions.gd
 ```

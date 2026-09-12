@@ -27,8 +27,14 @@ var pitch := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
 var auto_run := false
+var energy_cells := 0
+var checkpoint_name := "START"
 
 @onready var camera: Camera3D = $Camera3D
+@onready var objective_label: Label = $HUD/Margin/Rows/Objective
+@onready var notice_label: Label = $HUD/Margin/Rows/Notice
+
+var notice_time := 0.0
 
 
 func _ready() -> void:
@@ -54,6 +60,7 @@ func _ready() -> void:
 	spawn_pitch = camera.rotation.x
 	pitch = spawn_pitch
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_update_hud()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -81,6 +88,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(dt: float) -> void:
+	if notice_time > 0.0:
+		notice_time = maxf(0.0, notice_time - dt)
+		if notice_time == 0.0:
+			notice_label.text = ""
 	if Input.is_action_just_pressed("foundry_reset"):
 		_reset_to_spawn()
 		return
@@ -138,6 +149,41 @@ func _reset_to_spawn() -> void:
 	coyote = 0.0
 	jump_buffer = 0.0
 	auto_run = false
+	show_notice("RESPAWNED AT %s" % checkpoint_name)
+
+
+func collect_energy_cell() -> void:
+	energy_cells += 1
+	_update_hud()
+	show_notice("ENERGY CELL ACQUIRED  ·  %d / 3" % mini(energy_cells, 3))
+
+
+func activate_checkpoint(next_transform: Transform3D, title: String = "CHECKPOINT") -> void:
+	spawn_transform = next_transform
+	spawn_pitch = 0.0
+	checkpoint_name = title.to_upper()
+	_update_hud()
+	show_notice("%s ONLINE" % checkpoint_name)
+
+
+func has_exit_power(required_cells: int = 3) -> bool:
+	return energy_cells >= required_cells
+
+
+func show_exit_status(required_cells: int = 3) -> void:
+	if has_exit_power(required_cells):
+		show_notice("EXIT POWERED  ·  FOUNDRY COMPLETE", 4.0)
+	else:
+		show_notice("EXIT LOCKED  ·  %d MORE CELL%s" % [required_cells - energy_cells, "" if required_cells - energy_cells == 1 else "S"], 3.0)
+
+
+func show_notice(message: String, duration: float = 2.2) -> void:
+	notice_label.text = message
+	notice_time = duration
+
+
+func _update_hud() -> void:
+	objective_label.text = "ENERGY  %d / 3    ·    CHECKPOINT  %s" % [mini(energy_cells, 3), checkpoint_name]
 
 
 func _bind_action(action: String, code: Key) -> void:
