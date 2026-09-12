@@ -83,7 +83,7 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	gizmo.clear()
 	var solid := gizmo.get_node_3d()
-	if solid == null or not solid.has_method("get_edges"):
+	if solid == null or not is_instance_valid(solid) or not solid.has_method("get_edges"):
 		return
 	var wire := PackedVector3Array()
 	for edge in solid.get_edges():

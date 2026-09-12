@@ -105,6 +105,7 @@ func adopt_host_selection() -> void:
 
 
 func gizmo_targets() -> Array[Node3D]:
+	_selection.drop_invalid()
 	var seen: Dictionary = {}
 	var current: Array[Node3D] = []
 	for node in _selection.objects:
@@ -392,11 +393,15 @@ func _focus(solid: Node3D, additive: bool) -> void:
 	adopt_host_selection()
 
 
-func _touch_gizmo(node: Node3D, seen: Dictionary, next: Array[Node3D]) -> void:
-	if node == null or not is_instance_valid(node) or seen.has(node):
+func _touch_gizmo(node: Variant, seen: Dictionary, next: Array[Node3D]) -> void:
+	# Typed Node3D args throw on a previously-freed Object before is_instance_valid runs.
+	if node == null or not is_instance_valid(node) or not (node is Node3D):
 		return
-	seen[node] = true
-	next.append(node)
+	var solid: Node3D = node
+	if seen.has(solid):
+		return
+	seen[solid] = true
+	next.append(solid)
 
 
 static func screen_of(event: InputEventMouseButton) -> Vector2:

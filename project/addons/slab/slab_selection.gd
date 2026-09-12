@@ -48,10 +48,12 @@ var solid: Node3D:
 
 
 static func is_solid(node: Object) -> bool:
-	return node != null and node.is_class(SOLID_CLASS)
+	return node != null and is_instance_valid(node) and node.is_class(SOLID_CLASS)
 
 
 static func owning_solid(node: Object) -> Node3D:
+	if node == null or not is_instance_valid(node):
+		return null
 	var current: Node = node as Node
 	while current != null:
 		if is_solid(current):
@@ -60,9 +62,22 @@ static func owning_solid(node: Object) -> Node3D:
 	return null
 
 
+func drop_invalid() -> void:
+	var kept: Array[Node3D] = []
+	for node in objects:
+		if node != null and is_instance_valid(node):
+			kept.append(node)
+	objects = kept
+	if hover_solid != null and not is_instance_valid(hover_solid):
+		hover_solid = null
+		hover_id = 0
+
+
 func set_objects(nodes: Array) -> void:
 	var kept: Array[Node3D] = []
 	for node in nodes:
+		if node == null or not is_instance_valid(node):
+			continue
 		var solid: Node3D = owning_solid(node)
 		if solid != null and not kept.has(solid):
 			kept.append(solid)
@@ -97,11 +112,18 @@ func clear_ids() -> void:
 	set_ids(PackedInt64Array())
 
 
-func set_hover(next_solid: Node3D, next_id: int) -> void:
-	if hover_solid == next_solid and hover_id == next_id:
+func set_hover(next_solid: Variant, next_id: int) -> void:
+	var solid: Node3D = null
+	if next_solid != null and is_instance_valid(next_solid) and next_solid is Node3D:
+		solid = next_solid
+	var id: int = next_id if solid != null else 0
+	if hover_solid != null and not is_instance_valid(hover_solid):
+		hover_solid = null
+		hover_id = 0
+	if hover_solid == solid and hover_id == id:
 		return
-	hover_solid = next_solid
-	hover_id = next_id
+	hover_solid = solid
+	hover_id = id
 	hover_changed.emit()
 
 
@@ -114,6 +136,7 @@ func mode_label() -> String:
 
 
 func describe() -> String:
+	drop_invalid()
 	if objects.is_empty():
 		return "No solid selected."
 	if mode == Mode.OBJECT:

@@ -228,6 +228,30 @@ func case_gizmo_targets_include_the_node_that_stopped_being_hovered() -> void:
 	expect(not _session.gizmo_targets().has(box), "and then it drops out of the redraw set")
 
 
+func case_gizmo_targets_tolerate_a_freed_selected_solid() -> void:
+	var hub: Node3D = _world.add_solid("Hub", Vector3(2, 2, 2), Vector3(8, 0, 0))
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box, hub])
+	_session.adopt_host_selection()
+	_session.state().mode = SlabSelection.Mode.OBJECT
+	_session.state().set_hover(hub, 0)
+	var mat := StandardMaterial3D.new()
+	box.set("materials", [mat])
+	hub.set("materials", [mat])
+	expect(_session.gizmo_targets().has(hub), "the hovered extra solid is a redraw target")
+	hub.free()
+	var first: Array = _session.gizmo_targets()
+	var live_names := PackedStringArray()
+	for node in first:
+		live_names.append(node.name)
+	expect(not live_names.has("Hub"), "a freed solid is dropped from redraw targets, got %s" % live_names)
+	expect(live_names.has("Box"), "the remaining selected solid still redraws")
+	var second: Array = _session.gizmo_targets()
+	expect(second.has(box), "a second pass after a free still redraws the live solid")
+	expect(_session.state().describe() == "Box selected.",
+		"describe does not read a freed node, got %s" % _session.state().describe())
+
+
 func case_every_verdict_maps_to_an_editor_constant() -> void:
 	expect(int(SlabViewport.Verdict.PASS) == 0, "PASS is 0, matching AFTER_GUI_INPUT_PASS")
 	expect(int(SlabViewport.Verdict.STOP) == 1, "STOP is 1, matching AFTER_GUI_INPUT_STOP")
