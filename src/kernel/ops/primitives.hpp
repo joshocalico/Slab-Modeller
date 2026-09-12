@@ -16,7 +16,7 @@ static constexpr int CYLINDER_SIDES_MAX = 32;
 static constexpr int ARCH_SEGMENTS_MIN = 4;
 static constexpr int ARCH_SEGMENTS_MAX = 32;
 static constexpr double ARCH_ARC_MIN = Math_PI / 12.0;
-static constexpr double ARCH_ARC_MAX = Math_TAU - ARCH_ARC_MIN;
+static constexpr double ARCH_ARC_MAX = Math_TAU;
 
 MeshFault box(MeshEdit &p_edit, const godot::Vector3 &p_size);
 MeshFault plane(MeshEdit &p_edit, const godot::Vector2 &p_size, float p_thickness);

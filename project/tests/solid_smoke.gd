@@ -155,6 +155,12 @@ func _check_arch() -> void:
 	_expect(float(band.call("volume")) > 0.0, "the 90 degree arch has positive volume")
 	_expect(band.get("data") != explicit.get("data"), "the arc changes the mesh")
 
+	var ring: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(ring)
+	_expect(ring.call("make_arch", 4, 1, 8, 0.5, TAU) == 0, "a 360 degree arch builds")
+	_expect(ring.call("face_count") == 32, "an 8 segment full arch has 32 faces")
+	_expect(float(ring.call("volume")) > 0.0, "the 360 degree arch has positive volume")
+
 	_expect(band.call("make_arch", 2, 2, 8, 1.0) != 0, "thickness at half the span is refused")
 
 

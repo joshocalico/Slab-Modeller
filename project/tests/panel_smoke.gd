@@ -18,7 +18,7 @@ const DEFAULTS: Dictionary = {
 
 const RANGES: Dictionary = {
 	&"stair_steps": [1.0, 32.0], &"cylinder_sides": [3.0, 32.0], &"arch_segments": [4.0, 32.0],
-	&"arch_arc": [15.0, 345.0], &"arch_thickness": [0.05, 8.0],
+	&"arch_arc": [15.0, 360.0], &"arch_thickness": [0.05, 8.0],
 	&"size_x": [0.05, 64.0], &"size_y": [0.05, 64.0], &"size_z": [0.05, 64.0],
 }
 
@@ -201,7 +201,7 @@ func _check_fields(shapes: RefCounted) -> void:
 	shapes.set_value(&"stair_steps", -4.0)
 	_expect(shapes.value_of(&"stair_steps") == 1.0, "set_value clamps low, got %s" % shapes.value_of(&"stair_steps"))
 	shapes.set_value(&"arch_arc", 400.0)
-	_expect(shapes.value_of(&"arch_arc") == 345.0, "arc clamps to 345, got %s" % shapes.value_of(&"arch_arc"))
+	_expect(shapes.value_of(&"arch_arc") == 360.0, "arc clamps to 360, got %s" % shapes.value_of(&"arch_arc"))
 	shapes.set_value(&"no_such_key", 5.0)
 	_expect(shapes.fields().size() == SlabShapes.PARAMS.size(), "an unknown key does not grow the store")
 	shapes.set_value(&"stair_steps", 8.0)

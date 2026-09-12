@@ -285,6 +285,46 @@ MeshFault arch(MeshEdit &p_edit, float p_span, float p_depth, int p_segments, fl
 	if (outer_r == 0 || inner_r <= 0) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
+	if (arc == Math_TAU) {
+		std::vector<IVec3> outer(segments);
+		std::vector<IVec3> inner(segments);
+		for (int i = 0; i < segments; i++) {
+			const double angle = Math_PI * 0.5 - Math_TAU * double(i) / double(segments);
+			outer[i] = _polar(outer_r, angle);
+			inner[i] = _polar(inner_r, angle);
+		}
+		int32_t min_x = outer[0].x;
+		int32_t min_y = outer[0].y;
+		for (const IVec3 &p : outer) {
+			min_x = std::min(min_x, p.x);
+			min_y = std::min(min_y, p.y);
+		}
+		for (int i = 0; i < segments; i++) {
+			outer[i].x -= min_x;
+			outer[i].y -= min_y;
+			inner[i].x -= min_x;
+			inner[i].y -= min_y;
+		}
+
+		const IVec3 depth{ 0, 0, sz.z };
+		const auto behind = [&](const IVec3 &p_point) {
+			return IVec3{ p_point.x, p_point.y, depth.z };
+		};
+		std::vector<std::vector<IVec3>> faces;
+		faces.reserve(size_t(segments) * 4);
+		for (int i = 0; i < segments; i++) {
+			const int next = (i + 1) % segments;
+			const IVec3 outer_back = behind(outer[i]);
+			const IVec3 outer_next_back = behind(outer[next]);
+			const IVec3 inner_back = behind(inner[i]);
+			const IVec3 inner_next_back = behind(inner[next]);
+			faces.push_back({ outer[i], outer[next], inner[next], inner[i] });
+			faces.push_back({ outer_back, inner_back, inner_next_back, outer_next_back });
+			faces.push_back({ outer[i], outer_back, outer_next_back, outer[next] });
+			faces.push_back({ inner[i], inner[next], inner_next_back, inner_back });
+		}
+		return p_edit.assemble(faces);
+	}
 	const double half = arc * 0.5;
 	const double hi = Math_PI * 0.5 + half;
 	const double lo = Math_PI * 0.5 - half;

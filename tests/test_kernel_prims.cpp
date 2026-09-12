@@ -290,6 +290,24 @@ SLAB_TEST(arch_over_180_is_a_horseshoe_and_still_one_solid) {
 	expect_near(double(aabb.size.z), 1.0, unit, "arch 270 aabb depth");
 }
 
+SLAB_TEST(arch_at_360_degrees_is_a_closed_annular_solid) {
+	const Mesh mesh = build_arch(4.0f, 1.0f, 8, 0.5f, Math_TAU, "arch 360");
+	expect_eq(mesh.vertex_count(), 32, "arch 360 verts");
+	expect_eq(mesh.face_count(), 32, "arch 360 faces");
+	expect_eq(euler(mesh), 0, "arch 360 euler");
+	expect(mesh.signed_volume() > 0.0, "arch 360 volume positive");
+	expect_near(mesh.signed_volume(), 4.949219, 1e-5, "arch 360 volume");
+	expect(validate(mesh).ok(), "arch 360 validate");
+	const double unit = 1.0 / double(LATTICE);
+	const godot::AABB aabb = mesh.local_aabb();
+	expect_near(double(aabb.position.x), 0.0, unit, "arch 360 aabb x");
+	expect_near(double(aabb.position.y), 0.0, unit, "arch 360 aabb y");
+	expect_near(double(aabb.position.z), 0.0, unit, "arch 360 aabb z");
+	expect_near(double(aabb.size.x), 4.0, unit, "arch 360 aabb width");
+	expect_near(double(aabb.size.y), 4.0, unit, "arch 360 aabb height");
+	expect_near(double(aabb.size.z), 1.0, unit, "arch 360 aabb depth");
+}
+
 SLAB_TEST(arch_arc_clamps_to_the_representable_band) {
 	const Mesh low = build_arch(4.0f, 1.0f, 8, 0.5f, 0.0, "arch arc 0");
 	const Mesh narrowest = build_arch(4.0f, 1.0f, 8, 0.5f, ops::ARCH_ARC_MIN, "arch arc min");

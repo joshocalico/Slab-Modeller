@@ -2,7 +2,7 @@
 extends RefCounted
 
 const ARC_MIN_DEG := 15.0
-const ARC_MAX_DEG := 360.0 - ARC_MIN_DEG
+const ARC_MAX_DEG := 360.0
 
 const PARAMS: Dictionary = {
 	&"size_x": { "label": "Width", "about": "Width in metres", "min": 0.05, "max": 64.0, "step": 0.05, "default": 2.0, "phrase": "%s m wide" },
