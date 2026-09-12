@@ -24,6 +24,7 @@ func _boot() -> void:
 		_finish()
 		return
 	_check_uv_matches_emit()
+	_check_texture_resolution_coherence()
 	_check_uv_modifier_dispatch()
 	_check_uv_transform_and_wrap()
 	_check_numeric_uv_apply_and_selection_sync()
@@ -55,6 +56,46 @@ func _check_uv_matches_emit() -> void:
 	_expect(_uv_matches_emit(mesh, corner, mapped), "GDScript UV matches emit.cpp, %s" % mapped)
 	var attrs: Dictionary = solid.call("face_uv", top)
 	_expect(attrs.has("slot"), "face_uv reports the material slot")
+	solid.free()
+
+
+func _check_texture_resolution_coherence() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.enter()
+	var flat := StandardMaterial3D.new()
+	flat.albedo_color = Color(0.2, 0.3, 0.4)
+	solid.set("materials", [flat])
+	actions.material_slot = 0
+	paint.rebind()
+	actions.uv_texture_resolution = 1024
+	paint.make_unique()
+	_expect(paint.image().get_width() == 1024 and paint.image().get_height() == 1024,
+		"Make Unique allocates a blank texture at Texture px")
+
+	var existing_image := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	existing_image.fill(Color(0.7, 0.1, 0.2))
+	var existing := StandardMaterial3D.new()
+	existing.albedo_texture = ImageTexture.create_from_image(existing_image)
+	solid.set("materials", [existing])
+	actions.material_slot = 0
+	actions.uv_texture_resolution = 4096
+	paint.rebind()
+	paint.make_unique()
+	_expect(paint.image().get_width() == 32 and paint.image().get_height() == 32,
+		"Make Unique preserves existing artwork dimensions")
+	_expect(actions.uv_texture_resolution == 32,
+		"Texture px reflects the bound artwork width for coherent unwrap density")
+	paint.exit()
 	solid.free()
 
 

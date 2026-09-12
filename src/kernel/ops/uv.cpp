@@ -264,32 +264,88 @@ UvUnwrapResult unwrap_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces,
 		}
 	}
 
-	// Pack seam-separated islands along U with one texel of padding.
+	// Pack seam-separated island bounds into one texture without changing scale.
 	std::vector<float> min_u(island, 1e30f), max_u(island, -1e30f);
+	std::vector<float> min_v(island, 1e30f), max_v(island, -1e30f);
 	for (const FaceId face : p_faces) {
 		const Mapping &mapping = maps.at(face.slot);
 		std::vector<VertexId> corners;
 		mesh.face_corners(face, corners);
 		for (const VertexId vertex : corners) {
 			const float u = map_point(mapping, mesh.position(vertex)).x;
+			const float v = map_point(mapping, mesh.position(vertex)).y;
 			min_u[mapping.island] = std::min(min_u[mapping.island], u);
 			max_u[mapping.island] = std::max(max_u[mapping.island], u);
+			min_v[mapping.island] = std::min(min_v[mapping.island], v);
+			max_v[mapping.island] = std::max(max_v[mapping.island], v);
 		}
 	}
-	std::vector<float> shift(island, 0.0f);
-	float cursor = 0.0f;
-	for (int i = 0; i < island; i++) {
-		shift[i] = cursor - min_u[i];
-		cursor += max_u[i] - min_u[i] + 1.0f / float(p_texture_resolution);
+	struct Placement { godot::Vector2 offset; bool rotated = false; };
+	std::vector<Placement> placements(island);
+	std::vector<int> order(island);
+	for (int i = 0; i < island; i++) order[i] = i;
+	std::sort(order.begin(), order.end(), [&](int a, int b) {
+		return std::max(max_u[a] - min_u[a], max_v[a] - min_v[a]) >
+				std::max(max_u[b] - min_u[b], max_v[b] - min_v[b]);
+	});
+	auto pack_at_resolution = [&](int p_resolution, std::vector<Placement> *r_placements) {
+		const float coordinate_scale = float(p_texture_resolution) / float(p_resolution);
+		const float padding = 1.0f / float(p_resolution);
+		float x = 0.0f;
+		float y = 0.0f;
+		float row_height = 0.0f;
+		for (const int index : order) {
+			const float source_w = (max_u[index] - min_u[index]) * coordinate_scale;
+			const float source_h = (max_v[index] - min_v[index]) * coordinate_scale;
+			bool rotated = false;
+			float width = source_w;
+			float height = source_h;
+			if ((width > 1.0f || (x + width > 1.0f && x + source_h <= 1.0f)) && source_h <= 1.0f) {
+				rotated = true;
+				width = source_h;
+				height = source_w;
+			}
+			if (x > 0.0f && x + width > 1.0f + 1e-6f) {
+				x = 0.0f;
+				y += row_height + padding;
+				row_height = 0.0f;
+				rotated = source_w < source_h;
+				width = rotated ? source_h : source_w;
+				height = rotated ? source_w : source_h;
+			}
+			if (width > 1.0f + 1e-6f || y + height > 1.0f + 1e-6f) return false;
+			if (r_placements != nullptr) {
+				(*r_placements)[index].rotated = rotated;
+				const godot::Vector2 source_min = rotated ? godot::Vector2(min_v[index], -max_u[index]) :
+						godot::Vector2(min_u[index], min_v[index]);
+				(*r_placements)[index].offset = godot::Vector2(x, y) - source_min;
+			}
+			x += width + padding;
+			row_height = std::max(row_height, height);
+		}
+		return true;
+	};
+	if (!pack_at_resolution(p_texture_resolution, &placements)) {
+		result.fault = invalid_selection();
+		result.atlas_overflow = true;
+		int candidate = p_texture_resolution;
+		do {
+			if (candidate > 1 << 28) break;
+			candidate *= 2;
+		} while (!pack_at_resolution(candidate, nullptr));
+		result.suggested_texture_resolution = candidate;
+		return result;
 	}
 	for (const EdgeId edge : result.auto_seams) p_edit.set_uv_seam(edge, true);
 	for (const FaceId face : p_faces) {
 		const Mapping &mapping = maps.at(face.slot);
+		const Placement &placement = placements[mapping.island];
 		FaceAttrs attrs = mesh.attrs(face);
 		attrs.uv_unwrapped = true;
-		attrs.uv_u = mapping.u;
-		attrs.uv_v = mapping.v;
-		attrs.uv_origin = mapping.origin + godot::Vector2(shift[mapping.island], 0.0f);
+		attrs.uv_u = placement.rotated ? mapping.v : mapping.u;
+		attrs.uv_v = placement.rotated ? -mapping.u : mapping.v;
+		attrs.uv_origin = (placement.rotated ? godot::Vector2(mapping.origin.y, -mapping.origin.x) : mapping.origin) +
+				placement.offset;
 		attrs.uv_scale = godot::Vector2(1, 1);
 		attrs.uv_offset = godot::Vector2(0, 0);
 		attrs.uv_rotation = 0.0f;

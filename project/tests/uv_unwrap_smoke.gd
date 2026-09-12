@@ -31,12 +31,25 @@ func _run() -> void:
 	var after_seam: PackedByteArray = solid.get("data")
 	check(after_seam != before_seam, "serialized data captures seam mutation")
 
-	var result: Dictionary = solid.call("unwrap_uv", sides, 256.0, 1024)
+	var overflow_before: PackedByteArray = solid.get("data")
+	var overflow: Dictionary = solid.call("unwrap_uv", sides, 512.0, 1024)
+	check(bool(overflow.get("atlas_overflow", false)), "oversized fixed-density atlas reports overflow")
+	check(int(overflow.get("suggested_texture_resolution", 0)) > 1024, "overflow suggests a larger texture")
+	check(solid.get("data") == overflow_before, "atlas overflow is atomic")
+	var result: Dictionary = solid.call("unwrap_uv", sides, 128.0, 2048)
 	check(int(result.get("error", -1)) == OK, "curved patch unwraps")
 	check(int(result.get("islands", 0)) >= 1, "unwrap reports its island count")
 	check(result.has("auto_seams"), "unwrap reports automatic cuts explicitly")
 	var unwrapped_data: PackedByteArray = solid.get("data")
 	check(unwrapped_data != after_seam, "serialized data captures unfolded mappings")
+	var centre_pixels: Dictionary = {}
+	for selected_face in sides:
+		for uv in PaintUv.face_uvs(solid, selected_face):
+			check(uv.x >= -0.0001 and uv.y >= -0.0001 and uv.x <= 1.0001 and uv.y <= 1.0001,
+				"unmodified paint sample stays inside one texture tile")
+		var centre_uv := PaintUv.point_uv(solid, selected_face, solid.call("face_centroid", selected_face))
+		centre_pixels[PaintUv.uv_to_pixel(centre_uv, 2048, 2048)] = true
+	check(centre_pixels.size() == sides.size(), "each cylinder face centre occupies a unique painter texel")
 
 	var face: int = sides[3]
 	check(solid.call("set_face_uv", PackedInt64Array([face]), Vector2(1.75, 0.8), Vector2(0.13, -0.27), 0.41) == OK,
@@ -71,9 +84,16 @@ func _run() -> void:
 	shared_selection.set_ids(sides)
 	var reports: Array[String] = []
 	shared_actions.reported.connect(func(text: String) -> void: reports.append(text))
+	var before_shared_overflow: PackedByteArray = clone.get("data")
+	shared_actions.run("uv_unwrap")
+	check(not reports.is_empty() and reports.back().contains("too small") and reports.back().contains("Pixels / metre") and reports.back().contains("Texture px"),
+		"shared Unwrap turns atlas overflow into actionable density and resolution guidance")
+	check(clone.get("data") == before_shared_overflow, "shared atlas overflow leaves UV data unchanged")
+	shared_actions.uv_pixels_per_meter = 128.0
+	shared_actions.uv_texture_resolution = 2048
 	shared_actions.run("uv_unwrap")
 	check(not reports.is_empty() and reports.back().contains("island") and reports.back().contains("automatic cut"),
-		"shared Unwrap command reports islands and automatic cuts")
+		"shared Unwrap recovery reports islands and automatic cuts")
 
 	var undo := Undo.new()
 	undo.create_action("Unwrap UV")

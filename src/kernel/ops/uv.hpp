@@ -11,6 +11,8 @@ struct UvUnwrapResult {
 	MeshFault fault;
 	std::vector<EdgeId> auto_seams;
 	int island_count = 0;
+	bool atlas_overflow = false;
+	int suggested_texture_resolution = 0;
 
 	bool ok() const { return fault.ok(); }
 };

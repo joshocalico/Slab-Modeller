@@ -128,7 +128,7 @@ SLAB_TEST(uv_unwrap_marked_hinge_splits_two_faces_into_packed_islands) {
 	FaceId b;
 	edit.scratch().edge_faces(middle, a, b);
 	edit.set_uv_seam(middle, true);
-	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, { a, b }, 64.0f, 256);
+	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, { a, b }, 30.0f, 256);
 	expect(result.ok(), "marked-seam patch unwraps");
 	expect_eq(result.island_count, 2, "marked shared hinge creates two islands");
 	expect(result.auto_seams.empty(), "authored seam is not reported as automatic");
@@ -147,7 +147,7 @@ SLAB_TEST(uv_unwrap_curved_cylinder_explicitly_cuts_inconsistent_cycle) {
 	const std::vector<FaceId> sides = cylinder_sides(cylinder);
 	expect_eq(int(sides.size()), 8, "eight hinged side faces");
 	MeshEdit edit(cylinder);
-	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, sides, 100.0f, 1000);
+	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, sides, 64.0f, 1024);
 	expect(result.ok(), "curved side strip unwraps");
 	expect(!result.auto_seams.empty(), "closing cycle receives an explicit automatic seam");
 	for (const EdgeId seam : result.auto_seams) expect(edit.scratch().edge_uv_seam(seam), "automatic cut is stored on mesh");
@@ -169,7 +169,7 @@ SLAB_TEST(uv_unwrap_branching_box_net_does_not_silently_overlap_faces) {
 	std::vector<FaceId> faces;
 	source.all_faces(faces);
 	MeshEdit edit(source);
-	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, faces, 128.0f, 512);
+	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, faces, 64.0f, 1024);
 	expect(result.ok(), "closed branching box surface unwraps");
 	expect(!result.auto_seams.empty(), "box cycle or overlapping branches receive explicit cuts");
 	for (const EdgeId edge : result.auto_seams) expect(edit.scratch().edge_uv_seam(edge), "each reported box cut is stored");
@@ -183,4 +183,44 @@ SLAB_TEST(uv_unwrap_branching_box_net_does_not_silently_overlap_faces) {
 					"a box face centre is not hidden under another island");
 		}
 	}
+}
+
+SLAB_TEST(uv_unwrap_packs_every_corner_inside_the_single_texture) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	MeshEdit edit(source);
+	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, faces, 64.0f, 1024);
+	expect(result.ok(), "low-density box atlas fits");
+	for (const FaceId face : faces) {
+		std::vector<VertexId> corners;
+		edit.scratch().face_corners(face, corners);
+		for (const VertexId corner : corners) {
+			const godot::Vector2 uv = uv_at(edit.scratch(), face, corner);
+			expect(uv.x >= -0.00001f && uv.y >= -0.00001f && uv.x <= 1.00001f && uv.y <= 1.00001f,
+					"packed corner remains in the non-wrapping atlas");
+		}
+	}
+}
+
+SLAB_TEST(uv_unwrap_atlas_overflow_is_atomic_and_actionable) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	std::vector<EdgeId> source_edges;
+	source.all_edges(source_edges);
+	MeshEdit marked(source);
+	for (const EdgeId edge : source_edges) marked.set_uv_seam(edge, true);
+	expect(std::move(marked).commit(source).ok(), "prepare six independent face islands");
+	MeshEdit edit(source);
+	const ops::UvUnwrapResult result = ops::unwrap_uv(edit, faces, 256.0f, 1024);
+	expect(!result.ok() && result.atlas_overflow, "oversized multi-island atlas is explicitly refused");
+	expect(result.suggested_texture_resolution > 1024, "overflow suggests a larger texture");
+	for (const FaceId face : faces) expect(!edit.scratch().attrs(face).uv_unwrapped, "overflow changes no face mapping");
+	std::vector<EdgeId> edges;
+	edit.scratch().all_edges(edges);
+	for (const EdgeId edge : edges) expect(edit.scratch().edge_uv_seam(edge), "overflow preserves authored seam state");
+	MeshEdit retry(source);
+	const ops::UvUnwrapResult retried = ops::unwrap_uv(retry, faces, 256.0f, result.suggested_texture_resolution);
+	expect(retried.ok(), "retry at the suggested resolution demonstrably fits every island");
 }

@@ -12,6 +12,8 @@ Use this when adjoining faces should paint continuously and keep texture pixels 
 
 Slab unfolds across edges that are not seams. Marked seams start separate islands. It packs the islands apart with a one-pixel gap.
 
+Every island must fit once inside the texture tile. Slab never shrinks the requested density or relies on texture wrapping to hide overlap. If the atlas is too large, the solid stays unchanged and Slab asks for a larger texture or a lower pixels-per-metre value.
+
 A closed or branching patch sometimes cannot lie flat without crossing itself. Slab adds seams where a cycle cannot close or two branches would overlap, and reports the automatically cut edges. Those seam marks persist with the solid, so review them before painting.
 
 Unwrap resets Repeat U, Repeat V, Offset and Rotation so the requested density is exact. Apply those placement controls afterward if the island needs to move, turn or repeat.
@@ -19,3 +21,5 @@ Unwrap resets Repeat U, Repeat V, Offset and Rotation so the requested density i
 For example, 256 pixels per metre on a 1024-pixel texture maps one metre of mesh surface to 0.25 UV units.
 
 Save the scene after unwrapping. Seam marks, unfolded coordinates, and the scale derived from **Pixels / metre** and **Texture px** are stored in the `SlabSolid` data and follow ordinary undo and redo.
+
+If the material has no image yet, set **Texture px** before **Make Unique**; the new paint image uses that size. Existing artwork keeps its current dimensions, and selecting it updates **Texture px** to its width.

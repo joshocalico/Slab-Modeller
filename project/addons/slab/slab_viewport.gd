@@ -367,11 +367,14 @@ func _confirm_bevel() -> void:
 
 
 func _cancel_bevel() -> void:
+	var was_active: bool = _bevel != null and _bevel.active
 	if _bevel != null and _bevel.active:
 		_bevel.cancel()
 	if _actions != null and _actions.bevel_active:
 		_actions.bevel_active = false
 		_actions.snap_align_state_changed.emit()
+	if was_active and _actions != null:
+		_actions.status_reset_requested.emit()
 
 
 func _sync_bevel_state() -> void:
@@ -379,8 +382,11 @@ func _sync_bevel_state() -> void:
 		return
 	var next_active: bool = _bevel.active
 	if _actions.bevel_active != next_active:
+		var ended: bool = _actions.bevel_active and not next_active
 		_actions.bevel_active = next_active
 		_actions.snap_align_state_changed.emit()
+		if ended:
+			_actions.status_reset_requested.emit()
 
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:

@@ -490,6 +490,8 @@ Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_
 	const slab::ops::UvUnwrapResult result = slab::ops::unwrap_uv(edit, ids, p_pixels_per_meter, p_texture_resolution);
 	if (!result.ok()) {
 		out["error"] = int(result.fault.code);
+		out["atlas_overflow"] = result.atlas_overflow;
+		if (result.atlas_overflow) out["suggested_texture_resolution"] = result.suggested_texture_resolution;
 		return out;
 	}
 	PackedInt64Array auto_seams;
@@ -500,6 +502,7 @@ Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_
 		out["islands"] = result.island_count;
 		out["auto_seams"] = auto_seams;
 		out["faces"] = p_faces;
+		out["atlas_overflow"] = false;
 	}
 	return out;
 }

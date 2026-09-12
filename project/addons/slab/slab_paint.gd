@@ -195,7 +195,7 @@ func make_unique() -> int:
 	var mats: Array = before_mats.duplicate()
 	var src: Variant = mats[src_slot] if src_slot >= 0 and src_slot < mats.size() else null
 	var copy := _duplicate_material(src)
-	var img: Image = _image_from_material(copy if copy != null else src)
+	var img: Image = _image_from_material(copy if copy != null else src, _new_texture_size())
 	var tex := ImageTexture.create_from_image(img)
 	copy.albedo_texture = tex
 	copy.resource_local_to_scene = true
@@ -631,9 +631,11 @@ func _bind_editable(solid: Node3D, slot: int, mat: StandardMaterial3D, img: Imag
 	_image = img
 	_texture = tex
 	mat.albedo_texture = tex
+	if _actions != null and img != null and not img.is_empty():
+		_actions.uv_texture_resolution = img.get_width()
 
 
-func _image_from_material(src: Variant) -> Image:
+func _image_from_material(src: Variant, blank_size: int = DEFAULT_SIZE) -> Image:
 	if src is StandardMaterial3D and src.albedo_texture is ImageTexture:
 		var live: Image = _cpu_image_from_texture(src.albedo_texture)
 		if live != null and not live.is_empty():
@@ -651,7 +653,13 @@ func _image_from_material(src: Variant) -> Image:
 	var color := Color(0.72, 0.55, 0.38)
 	if src is StandardMaterial3D:
 		color = src.albedo_color
-	return _filled(DEFAULT_SIZE, color)
+	return _filled(clampi(blank_size, 16, 16384), color)
+
+
+func _new_texture_size() -> int:
+	if _actions != null:
+		return clampi(int(_actions.uv_texture_resolution), 16, 16384)
+	return DEFAULT_SIZE
 
 
 func cpu_image_from_texture(tex: Texture2D) -> Image:

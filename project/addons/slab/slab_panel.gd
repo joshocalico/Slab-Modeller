@@ -22,6 +22,7 @@ var _selection: RefCounted
 var _actions: RefCounted
 var _metrics: RefCounted
 var _status: Label
+var _last_report := ""
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
 var _settings_fields: HFlowContainer
@@ -84,8 +85,9 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_paint_body.visible = false
 	add_child(_paint_body)
 
-	_selection.changed.connect(refresh)
+	_selection.changed.connect(_on_selection_changed)
 	_actions.reported.connect(_on_reported)
+	_actions.status_reset_requested.connect(_reset_status)
 	refresh()
 
 
@@ -138,7 +140,7 @@ func refresh() -> void:
 		_refresh_settings()
 	_refresh_buttons()
 	_refresh_material_chips()
-	set_status(_selection.describe())
+	set_status(_last_report if _last_report != "" else _selection.describe())
 	if _paint != null and _paint.active:
 		_refresh_paint_chrome()
 
@@ -515,10 +517,21 @@ func set_status(text: String) -> void:
 
 
 func _on_reported(text: String) -> void:
+	_last_report = text
 	set_status(text)
 	_sync_edit_fields()
 	if _selection.mode == SlabSelection.Mode.FACE:
 		call_deferred("_refresh_material_chips")
+
+
+func _on_selection_changed() -> void:
+	_last_report = ""
+	refresh()
+
+
+func _reset_status() -> void:
+	_last_report = ""
+	set_status(_selection.describe())
 
 
 func _sync_edit_fields() -> void:
@@ -579,10 +592,18 @@ func _settings_block() -> Control:
 	_settings_title.add_theme_font_size_override("font_size", _font(16))
 	_settings_title.add_theme_color_override("font_color", ACCENT)
 	_settings.add_child(_settings_title)
+	var scroll := ScrollContainer.new()
+	scroll.name = "SettingsScroll"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.custom_minimum_size.y = _scaled(96.0)
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	_settings_fields = HFlowContainer.new()
 	_settings_fields.name = "SettingsFields"
 	_settings_fields.add_theme_constant_override("h_separation", 10)
-	_settings.add_child(_settings_fields)
+	_settings_fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_settings_fields)
+	_settings.add_child(scroll)
 	_settings_chips = HFlowContainer.new()
 	_settings_chips.name = "MaterialChips"
 	_settings_chips.add_theme_constant_override("h_separation", 6)

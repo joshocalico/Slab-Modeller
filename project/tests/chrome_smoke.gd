@@ -78,6 +78,29 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	panel.free()
 
 
+func case_uv_settings_are_bounded_and_reports_survive_refresh() -> void:
+	var selection := SlabSelection.new()
+	selection.mode = SlabSelection.Mode.FACE
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var toggle := panel.find_child("uv_toggle", true, false) as Button
+	toggle.button_pressed = true
+	toggle.pressed.emit()
+	var scroll := panel.find_child("SettingsScroll", true, false) as ScrollContainer
+	expect(scroll != null and scroll.get_combined_minimum_size().y <= 100.0,
+		"expanded UV fields stay inside a bounded settings scroller, got %s" % (scroll.get_combined_minimum_size().y if scroll != null else -1))
+	expect(panel.find_child("uv_pixels_per_meter", true, false) != null and panel.find_child("uv_texture_resolution", true, false) != null,
+		"the bounded UV scroller contains density and texture resolution")
+	actions.reported.emit("Unwrapped 2 island(s); added 1 automatic cut(s).")
+	panel.refresh()
+	var status := panel.find_child("Status", true, false) as Label
+	expect(status != null and status.text.begins_with("Unwrapped 2"), "an undo refresh preserves the Unwrap result status")
+	actions.status_reset_requested.emit()
+	expect(status.text == selection.describe(), "ending a modal clears persistent preview guidance")
+	panel.free()
+
+
 func case_every_text_control_declares_a_font_size() -> void:
 	for mode in MODES:
 		var panel := _build_panel(1.0, mode)

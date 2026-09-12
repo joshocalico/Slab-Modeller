@@ -6,6 +6,7 @@ const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 
 signal reported(text: String)
+signal status_reset_requested
 signal loop_requested
 signal loop_settings_changed
 signal loop_values_updated
@@ -516,6 +517,9 @@ func _pick_ring(target: Node3D) -> String:
 func _unwrap_target(target: Node3D) -> String:
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("unwrap_uv", _selection.ids, uv_pixels_per_meter, uv_texture_resolution)
+	if bool(result.get("atlas_overflow", false)):
+		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
+		return "Unwrap atlas is too small. Lower Pixels / metre or raise Texture px to at least %d. The solid was unchanged." % suggested
 	var err: int = int(result.get("error", ERR_INVALID_SELECTION))
 	if err != OK:
 		return "Unwrap failed. %s" % describe_error(err, "uv_unwrap")
