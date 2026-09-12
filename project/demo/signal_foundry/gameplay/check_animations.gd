@@ -100,15 +100,23 @@ func run() -> void:
 	var hazard_mesh: BoxMesh = hazard.get_node("Visual/Mesh").mesh
 	expect(hazard_mesh.size.x == hazard_shape.size.x and hazard_mesh.size.z == hazard_shape.size.z,
 		"hazard visual footprint matches its trigger")
-	expect(hazard_shape.size.is_equal_approx(Vector3(24, 0.5, 1)), "hazard footprint export preserves trigger height")
+	expect(hazard_shape.size.is_equal_approx(Vector3(24, 0.16, 1)), "hazard footprint export preserves trigger height")
 	expect(hazard_mesh.size.is_equal_approx(Vector3(24, 0.12, 1)), "hazard footprint export preserves visual height")
+	var trigger_node: CollisionShape3D = hazard.get_node("CollisionShape3D")
+	expect(is_equal_approx(trigger_node.position.y, 0.08), "hazard trigger is centered on the visible slab")
+	var trigger_bottom: float = trigger_node.position.y - hazard_shape.size.y * 0.5
+	var trigger_top: float = trigger_node.position.y + hazard_shape.size.y * 0.5
+	var visual_half_height: float = hazard_mesh.size.y * (1.0 + float(hazard.pulse_amount)) * 0.5
+	expect(trigger_bottom <= hazard.get_node("Visual").position.y - visual_half_height
+		and trigger_top >= hazard.get_node("Visual").position.y + visual_half_height,
+		"hazard trigger closely encloses the full visible pulse")
 	expect(hazard.scale.is_equal_approx(Vector3.ONE), "wide hazard uses a unit CollisionObject3D scale")
 	var other_hazard: Area3D = hazard_scene.instantiate()
 	world.add_child(other_hazard)
 	var other_shape: BoxShape3D = other_hazard.get_node("CollisionShape3D").shape
 	var other_mesh: BoxMesh = other_hazard.get_node("Visual/Mesh").mesh
 	expect(other_shape != hazard_shape and other_mesh != hazard_mesh, "hazard instances own independent footprint resources")
-	expect(other_shape.size.is_equal_approx(Vector3(2, 0.5, 2)), "resizing one hazard leaves another trigger at its default")
+	expect(other_shape.size.is_equal_approx(Vector3(2, 0.16, 2)), "resizing one hazard leaves another trigger at its default")
 	expect(other_mesh.size.is_equal_approx(Vector3(2, 0.12, 2)), "resizing one hazard leaves another visual at its default")
 	var hazard_visual: Node3D = hazard.get_node("Visual")
 	var visual_scale := hazard_visual.scale
