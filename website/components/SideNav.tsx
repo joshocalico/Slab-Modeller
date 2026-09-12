@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SiteMark } from "@/components/SiteMark";
@@ -17,9 +18,12 @@ export function SideNav({
   otherLabel: string;
 }) {
   const path = usePathname();
+  const [expanded, setExpanded] = useState(false);
   return (
     <nav className="guide-nav" aria-label={label}>
       <SiteMark />
+      <button className="nav-toggle" aria-expanded={expanded} aria-controls="nav-groups" onClick={() => setExpanded(!expanded)}>{label} contents <span aria-hidden="true">{expanded ? "−" : "+"}</span></button>
+      <div id="nav-groups" className={`nav-groups ${expanded ? "is-open" : ""}`}>
       {groups.map((group) => (
         <section key={group.title}>
           <h2>{group.title}</h2>
@@ -28,6 +32,7 @@ export function SideNav({
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={() => setExpanded(false)}
                   aria-current={path === item.href ? "page" : undefined}
                 >
                   {item.label}
@@ -37,6 +42,7 @@ export function SideNav({
           </ul>
         </section>
       ))}
+      </div>
       <p className="guide-nav-other">
         <Link href={otherHref}>{otherLabel}</Link>
       </p>

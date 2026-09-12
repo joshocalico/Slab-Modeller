@@ -4,19 +4,19 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. It is a command toolbar. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. Each command is an icon. The tooltip holds the name, what it does, and the shortcut. A command disables when the selection count is too small. The tooltip then states the missing requirement.
+The panel is the bottom dock named **Slab**. It is a command toolbar. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. Commands have icons and labels. The tooltip holds the name, what it does, and the shortcut. A command disables when the selection count is too small. The tooltip then states the missing requirement.
 
 <Figure
   src="/img/panel.png"
   alt="The Slab panel in Face mode, with Face and Selection icon rows above Distance and UV fields."
-  caption="Face mode. Icons first. Distance and UV sit in the settings strip under the icons. Hover an icon for its name. The first Selection icon is Select All."
+  caption="Face mode, with no solid selected. Commands stay disabled until their selection requirements are met. UV opens the placement fields."
 />
 
 The header status line repeats the selection, for example `Box, 1 face.`
 
 ## Settings strip
 
-Under the icons. The fields follow the mode, and in Object mode they follow the Create icon you last hovered.
+Under the commands. Click **UV** beside Distance to show the UV fields. The fields follow the mode, and in Object mode they follow the Create icon you last hovered.
 
 | Field | When it shows | Role |
 | --- | --- | --- |

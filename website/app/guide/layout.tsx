@@ -1,3 +1,5 @@
+import { DocOutline } from "@/components/DocOutline";
+import { DocFooter } from "@/components/DocFooter";
 import { EditLink } from "@/components/EditLink";
 import { SideNav } from "@/components/SideNav";
 import { GUIDE_NAV } from "@/lib/nav";
@@ -12,10 +14,13 @@ export default function GuideLayout({ children }: { children: ReactNode }) {
         otherHref="/engineering"
         otherLabel="Engineering notes"
       />
-      <article className="guide-main">
+      <main id="main-content" className="guide-main">
+        <p className="eyebrow doc-section">Slab manual</p>
         {children}
+        <DocFooter groups={GUIDE_NAV} />
         <EditLink />
-      </article>
+      </main>
+      <DocOutline />
     </div>
   );
 }

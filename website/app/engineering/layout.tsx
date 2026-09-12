@@ -1,3 +1,5 @@
+import { DocOutline } from "@/components/DocOutline";
+import { DocFooter } from "@/components/DocFooter";
 import { EditLink } from "@/components/EditLink";
 import { SideNav } from "@/components/SideNav";
 import { ENGINEERING_NAV } from "@/lib/nav";
@@ -12,10 +14,13 @@ export default function EngineeringLayout({ children }: { children: ReactNode })
         otherHref="/guide"
         otherLabel="Back to the guide"
       />
-      <article className="guide-main">
+      <main id="main-content" className="guide-main">
+        <p className="eyebrow doc-section">Inside the mesh</p>
         {children}
+        <DocFooter groups={ENGINEERING_NAV} />
         <EditLink />
-      </article>
+      </main>
+      <DocOutline />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { Figure } from "@/components/Figure";
 import { EditLink } from "@/components/EditLink";
 import { SiteMark } from "@/components/SiteMark";
@@ -5,82 +6,32 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16">
-      <SiteMark />
-      <h1 className="mt-8 max-w-3xl text-4xl font-semibold tracking-tight text-slab-ink sm:text-5xl">
-        Block out levels inside Godot.
-      </h1>
-      <p className="mt-5 max-w-2xl text-lg text-slab-muted">
-        Godot CSG is a node tree you inspect. Blender is a round trip. Slab is
-        a closed solid you click in the 3D view.
-      </p>
-      <div className="mt-8 flex flex-wrap gap-4">
-        <Link
-          className="bg-slab-gold px-4 py-2 font-semibold text-black no-underline hover:no-underline"
-          href="/guide/tutorials/block-out-a-room"
-        >
-          Block out a room
-        </Link>
-        <Link className="px-4 py-2 text-slab-ink" href="/guide">
-          Read the guide
-        </Link>
-      </div>
-      <Figure
-        src="/img/solid-room.png"
-        alt="A hollow SlabSolid with an open top, inner walls, and a floor."
-        caption="Inset the top, then move the inner cap down. Walls and a floor. No roof."
-      />
-      <section className="mt-16 max-w-2xl space-y-4 text-slab-muted">
-        <h2 className="text-lg font-semibold text-slab-ink">
-          Why not CSGBox3D
-        </h2>
-        <p>
-          <code>CSGBox3D</code> and <code>CSGCombiner3D</code> boolean at the
-          node. You add children. You wait for a mesh. You do not select a
-          face and pull it. Union is a node, not an undoable edit. The tree is
-          the document.
-        </p>
-        <p>
-          Blender and Unity ProBuilder give you the click. They are not the
-          Godot editor. GridMap is tiles. A wall there is a cell, not a
-          volume you inset.
-        </p>
-        <p>
-          Slab stores a watertight half-edge mesh on <code>SlabSolid</code>.
-          Keys 1 to 4 switch object, vertex, edge, and face. Click selects. The
-          Move gizmo translates. Subtract punches a doorway and keeps a closed
-          solid. Every edit records undo.
-        </p>
+    <main id="main-content" className="home">
+      <header className="home-header"><SiteMark /><nav aria-label="Main"><Link href="/guide">The guide</Link><Link href="/engineering">Engineering</Link></nav></header>
+      <section className="home-hero">
+        <div>
+          <p className="eyebrow">The Slab manual · Godot 4.7</p>
+          <h1>Block out levels<br />inside Godot.</h1>
+          <p className="hero-intro">Godot CSG is a node tree you inspect. Blender is a round trip. Slab is a closed solid you click in the 3D view.</p>
+          <div className="home-actions"><Link className="primary-link" href="/guide/tutorials/block-out-a-room">Block out a room <span aria-hidden="true">↗</span></Link><Link href="/guide/install">Install Slab →</Link></div>
+        </div>
+        <div className="hero-mesh"><span className="eyebrow">01 / Inset → move → room</span><Figure eager src="/img/solid-room.png" alt="An open-top room with thick walls and a floor, made from one solid." caption="Inset the top. Move the inner cap down. Stop before the floor." /></div>
       </section>
-      <section className="mt-16 grid gap-8 sm:grid-cols-3">
-        <div>
-          <h2 className="text-lg font-semibold">Select in the view</h2>
-          <p className="mt-2 text-slab-muted">
-            Keys 1 to 4 switch object, vertex, edge, and face mode. Click
-            selects. The Move gizmo translates. Shift-drag extrudes a face or
-            bevels an edge.
-          </p>
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">Edit on the solid</h2>
-          <p className="mt-2 text-slab-muted">
-            Extrude, inset, bevel, and loops live on the Slab bottom panel. Every
-            edit records undo.
-          </p>
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">Stay watertight</h2>
-          <p className="mt-2 text-slab-muted">
-            A wall is a thin closed box. Subtract punches a cavity when the
-            cutter sits inside, or a doorway when it crosses a wall.
-          </p>
+      <div className="home-strip"><span>One solid. Faces you can pull.</span><span><kbd>1</kbd> Object <kbd>2</kbd> Vertex <kbd>3</kbd> Edge <kbd>4</kbd> Face</span></div>
+      <section className="home-workflows" aria-labelledby="workflows-title">
+        <div className="section-heading"><div><p className="eyebrow">Start with a volume</p><h2 id="workflows-title">A room. A surface. A roof.</h2></div><Link href="/guide">All pages →</Link></div>
+        <div className="workflow-grid">
+          <Link className="workflow" href="/guide/tutorials/block-out-a-room"><Image width={1280} height={720} sizes="(max-width: 800px) 100vw, 360px" src="/img/solid-door.png" alt="A hollow room with a doorway cut through its wall." /><div><span className="eyebrow">01 / Shape</span><h3>Block out a room <span aria-hidden="true">↗</span></h3><p>Inset a box. Lower the floor. Subtract a door through the wall.</p></div></Link>
+          <Link className="workflow" href="/guide/tutorials/texture-a-room"><Image width={1280} height={720} sizes="(max-width: 800px) 100vw, 360px" src="/img/solid-textured.png" alt="A room with different materials on its floor and walls." /><div><span className="eyebrow">02 / Surface</span><h3>Texture a room <span aria-hidden="true">↗</span></h3><p>Two materials on one solid. Set the repeats. Turn a wall texture.</p></div></Link>
+          <Link className="workflow" href="/guide/tutorials/build-a-house"><Image width={1280} height={720} sizes="(max-width: 800px) 100vw, 360px" src="/img/house-04.png" alt="A Slab house made with an arch roof and a box." /><div><span className="eyebrow">03 / Combine</span><h3>Build a house <span aria-hidden="true">↗</span></h3><p>An Arch roof, a box, and Union. Cut a doorway and add three materials.</p></div></Link>
         </div>
       </section>
-      <p className="mt-16 text-sm text-slab-muted">
-        Papers and mesh notes live in{" "}
-        <Link href="/engineering">Engineering</Link>, off the guide.
-      </p>
-      <EditLink />
+      <section className="home-principles"><div><p className="eyebrow">Work on the solid</p><h2>The click stays<br />in the editor.</h2></div><div>
+        <h3>Select in the view</h3><p>Keys 1 to 4 switch object, vertex, edge, and face. Click selects. The Move gizmo translates. Shift-drag extrudes a face or bevels an edge.</p>
+        <h3>Edit on the solid</h3><p>Extrude, inset, bevel, and loops live on the Slab bottom panel. Surface Paint puts materials, UV placement, and pixel painting beside the view. Edits record undo.</p>
+        <h3>Stay watertight</h3><p>A wall is a thin closed box. Subtract punches a cavity when the cutter sits inside, or a doorway when it crosses a wall. A refused edit leaves the solid as it was.</p><Link href="/guide/explanation/closed-solids">Why closed solids →</Link>
+      </div></section>
+      <footer className="home-footer"><p>A key or a button? <Link href="/guide/reference/keys-and-modes">Keys and modes</Link> · <Link href="/guide/reference/panel">The Slab panel</Link></p><p>Papers and mesh notes live in <Link href="/engineering">Engineering</Link>, off the guide.</p><EditLink /></footer>
     </main>
   );
 }
