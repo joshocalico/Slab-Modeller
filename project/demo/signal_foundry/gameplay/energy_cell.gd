@@ -18,7 +18,7 @@ func _on_body_entered(body: Node3D) -> void:
 		return
 	collected = true
 	body.call("collect_energy_cell")
-	monitoring = false
+	set_deferred("monitoring", false)
 	$CollisionShape3D.set_deferred("disabled", true)
 	var tween := create_tween().set_parallel(true)
 	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
