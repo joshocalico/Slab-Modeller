@@ -1,6 +1,7 @@
 extends Area3D
 
 @export var checkpoint_title := "CHECKPOINT"
+@export var local_respawn_offset := Vector3(0, 0, -1.5)
 var activated := false
 var animation_time := 0.0
 
@@ -22,8 +23,12 @@ func _on_body_entered(body: Node3D) -> void:
 	if activated or not body.has_method("activate_checkpoint"):
 		return
 	activated = true
-	var respawn := global_transform
-	respawn.origin = global_position
+	var forward := -global_basis.z
+	forward.y = 0.0
+	if forward.length_squared() < 0.0001:
+		forward = Vector3.FORWARD
+	var facing := Basis.looking_at(forward.normalized(), Vector3.UP)
+	var respawn := Transform3D(facing, global_position + facing * local_respawn_offset)
 	body.call("activate_checkpoint", respawn, checkpoint_title)
 	$Visual/Ring.hide()
 	$Visual/RingOnline.show()

@@ -11,7 +11,7 @@ Instance these scenes wherever they make sense in the editor. Their origins sit 
 | Scene | Behavior |
 | --- | --- |
 | `res://demo/signal_foundry/gameplay/energy_cell.tscn` | Floating cyan pickup. Each instance adds one energy cell, flashes HUD feedback, then disappears. |
-| `res://demo/signal_foundry/gameplay/checkpoint_beacon.tscn` | Orange beacon that turns green on contact. R and fall recovery subsequently return the player to its origin and orientation. Set `checkpoint_title` in the Inspector for a useful HUD name. |
+| `res://demo/signal_foundry/gameplay/checkpoint_beacon.tscn` | Orange beacon that turns green on contact. R and fall recovery subsequently spawn 1.5 m along its local −Z, facing local −Z. Rotate the beacon so its blue −Z arrow points in the desired departure direction. Set `checkpoint_title` and `local_respawn_offset` in the Inspector as needed. |
 | `res://demo/signal_foundry/gameplay/exit_beacon.tscn` | Red exit field that reports missing cells, or turns green and reports completion once powered. Its `required_cells` Inspector value defaults to 3. |
 | `res://demo/signal_foundry/gameplay/hazard_reset.tscn` | Pulsing red trigger that immediately returns the player to the active checkpoint. Scale the Area3D to cover the hazard volume. |
 | `res://demo/signal_foundry/gameplay/moving_platform.tscn` | Physics-safe shuttle. Add hand-authored SlabSolid nodes below `PlaceSlabChildrenHere`, then set `local_travel`, `travel_duration`, and `endpoint_pause`. |

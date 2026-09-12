@@ -63,14 +63,17 @@ func run() -> void:
 
 	var checkpoint: Area3D = checkpoint_scene.instantiate()
 	checkpoint.position = Vector3(8, 0, -4)
+	checkpoint.rotation.y = PI / 2.0
 	checkpoint.checkpoint_title = "Forge Deck"
 	world.add_child(checkpoint)
 	checkpoint._on_body_entered(player)
-	expect(player.spawn_transform.origin.is_equal_approx(Vector3(8, 0, -4)), "checkpoint updates respawn position")
+	var expected_respawn := Vector3(6.5, 0, -4)
+	expect(player.spawn_transform.origin.is_equal_approx(expected_respawn), "checkpoint offsets respawn 1.5 m along local -Z")
+	expect(player.spawn_transform.basis.z.is_equal_approx(checkpoint.global_basis.z), "checkpoint preserves beacon facing")
 	expect(player.checkpoint_name == "FORGE DECK", "checkpoint updates HUD name")
 	player.position = Vector3.ZERO
 	player._reset_to_spawn()
-	expect(player.global_position.is_equal_approx(Vector3(8, 0, -4)), "reset returns to active checkpoint")
+	expect(player.global_position.is_equal_approx(expected_respawn), "reset returns beside the active checkpoint")
 
 	var exit_beacon: Area3D = exit_scene.instantiate()
 	world.add_child(exit_beacon)
