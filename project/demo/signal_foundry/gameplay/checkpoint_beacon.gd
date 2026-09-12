@@ -2,10 +2,20 @@ extends Area3D
 
 @export var checkpoint_title := "CHECKPOINT"
 var activated := false
+var animation_time := 0.0
 
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
+
+
+func _process(delta: float) -> void:
+	animation_time += delta
+	$Visual/Ring.rotate_y(delta * (2.2 if activated else 0.7))
+	$Visual/RingOnline.rotate_y(delta * 2.2)
+	if activated:
+		var pulse := 1.0 + sin(animation_time * 4.0) * 0.08
+		$Visual/RingOnline.scale = Vector3.ONE * pulse
 
 
 func _on_body_entered(body: Node3D) -> void:

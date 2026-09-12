@@ -19,7 +19,10 @@ func _on_body_entered(body: Node3D) -> void:
 	collected = true
 	body.call("collect_energy_cell")
 	monitoring = false
-	$Visual.hide()
 	$CollisionShape3D.set_deferred("disabled", true)
-	await get_tree().create_timer(0.12).timeout
+	var tween := create_tween().set_parallel(true)
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tween.tween_property($Visual, "scale", Vector3.ONE * 0.02, 0.22)
+	tween.tween_property($Visual, "rotation:y", $Visual.rotation.y + TAU, 0.22)
+	await tween.finished
 	queue_free()

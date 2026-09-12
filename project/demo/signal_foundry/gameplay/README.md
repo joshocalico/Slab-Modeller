@@ -13,8 +13,14 @@ Instance these scenes wherever they make sense in the editor. Their origins sit 
 | `res://demo/signal_foundry/gameplay/energy_cell.tscn` | Floating cyan pickup. Each instance adds one energy cell, flashes HUD feedback, then disappears. |
 | `res://demo/signal_foundry/gameplay/checkpoint_beacon.tscn` | Orange beacon that turns green on contact. R and fall recovery subsequently return the player to its origin and orientation. Set `checkpoint_title` in the Inspector for a useful HUD name. |
 | `res://demo/signal_foundry/gameplay/exit_beacon.tscn` | Red exit field that reports missing cells, or turns green and reports completion once powered. Its `required_cells` Inspector value defaults to 3. |
+| `res://demo/signal_foundry/gameplay/hazard_reset.tscn` | Pulsing red trigger that immediately returns the player to the active checkpoint. Scale the Area3D to cover the hazard volume. |
+| `res://demo/signal_foundry/gameplay/moving_platform.tscn` | Physics-safe shuttle. Add hand-authored SlabSolid nodes below `PlaceSlabChildrenHere`, then set `local_travel`, `travel_duration`, and `endpoint_pause`. |
 
 The compact player HUD shows collected energy, the active checkpoint, and short interaction notices. Progress is session-local and requires no autoload or level script.
+
+For spinning fans, gears, and machinery, add a Node3D parent, attach `res://demo/signal_foundry/gameplay/rotating_machinery.gd`, then place authored SlabSolid children beneath it. Choose the axis and speed in the Inspector. Use this for machinery and scenery; use the moving-platform scene when the object must carry the player.
+
+Use Godot's `AnimationPlayer` for unique timing or multi-part sequences: add it beside the animated Node3D, key that node's transform, and enable looping on the animation. For a custom platform route, animate the `MovingPlatform` root itself and turn off `shuttle_enabled`; keeping the root as an `AnimatableBody3D` preserves moving-platform physics. The helper scripts cover only constant rotation and a two-endpoint shuttle.
 
 ## Controls
 
@@ -55,4 +61,5 @@ Headless check (does not load or write `signal_foundry.tscn`):
 ```sh
 scripts/godot --headless --path project --script res://demo/signal_foundry/gameplay/check_player.gd
 scripts/godot --headless --path project --script res://demo/signal_foundry/gameplay/check_interactions.gd
+scripts/godot --headless --path project --script res://demo/signal_foundry/gameplay/check_animations.gd
 ```

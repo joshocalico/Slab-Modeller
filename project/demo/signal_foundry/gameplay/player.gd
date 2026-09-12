@@ -152,6 +152,11 @@ func _reset_to_spawn() -> void:
 	show_notice("RESPAWNED AT %s" % checkpoint_name)
 
 
+func respawn_from_hazard() -> void:
+	_reset_to_spawn()
+	show_notice("HAZARD  ·  RETURNED TO %s" % checkpoint_name, 2.8)
+
+
 func collect_energy_cell() -> void:
 	energy_cells += 1
 	_update_hud()

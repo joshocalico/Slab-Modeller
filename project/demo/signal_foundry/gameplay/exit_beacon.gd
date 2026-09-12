@@ -1,11 +1,19 @@
 extends Area3D
 
 @export_range(1, 99, 1) var required_cells := 3
+var animation_time := 0.0
 
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
+
+
+func _process(delta: float) -> void:
+	animation_time += delta
+	var pulse := 1.0 + sin(animation_time * 3.5) * 0.025
+	$Visual/Locked.scale = Vector3(pulse, pulse, 1.0)
+	$Visual/Powered.scale = Vector3(pulse, pulse, 1.0)
 
 
 func _on_body_entered(body: Node3D) -> void:
