@@ -27,6 +27,14 @@ func key(code: int, down: bool) -> void:
 	Input.parse_input_event(event)
 
 
+func tap_player(code: int) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = true
+	player._unhandled_input(event)
+
+
 func add_box(size: Vector3, origin: Vector3) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	var collider := CollisionShape3D.new()
@@ -159,6 +167,86 @@ func run() -> void:
 	Input.action_release("foundry_forward")
 	await settle(8)
 	expect(player.global_position.y > 0.7, "walks a 4×0.25 m Slab stair, y=%s frames=%d" % [player.global_position.y, frames])
+
+	player.global_transform = player.spawn_transform
+	player.velocity = Vector3.ZERO
+	player.auto_run = false
+	player.pitch = player.spawn_pitch
+	await settle(8)
+	expect(player.is_on_floor(), "autorun start is on the pad")
+	expect(not player.auto_run, "autorun starts off")
+	tap_player(KEY_T)
+	expect(player.auto_run, "T tap starts autorun")
+	await settle(20)
+	expect(player.global_position.z < -0.8, "autorun walks forward without holding W, z=%s" % player.global_position.z)
+	expect(absf(player.velocity.z + 5.0) < 0.05, "autorun is walk speed, vz=%s" % player.velocity.z)
+	Input.action_press("foundry_jump")
+	await physics_frame
+	Input.action_release("foundry_jump")
+	await physics_frame
+	expect(player.velocity.y > 4.0, "Space still jumps during autorun, vy=%s" % player.velocity.y)
+	expect(player.velocity.z < -4.0, "autorun keeps forward speed in the air, vz=%s" % player.velocity.z)
+
+	player.global_transform = player.spawn_transform
+	player.velocity = Vector3.ZERO
+	await settle(8)
+	expect(player.is_on_floor(), "back on the pad before toggling autorun off")
+	expect(player.auto_run, "autorun stays on across a scripted teleport")
+	tap_player(KEY_T)
+	expect(not player.auto_run, "second T tap stops autorun")
+	await settle(8)
+	var z_stopped: float = player.global_position.z
+	await settle(12)
+	expect(absf(player.global_position.z - z_stopped) < 0.2, "after T-off the player is not still running, z=%s" % player.global_position.z)
+
+	player.global_transform = player.spawn_transform
+	player.velocity = Vector3.ZERO
+	player.auto_run = false
+	await settle(6)
+	tap_player(KEY_T)
+	await settle(10)
+	expect(player.auto_run, "autorun is on before S")
+	tap_player(KEY_S)
+	expect(not player.auto_run, "S tap cancels autorun")
+	Input.action_press("foundry_back")
+	await physics_frame
+	Input.action_release("foundry_back")
+	var z_after_s: float = player.global_position.z
+	await settle(12)
+	expect(absf(player.global_position.z - z_after_s) < 0.25, "S does not leave autorun running, z=%s" % player.global_position.z)
+
+	player.auto_run = true
+	player.velocity = Vector3(0, 0, -5)
+	player.global_position = Vector3(0.4, 0, 0.4)
+	Input.action_press("foundry_reset")
+	await settle(2)
+	Input.action_release("foundry_reset")
+	expect(not player.auto_run, "R clears autorun")
+	expect(player.global_position.is_equal_approx(Vector3(0, 0, 0)), "R still restores origin after autorun")
+
+	player.auto_run = true
+	tap_player(KEY_ESCAPE)
+	expect(not player.auto_run, "Esc stops autorun")
+	expect(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Esc still releases the mouse")
+
+	player.global_transform = player.spawn_transform
+	player.velocity = Vector3.ZERO
+	player.auto_run = false
+	await settle(4)
+	Input.action_press("foundry_forward")
+	await settle(12)
+	Input.action_release("foundry_forward")
+	expect(player.global_position.z < -0.4, "held W still walks without autorun, z=%s" % player.global_position.z)
+
+	player.global_transform = player.spawn_transform
+	player.velocity = Vector3.ZERO
+	player.rotation.y = 0.0
+	tap_player(KEY_Q)
+	await settle(20)
+	expect(is_equal_approx(player.rotation.y, deg_to_rad(15.0)),
+		"one Q tap is a 15° left step even if held-time passes, yaw=%s" % player.rotation.y)
+	tap_player(KEY_E)
+	expect(is_equal_approx(player.rotation.y, 0.0), "E yaws 15° right, yaw=%s" % player.rotation.y)
 
 	expect(FileAccess.file_exists("res://demo/signal_foundry/signal_foundry.tscn"), "authored foundry scene is untouched on disk")
 

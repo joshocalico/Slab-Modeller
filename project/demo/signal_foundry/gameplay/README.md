@@ -8,15 +8,17 @@ Reusable first-person controller. **Do not generate level layout here.** Instanc
 
 | Input | Action |
 | --- | --- |
-| W A S D | Move (physical keys) |
+| W A S D | Move (physical keys). Hold as usual; auto-run does not replace WASD. |
+| T | Toggle auto-run: walk forward at normal speed without holding W. Another T, S, Esc, or R stops it. Made for brief computer-use key taps so a run-up jump does not need W held. |
+| Q / E | Turn 15° left / right per tap (keyboard-only alignment; holding does not keep spinning) |
 | Mouse | Look while captured |
 | Arrow keys | Look (computer-use / no mouse) |
 | Numpad 8 2 4 6 | Look (up / down / left / right) |
 | Space | Jump |
-| Shift | Sprint (×1.45) |
-| Esc | Release mouse; keyboard move/look still work |
+| Shift | Sprint (×1.45). Auto-run stays at walk speed unless Shift is held. |
+| Esc | Release mouse and stop auto-run; keyboard move/look still work |
 | Left click | Recapture mouse |
-| R | Reset to this instance’s transform at `_ready` |
+| R | Reset to this instance’s transform at `_ready`; also stops auto-run |
 
 Falls below y = −6 also reset to that spawn transform.
 

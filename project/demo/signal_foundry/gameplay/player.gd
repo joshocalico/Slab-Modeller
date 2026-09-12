@@ -5,7 +5,8 @@ extends CharacterBody3D
 ##
 ## Move: WASD (physical). Look: mouse, arrows, or numpad 8/2/4/6.
 ## Jump: Space. Sprint: Shift. Release mouse: Esc. Recapture: left click.
-## R restores the transform captured when this instance entered the tree.
+## T toggles auto-run (walk forward without holding W; T, S, Esc, or R stop it).
+## Q / E yaw 15° left / right per tap. R restores the transform from `_ready`.
 
 const SPEED := 5.0
 const SPRINT := 1.45
@@ -18,12 +19,14 @@ const COYOTE := 0.12
 const JUMP_BUFFER := 0.12
 const STEP_HEIGHT := 0.28
 const FALL_RESET_Y := -6.0
+const YAW_STEP := deg_to_rad(15.0)
 
 var spawn_transform := Transform3D.IDENTITY
 var spawn_pitch := 0.0
 var pitch := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
+var auto_run := false
 
 @onready var camera: Camera3D = $Camera3D
 
@@ -35,6 +38,9 @@ func _ready() -> void:
 	_bind_action("foundry_back", KEY_S)
 	_bind_action("foundry_jump", KEY_SPACE)
 	_bind_action("foundry_reset", KEY_R)
+	_bind_action("foundry_autorun", KEY_T)
+	_bind_action("foundry_yaw_left", KEY_Q)
+	_bind_action("foundry_yaw_right", KEY_E)
 	_bind_action("foundry_look_left", KEY_LEFT)
 	_bind_action("foundry_look_right", KEY_RIGHT)
 	_bind_action("foundry_look_up", KEY_UP)
@@ -56,10 +62,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		pitch = clampf(pitch - event.relative.y * MOUSE_SENS, -PITCH_LIMIT, PITCH_LIMIT)
 		camera.rotation.x = pitch
 	if event is InputEventKey and event.pressed and not event.echo:
+		var code: int = event.physical_keycode if event.physical_keycode != KEY_NONE else event.keycode
 		if event.keycode == KEY_ESCAPE:
+			auto_run = false
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		elif event.keycode == KEY_R:
+		elif event.keycode == KEY_R or code == KEY_R:
 			_reset_to_spawn()
+		elif code == KEY_T:
+			auto_run = not auto_run
+		elif code == KEY_S:
+			auto_run = false
+		elif code == KEY_Q:
+			rotation.y += YAW_STEP
+		elif code == KEY_E:
+			rotation.y -= YAW_STEP
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -68,6 +84,9 @@ func _physics_process(dt: float) -> void:
 	if Input.is_action_just_pressed("foundry_reset"):
 		_reset_to_spawn()
 		return
+
+	if Input.is_action_pressed("foundry_back"):
+		auto_run = false
 
 	var look := Input.get_vector("foundry_look_left", "foundry_look_right", "foundry_look_up", "foundry_look_down")
 	if look != Vector2.ZERO:
@@ -86,6 +105,8 @@ func _physics_process(dt: float) -> void:
 		jump_buffer = maxf(0.0, jump_buffer - dt)
 
 	var keys := Input.get_vector("foundry_left", "foundry_right", "foundry_forward", "foundry_back")
+	if auto_run:
+		keys.y = -1.0
 	var wish := Vector3(keys.x, 0, keys.y)
 	var direction := (global_basis * wish).normalized() if wish.length_squared() > 0.0 else Vector3.ZERO
 	var speed := SPEED * (SPRINT if Input.is_physical_key_pressed(KEY_SHIFT) else 1.0)
@@ -116,6 +137,7 @@ func _reset_to_spawn() -> void:
 	velocity = Vector3.ZERO
 	coyote = 0.0
 	jump_buffer = 0.0
+	auto_run = false
 
 
 func _bind_action(action: String, code: Key) -> void:
