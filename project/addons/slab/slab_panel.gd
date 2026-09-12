@@ -300,7 +300,9 @@ func _uv_toggle() -> Button:
 	button.toggle_mode = true
 	button.button_pressed = _uv_open
 	button.tooltip_text = "Show UV scale, offset, and rotation."
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
+	button.accessibility_name = "Toggle UV settings"
+	button.accessibility_description = button.tooltip_text
 	button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
 	button.add_theme_font_size_override("font_size", _font(15))
 	button.pressed.connect(func() -> void:
@@ -367,8 +369,10 @@ func _header() -> Control:
 	_paint_toggle.name = "SurfacePaint"
 	_paint_toggle.text = "Surface Paint"
 	_paint_toggle.toggle_mode = true
-	_paint_toggle.focus_mode = Control.FOCUS_NONE
+	_paint_toggle.focus_mode = Control.FOCUS_ALL
 	_paint_toggle.tooltip_text = "Open the Surface Paint workspace. Escape closes it."
+	_paint_toggle.accessibility_name = "Surface Paint"
+	_paint_toggle.accessibility_description = _paint_toggle.tooltip_text
 	_paint_toggle.add_theme_font_size_override("font_size", _font(15))
 	_paint_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
 	_paint_toggle.pressed.connect(func() -> void:
@@ -482,7 +486,9 @@ func _action_button(row: Dictionary) -> Button:
 	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
+	button.accessibility_name = row["label"]
+	button.accessibility_description = _actions.tooltip_of(row)
 	button.add_theme_font_size_override("font_size", _font(15))
 	button.custom_minimum_size = Vector2(0.0, _scaled(BUTTON_HEIGHT))
 	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -785,7 +791,8 @@ func _paint_tool_button(text: String, tool: int, group: ButtonGroup) -> Button:
 	button.toggle_mode = true
 	button.button_group = group
 	button.button_pressed = tool == SlabPaint.Tool.MATERIAL_UV
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
+	button.accessibility_name = text
 	button.add_theme_font_size_override("font_size", _font(15))
 	button.custom_minimum_size = Vector2(_scaled(110.0), _scaled(PAINT_ROW_HEIGHT))
 	button.set_meta("slab_label", text)
@@ -801,7 +808,9 @@ func _named_action(text: String, icon: String, tip: String, on_press: Callable) 
 	button.text = text
 	button.icon = SlabIcons.texture(icon, _metrics.scale())
 	button.tooltip_text = tip
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
+	button.accessibility_name = text
+	button.accessibility_description = tip
 	button.clip_text = false
 	button.clip_contents = true
 	button.add_theme_font_size_override("font_size", _font(13))

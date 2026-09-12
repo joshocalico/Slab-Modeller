@@ -72,7 +72,9 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.tooltip_text = "\n".join(lines)
 	button.toggle_mode = true
 	button.button_group = group
-	button.focus_mode = Control.FOCUS_NONE
+	button.focus_mode = Control.FOCUS_ALL
+	button.accessibility_name = SlabSelection.MODE_LABELS[mode] + " mode"
+	button.accessibility_description = MODE_HINTS[mode]
 	button.set_meta("slab_mode", mode)
 	button.custom_minimum_size = Vector2(_metrics.px(100.0 if with_label else 40.0), _metrics.px(36.0))
 	button.add_theme_font_size_override("font_size", _metrics.font(15))

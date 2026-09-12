@@ -470,6 +470,37 @@ func case_unlabeled_mode_strip_names_the_mode() -> void:
 	strip.free()
 
 
+func case_primary_panel_buttons_are_keyboard_reachable_and_named() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var paint: RefCounted = preload("res://addons/slab/slab_paint.gd").new()
+	paint.bind(selection, actions, SlabTestUndo.new())
+	panel.bind_paint(paint)
+	root.add_child(panel)
+
+	var expected: Array[Button] = []
+	for button in _buttons(panel):
+		if button.has_meta("slab_mode") or button.has_meta("slab_label") or button.name == "SurfacePaint":
+			expected.append(button)
+	for button in expected:
+		expect(button.focus_mode == Control.FOCUS_ALL, "%s is reachable by keyboard focus" % button.name)
+		expect(button.accessibility_name != "", "%s has an accessible name" % button.name)
+
+	var box: Button = panel.find_child("make_box", true, false)
+	var surface: Button = panel.find_child("SurfacePaint", true, false)
+	expect(box != null and box.accessibility_name == "Box", "Create Box has its visible accessible name")
+	expect(surface != null and surface.accessibility_name == "Surface Paint", "Surface Paint has its visible accessible name")
+	if box != null:
+		box.grab_focus()
+		expect(root.get_viewport().gui_get_focus_owner() == box, "Create Box accepts keyboard focus")
+	if surface != null:
+		surface.grab_focus()
+		expect(root.get_viewport().gui_get_focus_owner() == surface, "Surface Paint accepts keyboard focus")
+	panel.free()
+
+
 func case_editor_interface_stays_behind_the_host() -> void:
 	for file_name in EDITOR_INTERFACE_FENCE:
 		expect(not _source_of(file_name).contains("EditorInterface"),
