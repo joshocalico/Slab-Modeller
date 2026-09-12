@@ -95,6 +95,17 @@ func run() -> void:
 	player.position = Vector3(-3, 2, -3)
 	var hazard: Area3D = hazard_scene.instantiate()
 	world.add_child(hazard)
+	var hazard_shape: BoxShape3D = hazard.get_node("CollisionShape3D").shape
+	var hazard_mesh: BoxMesh = hazard.get_node("Visual/Mesh").mesh
+	expect(hazard_mesh.size.x == hazard_shape.size.x and hazard_mesh.size.z == hazard_shape.size.z,
+		"hazard visual footprint matches its 2 by 2 trigger")
+	var hazard_visual: Node3D = hazard.get_node("Visual")
+	var visual_scale := hazard_visual.scale
+	hazard._process(0.25)
+	expect(hazard_visual.scale.is_equal_approx(visual_scale), "hazard pulse never changes its horizontal danger footprint")
+	var mesh_scale: Vector3 = hazard.get_node("Visual/Mesh").scale
+	expect(is_equal_approx(mesh_scale.x, 1.0) and is_equal_approx(mesh_scale.z, 1.0),
+		"hazard animation pulses vertically without widening its footprint")
 	hazard._on_body_entered(player)
 	expect(player.global_position.is_equal_approx(Vector3(7, 0, 2)), "hazard returns player to active checkpoint")
 	expect(hazard.triggered, "hazard debounce activates")
