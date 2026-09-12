@@ -685,7 +685,7 @@ MeshFault boolean(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	}
 	if (p_mode == 1) {
 		if (_aabb_disjoint(a, b)) {
-			return p_edit.last_fault();
+			return _bad(MeshError::NO_INTERSECTION);
 		}
 		if (_aabb_strictly_encloses(b, a)) {
 			return _bad(MeshError::RESULT_EMPTY);

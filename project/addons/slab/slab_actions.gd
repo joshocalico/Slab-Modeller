@@ -172,12 +172,15 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		_report("%s failed. %s" % [row["label"], describe_error(err, row["id"])])
 		return
 	var after: PackedByteArray = target.get("data")
+	if after == before:
+		_report("%s did not change the solid." % row["label"])
+		return
 	if _undo != null:
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
 		_undo.add_undo_property(target, "data", before)
 		_undo.commit_action(false)
-	_report(_selection.describe())
+	_report("%s applied. %s now has %d faces." % [row["label"], target.name, int(target.call("face_count"))])
 
 
 func _create_solid(row: Dictionary, target: Node3D, method: String, args: Array) -> void:

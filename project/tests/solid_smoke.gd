@@ -4,6 +4,7 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
 
 var _fails := 0
+var _frames := 0
 
 
 func _init() -> void:
@@ -123,7 +124,15 @@ func _init() -> void:
 	_check_material_undo()
 	_check_fallback_lighting()
 	_check_signed_extrude_after_inset()
+
+
+func _process(_dt: float) -> bool:
+	_frames += 1
+	if _frames < 2:
+		return false
+	_check_boolean_uses_node_transforms()
 	_finish()
+	return true
 
 
 func _check_arch() -> void:
@@ -288,6 +297,51 @@ func _check_signed_extrude_after_inset() -> void:
 	actions.run("extrude_faces")
 	_expect(not said.is_empty() and said[0].contains("pierce"),
 		"a numeric stab still refuses at commit with the embedding copy, got %s" % [said])
+
+
+func _check_boolean_uses_node_transforms() -> void:
+	var hall: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(hall)
+	hall.name = "TurbineHall"
+	_expect(hall.call("make_box", Vector3(12, 9, 14)) == 0, "hall box builds")
+	var top: int = _top_face(hall)
+	_expect(hall.call("inset_faces", PackedInt64Array([top]), 0.45) == 0, "hall inset")
+	_expect(hall.call("extrude_faces", PackedInt64Array([top]), -8.55) == 0, "hall inward extrude")
+	hall.position = Vector3(6.5, 0, -3.5)
+	_expect(hall.call("face_count") == 14, "hollow hall has 14 faces, got %d" % hall.call("face_count"))
+	var cutter: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(cutter)
+	cutter.name = "Box"
+	_expect(cutter.call("make_box", Vector3(1.6, 3, 2)) == 0, "door cutter builds")
+	cutter.position = Vector3(6, 0.45, 2.5)
+	var selection := SlabSelection.new()
+	selection.set_objects([hall, cutter])
+	_expect(selection.describe() == "2 solids selected.", "Hall then Box is two solids, got %s" % selection.describe())
+	var actions := SlabActions.new(selection)
+	_expect(actions.disabled_reason(actions.find("boolean_subtract")) == "", "Subtract is enabled for two solids")
+	var said: Array[String] = []
+	actions.reported.connect(func(text: String) -> void: said.append(text))
+	var faces_before: int = hall.call("face_count")
+	actions.run("boolean_subtract")
+	_expect(not said.is_empty() and said[0].begins_with("Subtract applied."),
+		"Subtract reports that it cut, got %s" % [said])
+	_expect(hall.call("face_count") == 40,
+		"the doorway adds faces with node transforms, got %d from %d" % [hall.call("face_count"), faces_before])
+
+	var host: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(host)
+	_expect(host.call("make_box", Vector3(2, 2, 2)) == 0, "disjoint host builds")
+	var far: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(far)
+	_expect(far.call("make_box", Vector3(1, 1, 1)) == 0, "disjoint cutter builds")
+	far.position = Vector3(80, 0, 80)
+	selection.set_objects([host, far])
+	said.clear()
+	var disjoint_faces: int = host.call("face_count")
+	actions.run("boolean_subtract")
+	_expect(not said.is_empty() and said[0].contains("do not meet"),
+		"disjoint Subtract is refused, got %s" % [said])
+	_expect(host.call("face_count") == disjoint_faces, "disjoint Subtract leaves the host, got %d" % host.call("face_count"))
 
 
 func _has_property(node: Object, prop: String) -> bool:

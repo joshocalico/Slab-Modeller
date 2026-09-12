@@ -260,6 +260,22 @@ SLAB_TEST(boolean_subtract_cuts_a_door_in_a_hollow_room) {
 	expect(out.signed_volume() < before, "room doorway removes wall volume");
 }
 
+SLAB_TEST(boolean_subtract_of_disjoint_boxes_is_refused) {
+	const Mesh a = unit_box();
+	MeshEdit b_edit = MeshEdit::empty();
+	ops::box(b_edit, godot::Vector3(1, 1, 1));
+	Mesh b;
+	expect(std::move(b_edit).commit(b).ok(), "far box");
+	std::vector<VertexId> verts;
+	b.all_vertices(verts);
+	MeshEdit shifted(b);
+	expect(ops::move_vertices(shifted, verts, godot::Vector3(10, 0, 0)).ok(), "shift far away");
+	expect(std::move(shifted).commit(b).ok(), "far commit");
+	MeshEdit cut(a);
+	expect_eq(int(ops::boolean(cut, b, 1).code), int(MeshError::NO_INTERSECTION), "disjoint subtract is refused");
+	expect_eq(cut.scratch().face_count(), 6, "the host stays a box");
+}
+
 SLAB_TEST(mirror_x_keeps_volume_and_euler) {
 	const Mesh box = unit_box();
 	MeshEdit edit(box);
