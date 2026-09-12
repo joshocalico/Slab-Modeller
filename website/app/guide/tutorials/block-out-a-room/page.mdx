@@ -31,7 +31,7 @@ You should see a closed rectangular volume that matches the shot.
 ## Inset the top
 
 1. Click the top face.
-2. Set **Amount** to 0.45. The default 0.5 also works.
+2. Set **Distance** to 0.45. The default 0.5 also works.
 3. Press <kbd>I</kbd>. Or hover the Face icons until you see **Inset**. Click it.
 
 The top face shrinks in place. A rim of new faces appears around it. The inner cap stays selected.
@@ -48,7 +48,7 @@ The top face shrinks in place. A rim of new faces appears around it. The inner c
 2. Press <kbd>W</kbd>.
 3. Drag the Move gizmo toward the floor. Do not hold Shift. Do not press <kbd>E</kbd>.
 
-The gizmo translates the face. Distance comes from the gizmo, not from Amount. Amount cannot go negative, so **Extrude** always pushes the face out.
+The gizmo translates the face. Its travel comes from the gizmo, not the panel's Distance field. **Extrude** can use a negative Distance to move inward, but it also creates a new side ring. Moving the inset cap gives this room one inner wall loop.
 
 Release when you can see a floor and four inner walls. That gizmo commit is one undo action.
 

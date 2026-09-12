@@ -1,0 +1,30 @@
+export const metadata = { title: "Nodes and output" };
+
+# Nodes and output
+
+## SlabSolid
+
+`SlabSolid` stores the editable half-edge data, materials, grid step, prototype colour, and collision switch. Its generated children are implementation output:
+
+| Child | Output |
+| --- | --- |
+| `Mesh` | An `ArrayMesh`, split into surfaces by face material slot. |
+| `__body/__shape` | A `StaticBody3D` with a concave triangle-soup shape. |
+
+`collision_enabled` defaults to `true`. Every geometry rebuild refreshes the concave collision while it is enabled. Turning the property off disables the collider without replacing the visible mesh; the next geometry rebuild clears the shape. Turn it off for decorative or separately managed solids.
+
+`build_mesh()` returns the current `ArrayMesh`. It preserves the solid's material-slot surfaces.
+
+## SlabModule
+
+`SlabModule` groups direct `SlabSolid` children and `SlabSocket` descriptions. `cell_size` defaults to 2 m. `get_footprint()` rounds the combined bounds up to whole cells. `module_id` defaults to `module`.
+
+`bake_mesh()` returns one `ArrayMesh` from the module's direct `SlabSolid` children. It applies each child's local transform and combines positions, normals, UVs, and triangle indices into one surface. It does not include nested solids, sockets, collision, or material assignments.
+
+## SlabSocket
+
+`SlabSocket` describes a named door, open edge, or window on a module. It records a face, offset, opening size, and tags. It does not cut geometry. Use Subtract when the visible mesh needs an opening.
+
+## SlabSweep
+
+`SlabSweep` rebuilds a swept mesh when its points, profile, or closed setting changes. It is a `Node3D`, not a `SlabSolid`. The panel's element tools, booleans, collision switch, and `SlabModule.bake_mesh()` do not treat it as a solid.

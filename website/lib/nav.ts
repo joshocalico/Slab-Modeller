@@ -46,6 +46,10 @@ export const GUIDE_NAV: NavGroup[] = [
       },
       { href: "/guide/how-to/pull-a-wall", label: "Pull a wall" },
       { href: "/guide/how-to/punch-a-cavity", label: "Punch a cavity" },
+      {
+        href: "/guide/how-to/paint-texture-pixels",
+        label: "Paint texture pixels",
+      },
     ],
   },
   {
@@ -53,6 +57,7 @@ export const GUIDE_NAV: NavGroup[] = [
     items: [
       { href: "/guide/reference/keys-and-modes", label: "Keys and modes" },
       { href: "/guide/reference/panel", label: "The Slab panel" },
+      { href: "/guide/reference/nodes-and-output", label: "Nodes and output" },
     ],
   },
   {

@@ -6,7 +6,7 @@ Build the GDExtension, then open the Godot project that already enables the plug
 
 ## What you need
 
-- Godot 4.7
+- Godot 4.7 for the bundled project. The extension declares Godot 4.5 as its compatibility minimum.
 - A C++ toolchain that can run `scons`
 - Git, so you can fetch `godot-cpp`
 
@@ -20,7 +20,7 @@ scons target=template_debug
 scripts/slab-verify
 ```
 
-`scripts/slab-verify` builds the extension, runs the kernel tests, and loads the plugin in Godot.
+`scons target=template_debug` writes the debug library under `project/addons/slab/bin/`. `scripts/slab-verify` builds it again, runs the kernel tests, loads the extension, and exercises the editor plugin and demos.
 
 ## Open the editor
 

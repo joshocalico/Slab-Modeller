@@ -12,7 +12,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | <kbd>2</kbd> | Vertex | Pick a vertex. The Move gizmo translates it. |
 | <kbd>3</kbd> | Edge | Pick an edge. The Move gizmo translates both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
 | <kbd>4</kbd> | Face | Pick a face. The Move gizmo translates it. Shift-drag extrudes. |
-| <kbd>Escape</kbd> | Object | Leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. |
+| <kbd>Escape</kbd> | Object | Leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In Surface Paint it cancels a stroke, or closes the workspace when idle. |
 
 <kbd>W</kbd>, <kbd>E</kbd>, and <kbd>R</kbd> are Godot's Move, Rotate, and Scale tools. Slab claims <kbd>E</kbd> in Face mode for Extrude when a face is selected.
 
@@ -50,3 +50,5 @@ These run only when the current mode and selection count match the command. They
 Select Ring, the Create icons, and the Object boolean icons have no keys.
 
 <kbd>A</kbd> through those keys are ignored when Ctrl or Cmd is held, so editor chords still pass through.
+
+Surface Paint takes keyboard input while it is open, so modelling mode and command keys do not run there.
