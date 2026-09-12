@@ -16,6 +16,7 @@ const ACCENT := Color(0.86, 0.72, 0.34)
 const CHIP_SIZE := Vector2(28.0, 28.0)
 const PAINT_PALETTE_HEIGHT := 40.0
 const PAINT_ROW_HEIGHT := 28.0
+const PAINT_UV_ROW_HEIGHT := 44.0
 
 var _selection: RefCounted
 var _actions: RefCounted
@@ -516,6 +517,8 @@ func _paint_block() -> Control:
 	body.add_theme_constant_override("separation", 4)
 	body.add_child(_paint_target_row())
 	body.add_child(_paint_action_row())
+	_paint_uv_controls = _paint_uv_control_row()
+	body.add_child(_paint_uv_controls)
 	_paint_palette = ScrollContainer.new()
 	_paint_palette.name = "PaintPalette"
 	_paint_palette.custom_minimum_size.y = _scaled(PAINT_PALETTE_HEIGHT)
@@ -627,17 +630,24 @@ func _paint_action_row() -> Control:
 		if _paint and _selection.solid != null and not _selection.ids.is_empty():
 			_paint.sample_face(_selection.solid, _selection.ids[0])
 	))
-	_paint_uv_controls = _paint_uv_control_row()
-	tools.add_child(_paint_uv_controls)
 	tools.add_child(_paint_picker_slot())
 	scroll.add_child(tools)
 	return scroll
 
 
 func _paint_uv_control_row() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.name = "PaintUvControls"
+	scroll.custom_minimum_size.y = _scaled(PAINT_UV_ROW_HEIGHT)
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.clip_contents = true
 	var fields := HBoxContainer.new()
-	fields.name = "PaintUvControls"
+	fields.name = "PaintUvFields"
 	fields.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	fields.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	fields.add_theme_constant_override("separation", 8)
 	fields.add_child(_compact_spin("Repeat U", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
 		_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
@@ -666,7 +676,8 @@ func _paint_uv_control_row() -> Control:
 		if _paint:
 			_paint.rotate_uv_90()
 	))
-	return fields
+	scroll.add_child(fields)
+	return scroll
 
 
 func _paint_picker_slot() -> Control:
@@ -812,6 +823,7 @@ func _compact_spin(label_text: String, min_v: float, max_v: float, step: float, 
 	spin.custom_minimum_size.x = _scaled(76.0)
 	spin.add_theme_font_size_override("font_size", _font(12))
 	spin.get_line_edit().add_theme_font_size_override("font_size", _font(12))
+	spin.get_line_edit().select_all_on_focus = true
 	spin.value_changed.connect(on_change)
 	row.add_child(spin)
 	return row

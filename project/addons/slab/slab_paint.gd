@@ -14,7 +14,7 @@ enum Tool { MATERIAL_UV, PIXEL }
 const PNG_META := "slab_paint_png"
 const OWNED_META := "slab_paint_owned"
 const DEFAULT_SIZE := 256
-const PAINT_HEIGHT := 320.0
+const PAINT_HEIGHT := 360.0
 const VERDICT_PASS := 0
 const VERDICT_STOP := 1
 const UV_MOVE := 0

@@ -303,6 +303,8 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	expect(_button_for(panel, "Make Unique") != null, "Make Unique is labeled")
 	var uv_controls: Control = panel.find_child("PaintUvControls", true, false)
 	expect(uv_controls != null and uv_controls.visible, "Material/UV shows precise placement controls")
+	expect(uv_controls.custom_minimum_size.y >= SlabPanel.PAINT_UV_ROW_HEIGHT,
+		"precise placement reserves room for fields above its scrollbar")
 	for key in ["paint_uv_repeat_u", "paint_uv_repeat_v", "paint_uv_offset_u", "paint_uv_offset_v", "paint_uv_rotation"]:
 		var field: Node = panel.find_child(key, true, false)
 		expect(field != null and _spins(field).size() == 1, "%s has one numeric field" % key)
