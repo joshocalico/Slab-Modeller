@@ -13,7 +13,7 @@ Instance these scenes wherever they make sense in the editor. Their origins sit 
 | `res://demo/signal_foundry/gameplay/energy_cell.tscn` | Floating cyan pickup. Each instance adds one energy cell, flashes HUD feedback, then disappears. |
 | `res://demo/signal_foundry/gameplay/checkpoint_beacon.tscn` | Orange beacon that turns green on contact. R and fall recovery subsequently spawn 1.5 m along its local −Z, facing local −Z. Rotate the beacon so its blue −Z arrow points in the desired departure direction. Set `checkpoint_title` and `local_respawn_offset` in the Inspector as needed. |
 | `res://demo/signal_foundry/gameplay/exit_beacon.tscn` | Red exit field that reports missing cells, or turns green and reports completion once powered. Its `required_cells` Inspector value defaults to 3. |
-| `res://demo/signal_foundry/gameplay/hazard_reset.tscn` | Pulsing red trigger that immediately returns the player to the active checkpoint. Scale the Area3D to cover the hazard volume. |
+| `res://demo/signal_foundry/gameplay/hazard_reset.tscn` | Pulsing red strip that returns the player to the active checkpoint. Set `footprint_size` in the Inspector for its X/Z coverage; keep the root scale at one. Its shallow trigger matches the visible pulse so players can jump over it. |
 | `res://demo/signal_foundry/gameplay/moving_platform.tscn` | Physics-safe shuttle. Add hand-authored SlabSolid nodes below `PlaceSlabChildrenHere`, then set `local_travel`, `travel_duration`, and `endpoint_pause`. |
 
 The compact player HUD shows collected energy, the active checkpoint, and short interaction notices. Progress is session-local and requires no autoload or level script.
@@ -36,10 +36,10 @@ Use Godot's `AnimationPlayer` for unique timing or multi-part sequences: add it 
 | Shift | Sprint (×1.45). Auto-run stays at walk speed unless Shift is held. |
 | Esc | Release mouse and stop auto-run; keyboard move/look still work |
 | Left click | Recapture mouse |
-| R | Reset to this instance’s transform at `_ready`; also stops auto-run |
+| R | Return to the active checkpoint, or the initial spawn before activating a checkpoint; also stops auto-run |
 | F3 | Toggle a passive diagnostic overlay with feet XYZ, yaw, grounded state, floor collider/platform, velocity, platform velocity, and auto-run state |
 
-Falls below y = −6 also reset to that spawn transform.
+Falls below y = −6 also return to the active checkpoint. Collected cells survive resets within the current play session.
 
 ## Default dimensions
 
