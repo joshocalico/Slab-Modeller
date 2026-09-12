@@ -1,0 +1,9 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/teal_steel.svg" id="1_derk4"]
+
+[resource]
+resource_name = "Teal Steel"
+albedo_texture = ExtResource("1_derk4")
+metallic = 0.4
+roughness = 0.82

@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/limestone.svg" id="1_vqf5d"]
+
+[resource]
+resource_name = "Limestone"
+albedo_texture = ExtResource("1_vqf5d")
+roughness = 0.82

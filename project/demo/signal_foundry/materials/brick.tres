@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/brick.svg" id="1_vk20s"]
+
+[resource]
+resource_name = "Brick"
+albedo_texture = ExtResource("1_vk20s")
+roughness = 0.82
