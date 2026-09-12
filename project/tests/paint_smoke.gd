@@ -26,6 +26,7 @@ func _boot() -> void:
 	_check_uv_matches_emit()
 	_check_uv_modifier_dispatch()
 	_check_uv_transform_and_wrap()
+	_check_numeric_uv_apply_and_selection_sync()
 	_check_cylinder_and_concave()
 	_check_raster_wrap_and_stroke()
 	_check_wrap_outline_tiles()
@@ -95,6 +96,41 @@ func _check_uv_transform_and_wrap() -> void:
 	solid.rotation.y = PI * 0.25
 	var still: Vector2 = SlabPaintUv.point_uv(solid, top, corner)
 	_expect(still.distance_to(mapped) < 0.0001, "node rotation does not change local UV")
+	solid.free()
+
+
+func _check_numeric_uv_apply_and_selection_sync() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(4, 1, 4)) == 0, "numeric UV box builds")
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_objects([solid])
+	selection.set_ids(PackedInt64Array([top]))
+	var undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, undo)
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	actions.uv_scale = Vector2(4.0, 4.0)
+	actions.uv_offset = Vector2(0.25, -0.5)
+	actions.uv_rotation_degrees = 30.0
+	paint.apply_uv()
+	var attrs: Dictionary = solid.call("face_uv", top)
+	_expect((attrs.get("scale", Vector2.ZERO) as Vector2).is_equal_approx(Vector2(4.0, 4.0)), "numeric UV applies four repeats")
+	_expect((attrs.get("offset", Vector2.ZERO) as Vector2).is_equal_approx(Vector2(0.25, -0.5)), "numeric UV applies both offsets")
+	_expect(is_equal_approx(float(attrs.get("rotation", 0.0)), deg_to_rad(30.0)), "numeric UV applies degree rotation")
+	_expect(undo.actions.size() == 1 and undo.actions[0]["name"] == "Slab Apply UV", "numeric UV apply is one undoable action")
+
+	actions.uv_scale = Vector2.ONE
+	actions.uv_offset = Vector2.ZERO
+	actions.uv_rotation_degrees = 0.0
+	selection.set_ids(PackedInt64Array())
+	selection.set_ids(PackedInt64Array([top]))
+	_expect(actions.uv_scale.is_equal_approx(Vector2(4.0, 4.0)), "face selection restores numeric repeat fields")
+	_expect(actions.uv_offset.is_equal_approx(Vector2(0.25, -0.5)), "face selection restores numeric offset fields")
+	_expect(is_equal_approx(actions.uv_rotation_degrees, 30.0), "face selection restores numeric rotation field")
 	solid.free()
 
 

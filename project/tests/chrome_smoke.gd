@@ -301,6 +301,15 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	expect(_button_for(panel, "Pixel") != null and _button_for(panel, "Material / UV") != null,
 		"paint has distinct Material/UV and Pixel tools")
 	expect(_button_for(panel, "Make Unique") != null, "Make Unique is labeled")
+	var uv_controls: Control = panel.find_child("PaintUvControls", true, false)
+	expect(uv_controls != null and uv_controls.visible, "Material/UV shows precise placement controls")
+	for key in ["paint_uv_repeat_u", "paint_uv_repeat_v", "paint_uv_offset_u", "paint_uv_offset_v", "paint_uv_rotation"]:
+		var field: Node = panel.find_child(key, true, false)
+		expect(field != null and _spins(field).size() == 1, "%s has one numeric field" % key)
+		if field != null and not _spins(field).is_empty():
+			expect(_spins(field)[0].focus_mode == Control.FOCUS_ALL, "%s is keyboard focusable" % key)
+	expect(_button_for(panel, "Apply UV") != null and _button_for(panel, "Reset UV") != null,
+		"precise placement has clear Apply UV and Reset UV actions")
 	expect(panel.find_child("BrushColor", true, false) != null, "brush color sits next to the canvas")
 	expect(is_equal_approx(panel.custom_minimum_size.y, preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT),
 		"the paint dock stays bounded so the 3D viewport keeps height")
@@ -329,6 +338,7 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	var uv: Button = _button_for(panel, "Material / UV")
 	expect(pixel != null and pixel.button_pressed and uv != null and not uv.button_pressed,
 		"Pixel vs Material/UV shows which tool is selected")
+	expect(not uv_controls.visible, "Pixel painting hides UV placement fields and keeps the canvas workspace")
 	paint.exit()
 	expect(panel.find_child("ModelBody", true, false).visible, "closing paint restores modeling")
 	panel.free()

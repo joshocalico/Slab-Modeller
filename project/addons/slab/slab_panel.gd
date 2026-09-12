@@ -49,6 +49,7 @@ var _paint_tool_pixel: Button
 var _unique_button: Button
 var _paint_picker: Node
 var _paint_uv_hint: Label
+var _paint_uv_controls: Control
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
@@ -626,17 +627,46 @@ func _paint_action_row() -> Control:
 		if _paint and _selection.solid != null and not _selection.ids.is_empty():
 			_paint.sample_face(_selection.solid, _selection.ids[0])
 	))
-	tools.add_child(_named_action("UV Reset", "Reload", "Reset UV scale, offset and rotation.", func() -> void:
-		if _paint:
-			_paint.reset_uv()
-	))
-	tools.add_child(_named_action("UV 90°", "ToolRotate", "Rotate UV placement by ninety degrees.", func() -> void:
-		if _paint:
-			_paint.rotate_uv_90()
-	))
+	_paint_uv_controls = _paint_uv_control_row()
+	tools.add_child(_paint_uv_controls)
 	tools.add_child(_paint_picker_slot())
 	scroll.add_child(tools)
 	return scroll
+
+
+func _paint_uv_control_row() -> Control:
+	var fields := HBoxContainer.new()
+	fields.name = "PaintUvControls"
+	fields.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	fields.add_theme_constant_override("separation", 8)
+	fields.add_child(_compact_spin("Repeat U", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
+		_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
+	, "Texture repeats across the face in U.", &"paint_uv_repeat_u"))
+	fields.add_child(_compact_spin("Repeat V", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
+		_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
+	, "Texture repeats across the face in V.", &"paint_uv_repeat_v"))
+	fields.add_child(_compact_spin("Offset U", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
+		_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
+	, "Texture offset in U.", &"paint_uv_offset_u"))
+	fields.add_child(_compact_spin("Offset V", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
+		_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
+	, "Texture offset in V.", &"paint_uv_offset_v"))
+	fields.add_child(_compact_spin("Rotation", -360.0, 360.0, 1.0, 0.0, func(v: float) -> void:
+		_actions.uv_rotation_degrees = v
+	, "Texture rotation in degrees.", &"paint_uv_rotation"))
+	fields.add_child(_named_action("Apply UV", "ImageTexture", "Apply these UV values to the selected face.", func() -> void:
+		if _paint:
+			_paint.apply_uv()
+	))
+	fields.add_child(_named_action("Reset UV", "Reload", "Reset repeats, offsets and rotation on the selected face.", func() -> void:
+		if _paint:
+			_paint.reset_uv()
+	))
+	fields.add_child(_named_action("UV 90°", "ToolRotate", "Rotate UV placement by ninety degrees.", func() -> void:
+		if _paint:
+			_paint.rotate_uv_90()
+	))
+	return fields
 
 
 func _paint_picker_slot() -> Control:
@@ -776,6 +806,9 @@ func _compact_spin(label_text: String, min_v: float, max_v: float, step: float, 
 	spin.step = step
 	spin.value = value
 	spin.tooltip_text = tooltip
+	spin.focus_mode = Control.FOCUS_ALL
+	spin.accessibility_name = label_text
+	spin.accessibility_description = tooltip
 	spin.custom_minimum_size.x = _scaled(76.0)
 	spin.add_theme_font_size_override("font_size", _font(12))
 	spin.get_line_edit().add_theme_font_size_override("font_size", _font(12))
@@ -877,6 +910,14 @@ func _refresh_paint_chrome() -> void:
 	if _paint_uv_hint != null:
 		_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
 		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
+	if _paint_uv_controls != null:
+		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
+	if _paint != null:
+		_set_spin(&"paint_uv_repeat_u", _actions.uv_scale.x)
+		_set_spin(&"paint_uv_repeat_v", _actions.uv_scale.y)
+		_set_spin(&"paint_uv_offset_u", _actions.uv_offset.x)
+		_set_spin(&"paint_uv_offset_v", _actions.uv_offset.y)
+		_set_spin(&"paint_uv_rotation", _actions.uv_rotation_degrees)
 	if _paint_picker != null and is_instance_valid(_paint_picker) and _paint != null:
 		if _paint_picker.has_method("set_edited_resource"):
 			_paint_picker.set("edited_resource", _paint.material())

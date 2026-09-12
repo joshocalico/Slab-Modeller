@@ -249,6 +249,12 @@ func rotate_uv_90() -> void:
 		changed.emit()
 
 
+func apply_uv() -> void:
+	if _actions != null:
+		_actions.run("uv_apply")
+		changed.emit()
+
+
 func reset_uv() -> void:
 	if _actions != null:
 		_actions.run("uv_reset")
@@ -502,6 +508,7 @@ func _bind_from_selection() -> void:
 		_hide_brush()
 		changed.emit()
 		return
+	_sync_uv_from_selection()
 	if _actions != null:
 		_actions.clamp_material_slot()
 		_slot = _actions.material_slot
@@ -525,6 +532,17 @@ func _bind_from_selection() -> void:
 		_texture = ImageTexture.create_from_image(_image)
 		dirty = false
 	changed.emit()
+
+
+func _sync_uv_from_selection() -> void:
+	if _actions == null or _selection == null or _selection.solid == null or _selection.ids.is_empty():
+		return
+	var attrs: Dictionary = _selection.solid.call("face_uv", _selection.ids[0])
+	if attrs.is_empty():
+		return
+	_actions.uv_scale = attrs.get("scale", Vector2.ONE)
+	_actions.uv_offset = attrs.get("offset", Vector2.ZERO)
+	_actions.uv_rotation_degrees = rad_to_deg(float(attrs.get("rotation", 0.0)))
 
 
 func _ensure_editable() -> bool:
