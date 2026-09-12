@@ -4,14 +4,18 @@ extends VBoxContainer
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
+const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
+const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 
-const BUTTON_SIZE := Vector2(40.0, 36.0)
+const BUTTON_HEIGHT := 36.0
 const SPIN_WIDTH := 104.0
-const PANEL_HEIGHT := 320.0
+const PANEL_HEIGHT := 240.0
 const GRID_SEPARATION := 4.0
-const DEFAULT_COLUMNS := 6
 const ACCENT := Color(0.86, 0.72, 0.34)
 const CHIP_SIZE := Vector2(28.0, 28.0)
+const PAINT_PALETTE_HEIGHT := 40.0
+const PAINT_ROW_HEIGHT := 28.0
 
 var _selection: RefCounted
 var _actions: RefCounted
@@ -22,11 +26,32 @@ var _settings: VBoxContainer
 var _settings_fields: HFlowContainer
 var _settings_chips: HFlowContainer
 var _buttons: Dictionary = {}
-var _grids: Array[GridContainer] = []
 var _create_group: ButtonGroup
 var _create_focus: StringName = &"make_box"
 # Mode.OBJECT is 0, so -1 means the command column has never been built.
 var _built_mode: int = -1
+var _uv_open: bool = false
+var _settings_title: Label
+var _uv_wrap: HFlowContainer
+var _undo_hook: Object = null
+var _paint: RefCounted
+var _model_body: VBoxContainer
+var _paint_body: Control
+var _paint_toggle: Button
+var _paint_canvas: Control
+var _paint_face: Label
+var _paint_mat: Label
+var _paint_dirty: Label
+var _paint_palette: ScrollContainer
+var _paint_chips: HBoxContainer
+var _paint_tool_uv: Button
+var _paint_tool_pixel: Button
+var _unique_button: Button
+var _paint_picker: Node
+var _paint_uv_hint: Label
+var _brush_radius: SpinBox
+var _brush_opacity: SpinBox
+var _brush_color: ColorPickerButton
 
 
 func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
@@ -34,19 +59,61 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_actions = actions
 	_metrics = metrics if metrics != null else preload("res://addons/slab/slab_metrics.gd").at_scale(1.0)
 	name = "Slab"
+	clip_contents = true
 	custom_minimum_size = Vector2(0.0, _scaled(PANEL_HEIGHT))
 	add_theme_constant_override("separation", 6)
 	_create_group = ButtonGroup.new()
 
 	_status = _status_label()
 	add_child(_header())
-	add_child(_command_scroll())
-	add_child(_settings_block())
+	add_child(_status)
+	_model_body = VBoxContainer.new()
+	_model_body.name = "ModelBody"
+	_model_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_model_body.add_theme_constant_override("separation", 8)
+	_model_body.add_child(_command_scroll())
+	_model_body.add_child(_settings_block())
+	add_child(_model_body)
+	_paint_body = _paint_block()
+	_paint_body.visible = false
+	add_child(_paint_body)
 
 	_selection.changed.connect(refresh)
 	_actions.reported.connect(_on_reported)
-	resized.connect(_fit_columns)
 	refresh()
+
+
+func _get_minimum_size() -> Vector2:
+	var min_size := Vector2(0.0, _scaled(PANEL_HEIGHT))
+	if _paint != null and _paint.active:
+		min_size.y = _scaled(SlabPaint.PAINT_HEIGHT)
+	return min_size
+
+
+func bind_paint(paint: RefCounted) -> void:
+	_paint = paint
+	if _paint != null and _paint.has_signal("changed"):
+		if not _paint.changed.is_connected(_on_paint_changed):
+			_paint.changed.connect(_on_paint_changed)
+	if _paint != null and _paint.has_signal("reported"):
+		if not _paint.reported.is_connected(_on_reported):
+			_paint.reported.connect(_on_reported)
+	if _paint_canvas != null:
+		_paint_canvas.setup(_paint, _metrics)
+	_on_paint_changed()
+
+
+func bind_undo(undo: Object) -> void:
+	if _undo_hook != null and _undo_hook.has_signal("version_changed"):
+		if _undo_hook.version_changed.is_connected(_refresh_soon):
+			_undo_hook.version_changed.disconnect(_refresh_soon)
+	_undo_hook = undo
+	if _undo_hook != null and _undo_hook.has_signal("version_changed"):
+		_undo_hook.version_changed.connect(_refresh_soon)
+
+
+func _refresh_soon() -> void:
+	call_deferred("refresh")
 
 
 func _scaled(value: float) -> float:
@@ -55,16 +122,6 @@ func _scaled(value: float) -> float:
 
 func _font(px: int) -> int:
 	return _metrics.font(px)
-
-
-func _fit_columns() -> void:
-	# Before the first layout the panel has no width, and one column would drag its minimum width down.
-	if size.x <= 0.0:
-		return
-	var stride: float = _scaled(BUTTON_SIZE.x + GRID_SEPARATION)
-	var columns: int = maxi(1, int(size.x / stride))
-	for grid in _grids:
-		grid.columns = columns
 
 
 func refresh() -> void:
@@ -76,6 +133,8 @@ func refresh() -> void:
 	_refresh_buttons()
 	_refresh_material_chips()
 	set_status(_selection.describe())
+	if _paint != null and _paint.active:
+		_refresh_paint_chrome()
 
 
 func focus_create(id: StringName) -> void:
@@ -98,14 +157,12 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for id in _buttons:
 		_buttons[id].set_block_signals(true)
 	_buttons.clear()
-	_grids.clear()
 	for child in _command_column.get_children():
 		_command_column.remove_child(child)
 		child.free()
 	for section in sections:
 		_command_column.add_child(_section_label(section["heading"]))
-		_command_column.add_child(_section_grid(section["rows"]))
-	_fit_columns()
+		_command_column.add_child(_section_flow(section["rows"]))
 	_sync_create_pressed()
 
 
@@ -125,38 +182,55 @@ func _refresh_settings() -> void:
 			spin.value_changed.emit(spin.value)
 	for child in _settings_fields.get_children():
 		_settings_fields.remove_child(child)
-		child.free()
+		child.queue_free()
 	var mode: int = _selection.mode
 	if mode == SlabSelection.Mode.OBJECT:
+		_settings_title.text = "New %s" % _create_label()
+		_settings_title.visible = true
+		_uv_wrap = null
 		for field in _actions.shapes.fields_for(_create_focus):
 			_settings_fields.add_child(_shape_spin(field))
+	elif mode == SlabSelection.Mode.FACE:
+		_settings_title.text = "Distance"
+		_settings_title.visible = true
+		_settings_fields.add_child(_spin("Distance", SlabActions.EXTRUDE_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
+			_actions.amount = v
+		, "Positive extrudes outward. Negative extrudes inward. Inset uses the absolute value.", &"amount"))
+		_settings_fields.add_child(_uv_toggle())
+		_uv_wrap = HFlowContainer.new()
+		_uv_wrap.name = "UvFields"
+		_uv_wrap.add_theme_constant_override("h_separation", 10)
+		_uv_wrap.visible = _uv_open
+		_uv_wrap.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
+			_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
+		, "", &"uv_scale_x"))
+		_uv_wrap.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
+			_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
+		, "", &"uv_scale_y"))
+		_uv_wrap.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
+			_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
+		, "", &"uv_offset_x"))
+		_uv_wrap.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
+			_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
+		, "", &"uv_offset_y"))
+		_uv_wrap.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
+			_actions.uv_rotation_degrees = v
+		, "", &"uv_rotation"))
+		_settings_fields.add_child(_uv_wrap)
 	else:
-		_settings_fields.add_child(_spin("Amount", 0.05, 64.0, 0.05, _actions.amount, func(v: float) -> void:
+		_settings_title.text = "Amount"
+		_settings_title.visible = true
+		_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
 			_actions.amount = v
 		, "", &"amount"))
-		if mode == SlabSelection.Mode.FACE:
-			_settings_fields.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
-				_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
-			, "", &"uv_scale_x"))
-			_settings_fields.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
-				_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
-			, "", &"uv_scale_y"))
-			_settings_fields.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
-				_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
-			, "", &"uv_offset_x"))
-			_settings_fields.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
-				_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
-			, "", &"uv_offset_y"))
-			_settings_fields.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
-				_actions.uv_rotation_degrees = v
-			, "", &"uv_rotation"))
+		_uv_wrap = null
 	_refresh_material_chips()
 
 
 func _refresh_material_chips() -> void:
 	for child in _settings_chips.get_children():
 		_settings_chips.remove_child(child)
-		child.free()
+		child.queue_free()
 	_settings_chips.visible = _selection.mode == SlabSelection.Mode.FACE
 	if _selection.mode != SlabSelection.Mode.FACE:
 		return
@@ -168,6 +242,7 @@ func _refresh_material_chips() -> void:
 		hint.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
 		_settings_chips.add_child(hint)
 		return
+	_actions.clamp_material_slot()
 	var mats: Array = solid.materials
 	for i in mats.size():
 		_settings_chips.add_child(_material_chip(i, mats[i]))
@@ -197,23 +272,43 @@ func _material_chip(index: int, mat: Variant) -> Button:
 	chip.icon = SlabIcons.texture("StandardMaterial3D", _metrics.scale())
 	chip.pressed.connect(func() -> void:
 		_actions.material_slot = index
-		_refresh_material_chips()
+		call_deferred("_refresh_material_chips")
 	)
 	return chip
 
 
 func _add_material() -> void:
-	var solid: Node = _selection.solid
-	if solid == null:
-		return
-	var mats: Array = solid.materials
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.72, 0.55, 0.38)
-	mat.roughness = 0.7
-	mats.append(mat)
-	solid.materials = mats
-	_actions.material_slot = mats.size() - 1
-	_refresh_material_chips()
+	_actions.add_material()
+	call_deferred("_refresh_material_chips")
+
+
+func _create_label() -> String:
+	for entry in _actions.shapes.entries():
+		if StringName(entry["id"]) == _create_focus:
+			return str(entry["label"])
+	return "solid"
+
+
+func _clamped_amount() -> float:
+	return clampf(absf(_actions.amount), SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING)
+
+
+func _uv_toggle() -> Button:
+	var button := Button.new()
+	button.name = "uv_toggle"
+	button.text = "UV"
+	button.toggle_mode = true
+	button.button_pressed = _uv_open
+	button.tooltip_text = "Show UV scale, offset, and rotation."
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	button.add_theme_font_size_override("font_size", _font(15))
+	button.pressed.connect(func() -> void:
+		_uv_open = button.button_pressed
+		if _uv_wrap != null:
+			_uv_wrap.visible = _uv_open
+	)
+	return button
 
 
 func _shape_spin(field: Dictionary) -> Control:
@@ -227,11 +322,14 @@ func _shape_spin(field: Dictionary) -> Control:
 func set_status(text: String) -> void:
 	if _status:
 		_status.text = text
+		_status.tooltip_text = text
 
 
 func _on_reported(text: String) -> void:
 	set_status(text)
 	_sync_edit_fields()
+	if _selection.mode == SlabSelection.Mode.FACE:
+		call_deferred("_refresh_material_chips")
 
 
 func _sync_edit_fields() -> void:
@@ -265,7 +363,19 @@ func _header() -> Control:
 	var strip := SlabModeStrip.new()
 	row.add_child(strip)
 	strip.setup(_selection, true, _metrics)
-	row.add_child(_status)
+	_paint_toggle = Button.new()
+	_paint_toggle.name = "SurfacePaint"
+	_paint_toggle.text = "Surface Paint"
+	_paint_toggle.toggle_mode = true
+	_paint_toggle.focus_mode = Control.FOCUS_NONE
+	_paint_toggle.tooltip_text = "Open the Surface Paint workspace. Escape closes it."
+	_paint_toggle.add_theme_font_size_override("font_size", _font(15))
+	_paint_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	_paint_toggle.pressed.connect(func() -> void:
+		if _paint != null:
+			_paint.toggle()
+	)
+	row.add_child(_paint_toggle)
 	return row
 
 
@@ -273,6 +383,11 @@ func _settings_block() -> Control:
 	_settings = VBoxContainer.new()
 	_settings.name = "Settings"
 	_settings.add_theme_constant_override("separation", 6)
+	_settings_title = Label.new()
+	_settings_title.name = "SettingsTitle"
+	_settings_title.add_theme_font_size_override("font_size", _font(16))
+	_settings_title.add_theme_color_override("font_color", ACCENT)
+	_settings.add_child(_settings_title)
 	_settings_fields = HFlowContainer.new()
 	_settings_fields.name = "SettingsFields"
 	_settings_fields.add_theme_constant_override("h_separation", 10)
@@ -313,12 +428,16 @@ func _spin(label_text: String, min_v: float, max_v: float, step: float, value: f
 
 func _status_label() -> Label:
 	var label := Label.new()
+	label.name = "Status"
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.clip_text = true
+	label.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.clip_text = false
+	label.mouse_filter = Control.MOUSE_FILTER_STOP
 	label.add_theme_font_size_override("font_size", _font(16))
 	label.add_theme_color_override("font_color", ACCENT)
 	label.text = "No solid selected."
+	label.tooltip_text = label.text
 	return label
 
 
@@ -342,13 +461,14 @@ func _section_label(text: String) -> Label:
 	return label
 
 
-func _section_grid(rows: Array[Dictionary]) -> GridContainer:
-	var grid := GridContainer.new()
-	grid.columns = DEFAULT_COLUMNS
+func _section_flow(rows: Array[Dictionary]) -> HFlowContainer:
+	var flow := HFlowContainer.new()
+	flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	flow.add_theme_constant_override("h_separation", int(_scaled(GRID_SEPARATION)))
+	flow.add_theme_constant_override("v_separation", int(_scaled(GRID_SEPARATION)))
 	for row in rows:
-		grid.add_child(_action_button(row))
-	_grids.append(grid)
-	return grid
+		flow.add_child(_action_button(row))
+	return flow
 
 
 func _action_button(row: Dictionary) -> Button:
@@ -356,11 +476,16 @@ func _action_button(row: Dictionary) -> Button:
 	var button := Button.new()
 	button.name = id
 	button.icon = SlabIcons.texture(row["icon"], _metrics.scale())
-	button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	button.text = row["label"]
+	button.clip_text = false
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	button.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-	button.custom_minimum_size = Vector2(_scaled(BUTTON_SIZE.x), _scaled(BUTTON_SIZE.y))
-	button.add_theme_font_size_override("font_size", _font(15))
+	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", _font(15))
+	button.custom_minimum_size = Vector2(0.0, _scaled(BUTTON_HEIGHT))
+	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	button.set_meta("slab_label", row["label"])
 	button.tooltip_text = _tooltip_of(row)
 	if _actions.section_of(row) == _actions.SECTION_CREATE:
@@ -374,6 +499,470 @@ func _action_button(row: Dictionary) -> Button:
 	)
 	_buttons[id] = button
 	return button
+
+
+func _paint_block() -> Control:
+	var body := VBoxContainer.new()
+	body.name = "PaintBody"
+	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.clip_contents = true
+	body.add_theme_constant_override("separation", 4)
+	body.add_child(_paint_target_row())
+	body.add_child(_paint_action_row())
+	_paint_palette = ScrollContainer.new()
+	_paint_palette.name = "PaintPalette"
+	_paint_palette.custom_minimum_size.y = _scaled(PAINT_PALETTE_HEIGHT)
+	_paint_palette.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_paint_palette.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_paint_palette.clip_contents = true
+	_paint_palette.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	_paint_palette.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_paint_chips = HBoxContainer.new()
+	_paint_chips.name = "PaintSlots"
+	_paint_chips.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_paint_chips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_paint_chips.add_theme_constant_override("separation", 6)
+	_paint_palette.add_child(_paint_chips)
+	body.add_child(_paint_palette)
+	var row := HBoxContainer.new()
+	row.name = "PaintCanvasRow"
+	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.clip_contents = true
+	row.add_theme_constant_override("separation", 8)
+	_paint_canvas = SlabPaintCanvas.new()
+	_paint_canvas.setup(_paint, _metrics)
+	_paint_canvas.stroke_started.connect(func() -> void:
+		if _paint:
+			_paint.begin_stroke()
+	)
+	_paint_canvas.painted_pixel.connect(func(pixel: Vector2) -> void:
+		if _paint:
+			_paint.dab_pixel(pixel)
+	)
+	_paint_canvas.stroke_ended.connect(func() -> void:
+		if _paint:
+			_paint.end_stroke()
+	)
+	_paint_canvas.stroke_cancelled.connect(func() -> void:
+		if _paint:
+			_paint.cancel_stroke()
+	)
+	_paint_canvas.uv_dragged.connect(func(delta: Vector2, mode: int) -> void:
+		if _paint:
+			_paint.drag_uv(delta, mode)
+	)
+	_paint_uv_hint = Label.new()
+	_paint_uv_hint.name = "PaintUvHint"
+	_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
+	_paint_uv_hint.add_theme_font_size_override("font_size", _font(12))
+	_paint_uv_hint.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62, 0.92))
+	_paint_uv_hint.clip_text = true
+	_paint_uv_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_paint_uv_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	_paint_uv_hint.offset_left = 6
+	_paint_uv_hint.offset_top = 4
+	_paint_uv_hint.offset_right = -6
+	_paint_uv_hint.offset_bottom = 18
+	_paint_canvas.add_child(_paint_uv_hint)
+	row.add_child(_paint_canvas)
+	row.add_child(_brush_column())
+	body.add_child(row)
+	return body
+
+
+func _paint_target_row() -> Control:
+	var row := HBoxContainer.new()
+	row.name = "PaintTarget"
+	row.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	row.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.clip_contents = true
+	row.add_theme_constant_override("separation", 8)
+	var group := ButtonGroup.new()
+	_paint_tool_uv = _paint_tool_button("Material / UV", SlabPaint.Tool.MATERIAL_UV, group)
+	_paint_tool_pixel = _paint_tool_button("Pixel", SlabPaint.Tool.PIXEL, group)
+	row.add_child(_paint_tool_uv)
+	row.add_child(_paint_tool_pixel)
+	_paint_face = _paint_caption("Face", "none")
+	_paint_mat = _paint_caption("Material", "none")
+	_paint_dirty = _paint_caption("Save", "")
+	_paint_dirty.name = "PaintDirty"
+	row.add_child(_paint_face)
+	row.add_child(_paint_mat)
+	row.add_child(_paint_dirty)
+	return row
+
+
+func _paint_action_row() -> Control:
+	var scroll := ScrollContainer.new()
+	scroll.name = "PaintActions"
+	scroll.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.clip_contents = true
+	var tools := HBoxContainer.new()
+	tools.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	tools.clip_contents = true
+	tools.add_theme_constant_override("separation", 8)
+	_unique_button = _named_action("Make Unique", "Duplicate", "Copies this solid's material so painting does not rewrite shared tiles.", func() -> void:
+		if _paint:
+			_paint.make_unique()
+	)
+	tools.add_child(_unique_button)
+	tools.add_child(_named_action("Save Paint", "Save", "Writes the albedo PNG so paint survives reopen.", func() -> void:
+		if _paint:
+			_paint.save_png(_paint.default_save_path())
+	))
+	tools.add_child(_named_action("Sample", "ListSelect", "Click a face in the viewport with Alt, or this then a face, to copy material and UV.", func() -> void:
+		if _paint and _selection.solid != null and not _selection.ids.is_empty():
+			_paint.sample_face(_selection.solid, _selection.ids[0])
+	))
+	tools.add_child(_named_action("UV Reset", "Reload", "Reset UV scale, offset and rotation.", func() -> void:
+		if _paint:
+			_paint.reset_uv()
+	))
+	tools.add_child(_named_action("UV 90°", "ToolRotate", "Rotate UV placement by ninety degrees.", func() -> void:
+		if _paint:
+			_paint.rotate_uv_90()
+	))
+	tools.add_child(_paint_picker_slot())
+	scroll.add_child(tools)
+	return scroll
+
+
+func _paint_picker_slot() -> Control:
+	var wrap := Control.new()
+	wrap.name = "PaintMaterialPickerWrap"
+	wrap.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
+	wrap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.clip_contents = true
+	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
+	var picker: Node = _make_paint_picker()
+	wrap.add_child(picker)
+	wrap.resized.connect(func() -> void:
+		if picker is Control and is_instance_valid(picker):
+			picker.position = Vector2.ZERO
+			picker.size = wrap.size
+			_compact_resource_preview(picker)
+	)
+	_compact_resource_preview(picker)
+	return wrap
+
+
+func _make_paint_picker() -> Node:
+	if Engine.is_editor_hint() and ClassDB.class_exists("EditorResourcePicker"):
+		var picker: Variant = ClassDB.instantiate("EditorResourcePicker")
+		if picker is Node:
+			_paint_picker = picker
+			picker.name = "PaintMaterialPicker"
+			picker.set("base_type", "StandardMaterial3D")
+			picker.set("toggle_mode", false)
+			if picker is Control:
+				picker.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
+				picker.clip_contents = true
+			if picker.has_signal("resource_changed"):
+				picker.resource_changed.connect(func(res: Resource) -> void:
+					if _paint != null and res is StandardMaterial3D:
+						_paint.pick_material(res)
+				)
+			if picker.has_signal("child_entered_tree"):
+				picker.child_entered_tree.connect(func(_n: Node) -> void:
+					_compact_resource_preview(picker)
+				)
+			_apply_picker_fonts(picker)
+			return picker
+	var fake := Button.new()
+	fake.name = "PaintMaterialPicker"
+	fake.text = "Assign"
+	fake.clip_text = true
+	fake.focus_mode = Control.FOCUS_NONE
+	fake.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
+	fake.add_theme_font_size_override("font_size", _font(13))
+	var preview := TextureRect.new()
+	preview.name = "Preview"
+	preview.custom_minimum_size = Vector2(64, 64)
+	preview.mouse_filter = Control.MOUSE_FILTER_STOP
+	fake.add_child(preview)
+	_paint_picker = fake
+	return fake
+
+
+func _compact_resource_preview(node: Node) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if node is TextureRect:
+		node.visible = false
+		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		node.custom_minimum_size = Vector2.ZERO
+		node.size = Vector2.ZERO
+	if node is Button:
+		node.add_theme_constant_override("icon_max_width", int(_scaled(16.0)))
+		node.expand_icon = false
+		node.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+		node.clip_contents = true
+	if node is Control:
+		node.clip_contents = true
+		if node.custom_minimum_size.y > _scaled(PAINT_ROW_HEIGHT):
+			node.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	for child in node.get_children():
+		_compact_resource_preview(child)
+
+
+func _apply_picker_fonts(node: Node) -> void:
+	if node is Label or node is Button or node is LineEdit:
+		node.add_theme_font_size_override("font_size", _font(13))
+	for child in node.get_children():
+		_apply_picker_fonts(child)
+
+
+func _brush_column() -> Control:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = _scaled(132.0)
+	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	col.add_theme_constant_override("separation", 2)
+	var brush := Label.new()
+	brush.text = "Brush"
+	brush.add_theme_font_size_override("font_size", _font(13))
+	brush.add_theme_color_override("font_color", ACCENT)
+	col.add_child(brush)
+	_brush_color = ColorPickerButton.new()
+	_brush_color.name = "BrushColor"
+	_brush_color.color = Color(0.86, 0.18, 0.16)
+	_brush_color.custom_minimum_size = Vector2(_scaled(120.0), _scaled(PAINT_ROW_HEIGHT))
+	_brush_color.add_theme_font_size_override("font_size", _font(13))
+	_brush_color.focus_mode = Control.FOCUS_NONE
+	_brush_color.color_changed.connect(func(c: Color) -> void:
+		if _paint:
+			_paint.brush_color = c
+	)
+	col.add_child(_brush_color)
+	col.add_child(_compact_spin("Radius", 1.0, 64.0, 1.0, 8.0, func(v: float) -> void:
+		if _paint:
+			_paint.brush_radius = v
+	, "Brush radius in texture pixels.", &"brush_radius"))
+	col.add_child(_compact_spin("Opacity", 0.05, 1.0, 0.05, 1.0, func(v: float) -> void:
+		if _paint:
+			_paint.brush_opacity = v
+	, "Brush opacity.", &"brush_opacity"))
+	return col
+
+
+func _compact_spin(label_text: String, min_v: float, max_v: float, step: float, value: float, on_change: Callable, tooltip: String, key: StringName) -> Control:
+	var row := HBoxContainer.new()
+	row.name = String(key)
+	row.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	row.add_theme_constant_override("separation", 4)
+	var label := Label.new()
+	label.text = label_text
+	label.tooltip_text = tooltip
+	label.mouse_filter = Control.MOUSE_FILTER_STOP
+	label.add_theme_font_size_override("font_size", _font(12))
+	label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	label.custom_minimum_size.x = _scaled(52.0)
+	row.add_child(label)
+	var spin := SpinBox.new()
+	spin.min_value = min_v
+	spin.max_value = max_v
+	spin.step = step
+	spin.value = value
+	spin.tooltip_text = tooltip
+	spin.custom_minimum_size.x = _scaled(76.0)
+	spin.add_theme_font_size_override("font_size", _font(12))
+	spin.get_line_edit().add_theme_font_size_override("font_size", _font(12))
+	spin.value_changed.connect(on_change)
+	row.add_child(spin)
+	return row
+
+
+func _paint_tool_button(text: String, tool: int, group: ButtonGroup) -> Button:
+	var button := Button.new()
+	button.name = "PaintToolPixel" if tool == SlabPaint.Tool.PIXEL else "PaintToolMaterial"
+	button.text = text
+	button.toggle_mode = true
+	button.button_group = group
+	button.button_pressed = tool == SlabPaint.Tool.MATERIAL_UV
+	button.focus_mode = Control.FOCUS_NONE
+	button.add_theme_font_size_override("font_size", _font(15))
+	button.custom_minimum_size = Vector2(_scaled(110.0), _scaled(PAINT_ROW_HEIGHT))
+	button.set_meta("slab_label", text)
+	button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.tool = tool
+	)
+	return button
+
+
+func _named_action(text: String, icon: String, tip: String, on_press: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.icon = SlabIcons.texture(icon, _metrics.scale())
+	button.tooltip_text = tip
+	button.focus_mode = Control.FOCUS_NONE
+	button.clip_text = false
+	button.clip_contents = true
+	button.add_theme_font_size_override("font_size", _font(13))
+	button.add_theme_constant_override("icon_max_width", int(_scaled(16.0)))
+	button.custom_minimum_size = Vector2(0.0, _scaled(PAINT_ROW_HEIGHT))
+	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	button.set_meta("slab_label", text)
+	button.pressed.connect(on_press)
+	return button
+
+
+func _paint_caption(heading: String, text: String) -> Label:
+	var label := Label.new()
+	label.text = "%s: %s" % [heading, text]
+	label.add_theme_font_size_override("font_size", _font(13))
+	label.clip_text = false
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	label.custom_minimum_size.x = _scaled(72.0)
+	return label
+
+
+func _on_paint_changed() -> void:
+	var on: bool = _paint != null and _paint.active
+	if _paint_toggle != null:
+		_paint_toggle.set_pressed_no_signal(on)
+	if _model_body != null:
+		_model_body.visible = not on
+	if _paint_body != null:
+		_paint_body.visible = on
+	clip_contents = on
+	custom_minimum_size.y = _scaled(SlabPaint.PAINT_HEIGHT if on else PANEL_HEIGHT)
+	if _status != null:
+		_status.autowrap_mode = TextServer.AUTOWRAP_OFF if on else TextServer.AUTOWRAP_WORD_SMART
+		_status.clip_text = on
+		_status.max_lines_visible = 1 if on else -1
+	if _brush_color != null and _paint != null:
+		_brush_color.color = _paint.brush_color
+	update_minimum_size()
+	_refresh_paint_chrome()
+
+
+func _refresh_paint_chrome() -> void:
+	if _paint_face == null:
+		return
+	var face_text := "none"
+	if _selection != null and not _selection.ids.is_empty():
+		face_text = str(_selection.ids[0])
+	_paint_face.text = "Face: %s" % face_text
+	var mat_text := "none"
+	if _paint != null and _paint.slot() >= 0:
+		var mat: Variant = _paint.material()
+		mat_text = _paint.material_label(mat, _paint.slot())
+		if mat is StandardMaterial3D and _paint.is_owned(mat):
+			mat_text += " (unique)"
+	_paint_mat.text = "Material: %s" % mat_text
+	_paint_dirty.text = _paint.save_status() if _paint != null else ""
+	if _paint_tool_uv != null and _paint != null:
+		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
+		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
+	if _paint_tool_pixel != null and _paint != null:
+		_paint_tool_pixel.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.PIXEL)
+		_style_tool(_paint_tool_pixel, _paint.tool == SlabPaint.Tool.PIXEL)
+	if _paint_uv_hint != null:
+		_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
+		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
+	if _paint_picker != null and is_instance_valid(_paint_picker) and _paint != null:
+		if _paint_picker.has_method("set_edited_resource"):
+			_paint_picker.set("edited_resource", _paint.material())
+			_compact_resource_preview(_paint_picker)
+	if _unique_button != null:
+		var allowed: bool = _paint != null and _paint.can_make_unique()
+		_unique_button.disabled = not allowed
+		_unique_button.tooltip_text = "Copies this solid's material so painting does not rewrite shared tiles." if allowed else "Select a face, then Make Unique so the copy attaches to that face."
+	_refresh_paint_palette()
+
+
+func _refresh_paint_palette() -> void:
+	if _paint_chips == null:
+		return
+	for child in _paint_chips.get_children():
+		_paint_chips.remove_child(child)
+		child.queue_free()
+	if _selection == null or _selection.solid == null:
+		var hint := Label.new()
+		hint.text = "Select a solid to paint."
+		hint.add_theme_font_size_override("font_size", _font(15))
+		_paint_chips.add_child(hint)
+		return
+	var mats: Array = _selection.solid.get("materials")
+	var thumb_px: int = maxi(16, int(_scaled(CHIP_SIZE.x)))
+	for i in mats.size():
+		var chip := Button.new()
+		chip.name = "paint_material_%d" % i
+		chip.toggle_mode = true
+		chip.button_pressed = _actions != null and i == _actions.material_slot
+		var label: String = _paint.material_label(mats[i], i) if _paint != null else "Slot %d" % i
+		var text_w: float = _paint_chip_text_width(label)
+		chip.custom_minimum_size = Vector2(
+			maxf(_scaled(110.0), float(thumb_px) + _scaled(16.0) + text_w),
+			_scaled(CHIP_SIZE.y)
+		)
+		chip.focus_mode = Control.FOCUS_NONE
+		chip.clip_text = true
+		chip.clip_contents = true
+		chip.expand_icon = false
+		chip.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		chip.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		chip.add_theme_constant_override("icon_max_width", thumb_px)
+		chip.add_theme_font_size_override("font_size", _font(11))
+		var chip_style := _paint_chip_style()
+		chip.add_theme_stylebox_override("normal", chip_style)
+		chip.add_theme_stylebox_override("hover", chip_style)
+		chip.add_theme_stylebox_override("pressed", chip_style)
+		chip.text = label
+		chip.tooltip_text = label
+		if _paint != null:
+			chip.icon = _paint.thumbnail(mats[i], thumb_px)
+		chip.pressed.connect(func() -> void:
+			_actions.material_slot = i
+			if _paint:
+				_paint.rebind()
+		)
+		_paint_chips.add_child(chip)
+
+
+func _paint_chip_text_width(label: String) -> float:
+	var font: Font = ThemeDB.fallback_font
+	if font == null:
+		return maxf(48.0, float(label.length()) * 7.0)
+	return font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, _font(11)).x
+
+
+func _paint_chip_style() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.16, 0.16, 0.16)
+	box.set_corner_radius_all(3)
+	box.content_margin_left = 4
+	box.content_margin_right = 6
+	box.content_margin_top = 2
+	box.content_margin_bottom = 2
+	return box
+
+
+func _style_tool(button: Button, pressed: bool) -> void:
+	var box := StyleBoxFlat.new()
+	box.bg_color = ACCENT if pressed else Color(0.2, 0.2, 0.2)
+	box.set_corner_radius_all(3)
+	box.content_margin_left = 10
+	box.content_margin_right = 10
+	box.content_margin_top = 4
+	box.content_margin_bottom = 4
+	if pressed:
+		box.border_width_bottom = 2
+		box.border_color = Color(0.12, 0.1, 0.06)
+	button.add_theme_stylebox_override("normal", box)
+	button.add_theme_stylebox_override("pressed", box)
+	button.add_theme_stylebox_override("hover", box)
+	button.add_theme_color_override("font_color", Color(0.12, 0.1, 0.06) if pressed else Color(0.86, 0.86, 0.82))
+	button.add_theme_color_override("font_pressed_color", Color(0.12, 0.1, 0.06))
+	button.add_theme_color_override("font_hover_color", Color(0.12, 0.1, 0.06) if pressed else Color(0.95, 0.95, 0.9))
 
 
 func _sync_create_pressed() -> void:

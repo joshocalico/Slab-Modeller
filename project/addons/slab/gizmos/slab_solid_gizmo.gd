@@ -8,11 +8,13 @@ const HOT := "hot"
 const HOVER := "hover"
 const FILL := "fill"
 const FILL_HOVER := "fill_hover"
+const PAINT_EDGE := "paint_edge"
 const WIRE := "wire"
 const SELECTION_SUBGIZMO := 0
 
 var _selection: RefCounted
 var _undo: Object
+var _paint: RefCounted
 var _rest_data := PackedByteArray()
 var _rest_origin := Vector3.ZERO
 
@@ -23,11 +25,13 @@ func _init() -> void:
 	create_material(HOVER, Color(1.0, 0.82, 0.48, 0.9))
 	create_material(FILL, Color(1.0, 0.62, 0.18, 0.42), false, true)
 	create_material(FILL_HOVER, Color(1.0, 0.82, 0.48, 0.28), false, true)
+	create_material(PAINT_EDGE, Color(1.0, 0.88, 0.28, 1.0), false, true)
 
 
-func setup(selection: RefCounted, undo: Object = null) -> void:
+func setup(selection: RefCounted, undo: Object = null, paint: RefCounted = null) -> void:
 	_selection = selection
 	_undo = undo
+	_paint = paint
 
 
 func _get_gizmo_name() -> String:
@@ -130,8 +134,15 @@ func _draw_element(gizmo: EditorNode3DGizmo, solid: Node3D, mode: int, id: int, 
 	if mode == SlabSelection.Mode.EDGE:
 		gizmo.add_lines(solid.edge_endpoints(id), get_material(line_mat, gizmo), false)
 		return
+	if _paint_hides_albedo():
+		gizmo.add_lines(_outline(solid.face_corners(id)), get_material(PAINT_EDGE, gizmo), false)
+		return
 	_draw_face_fill(gizmo, solid.face_corners(id), FILL_HOVER if hovered else FILL)
 	gizmo.add_lines(_outline(solid.face_corners(id)), get_material(line_mat, gizmo), false)
+
+
+func _paint_hides_albedo() -> bool:
+	return _paint != null and bool(_paint.active)
 
 
 func _draw_face_fill(gizmo: EditorNode3DGizmo, corners: PackedVector3Array, material_name: String) -> void:

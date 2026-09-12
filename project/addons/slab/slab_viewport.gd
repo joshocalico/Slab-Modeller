@@ -52,6 +52,7 @@ var _host: RefCounted
 var _metrics: RefCounted
 var _selection: RefCounted
 var _actions: RefCounted
+var _paint: RefCounted
 var _gizmo_nodes: Array[Node3D] = []
 var _grab: Grab = Grab.idle()
 
@@ -66,6 +67,10 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
 
 
+func bind_paint(paint: RefCounted) -> void:
+	_paint = paint
+
+
 static func after_gui_input(verdict: int) -> int:
 	return verdict
 
@@ -73,6 +78,13 @@ static func after_gui_input(verdict: int) -> int:
 func handle(camera: Camera3D, event: InputEvent) -> int:
 	if _selection == null:
 		return Verdict.PASS
+	if _paint != null and _paint.active:
+		var verdict: int = _paint.handle_3d(camera, event, _host.scene_root() if _host != null else null)
+		if verdict == Verdict.STOP:
+			return verdict
+		if event is InputEventKey:
+			return Verdict.STOP
+		return verdict
 	if event is InputEventMouseMotion:
 		return _on_motion(camera, event)
 	if event is InputEventMouseButton:

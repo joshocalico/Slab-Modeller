@@ -43,6 +43,8 @@ const SECTIONS_BY_MODE: Dictionary = {
 	SlabSelection.Mode.FACE: {
 		"Face": [
 			"extrude_faces", "inset_faces", "delete_faces", "flip_faces", "subdivide_faces", "merge_faces",
+		],
+		"UV": [
 			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset",
 		],
 		"Selection": SELECTION_IDS,
@@ -228,9 +230,30 @@ func _check_phrasing(actions: RefCounted) -> void:
 	_expect(actions.tooltip_of(arch_row).contains("90 degrees"), "arch tooltip follows the arc field")
 	shapes.set_value(&"arch_arc", 180.0)
 	_expect(actions.tooltip_of(arch_row).begins_with(arch_row["tooltip"]), "arch tooltip starts with the row's sentence")
-	_expect(actions.tooltip_of(actions.find("extrude_faces")) == "Pulls the face out by the amount field.",
+	_expect(actions.tooltip_of(actions.find("extrude_faces")) == "Pulls the face along its normal. Positive is outward. Negative is inward.",
 		"edit rows keep their static tooltip")
 	_expect(shapes.describe(&"extrude_faces") == "", "describe is empty for a non-shape id")
+	_expect(SlabActions.describe_error(SlabActions.ERR_NOT_CLOSED, "delete_faces").contains("open solid"),
+		"delete explains the closed-solid rule")
+	_expect(SlabActions.describe_error(SlabActions.ERR_SELF_INTERSECTION).contains("pierce"),
+		"a piercing edit explains the embedding rule")
+	_expect(not SlabActions.describe_error(SlabActions.ERR_NOT_CLOSED, "delete_faces").contains("Mesh error"),
+		"delete does not fall back to a bare error number")
+	_expect(SlabActions.ERR_SELF_INTERSECTION == 16, "SELF_INTERSECTION stays last at 16")
+	_expect(SlabActions.describe_error(SlabActions.ERR_ADJACENT_SELECTION).contains("share"),
+		"adjacent selection names the shared-edge rule")
+	_expect(not SlabActions.describe_error(SlabActions.ERR_ADJACENT_SELECTION).contains("faces that do not touch"),
+		"adjacent selection is not face-only")
+	_expect(SlabActions.describe_error(SlabActions.ERR_COORD_OUT_OF_RANGE).contains("allowed range"),
+		"coord errors name a range, not only a vertex")
+	_expect(SlabActions.describe_error(SlabActions.ERR_TWIN_MISMATCH).contains("twin"),
+		"twin mismatch names the twin")
+	_expect(SlabActions.describe_error(SlabActions.ERR_DEGENERATE_FACE).contains("degenerate"),
+		"degenerate faces are named as degenerate")
+	for code in range(1, SlabActions.ERR_SELF_INTERSECTION + 1):
+		_expect(not SlabActions.describe_error(code).contains("Mesh error"),
+			"code %d has a named phrase, got %s" % [code, SlabActions.describe_error(code)])
+	_expect(SlabActions.describe_error(99).contains("Mesh error 99"), "unknown codes still print the number")
 
 
 func _check_plans(shapes: RefCounted) -> void:

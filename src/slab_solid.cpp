@@ -339,6 +339,7 @@ Dictionary SlabSolid::face_uv(int64_t p_face) const {
 	out["offset"] = attrs.uv_offset;
 	out["rotation"] = attrs.uv_rotation;
 	out["axis"] = int(attrs.uv_axis);
+	out["slot"] = int(attrs.material_slot);
 	return out;
 }
 

@@ -113,10 +113,12 @@ static func _pick_edge(solid: Node3D, camera: Camera3D, screen: Vector2, radius:
 	return best
 
 
-static func _pick_face(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:
+static func pick_face_hit(solid: Node3D, camera: Camera3D, screen: Vector2) -> Dictionary:
+	if solid == null or camera == null:
+		return {}
 	var origin: Vector3 = camera.project_ray_origin(screen)
 	var direction: Vector3 = camera.project_ray_normal(screen)
-	var best: int = 0
+	var best: Dictionary = {}
 	var best_depth: float = INF
 	for id in solid.get_faces():
 		var corners: PackedVector3Array = solid.face_corners(id)
@@ -136,8 +138,33 @@ static func _pick_face(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:
 			var depth: float = origin.distance_to(hit)
 			if depth < best_depth:
 				best_depth = depth
-				best = id
+				best = {
+					"id": id,
+					"world": hit,
+					"local": solid.to_local(hit),
+					"depth": depth,
+				}
 	return best
+
+
+static func pick_world_hit(root: Node, camera: Camera3D, screen: Vector2) -> Dictionary:
+	var best: Dictionary = {}
+	var best_depth: float = INF
+	for solid in all_solids(root):
+		var hit: Dictionary = pick_face_hit(solid, camera, screen)
+		if hit.is_empty():
+			continue
+		var depth: float = float(hit["depth"])
+		if depth < best_depth:
+			best_depth = depth
+			best = hit.duplicate()
+			best["solid"] = solid
+	return best
+
+
+static func _pick_face(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:
+	var hit: Dictionary = pick_face_hit(solid, camera, screen)
+	return int(hit.get("id", 0))
 
 
 static func _screen_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:

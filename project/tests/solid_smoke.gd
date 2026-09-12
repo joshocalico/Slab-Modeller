@@ -120,6 +120,8 @@ func _init() -> void:
 	_check_arch()
 	_check_shapes_stay_off_the_solid()
 	_check_two_materials()
+	_check_material_undo()
+	_check_signed_extrude_after_inset()
 	_finish()
 
 
@@ -188,6 +190,65 @@ func _check_two_materials() -> void:
 	_expect(mesh_node != null and mesh_node.mesh != null, "painted solid still emits")
 	if mesh_node != null and mesh_node.mesh != null:
 		_expect(mesh_node.mesh.get_surface_count() == 2, "two used slots emit two surfaces, got %d" % mesh_node.mesh.get_surface_count())
+
+
+func _check_material_undo() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 2, 2)) == 0, "material undo box builds")
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	var undo := preload("res://tests/slab_test_undo.gd").new()
+	var actions := SlabActions.new(selection, undo)
+	var before_n: int = (solid.get("materials") as Array).size()
+	actions.add_material()
+	var after_n: int = (solid.get("materials") as Array).size()
+	_expect(after_n == before_n + 1, "Add Material appends a slot, %d then %d" % [before_n, after_n])
+	_expect(undo.actions.size() == 1, "Add Material records one undo action, got %d" % undo.actions.size())
+	if undo.actions.is_empty():
+		return
+	_expect(undo.actions[0]["name"] == "Slab Add Material", "the action is named for materials")
+	_expect(undo.actions[0]["execute"] == false, "the live array is already mutated")
+	actions.add_material()
+	_expect((solid.get("materials") as Array).size() == before_n + 2, "a second add appends another slot")
+	_expect(actions.material_slot == before_n + 1, "the second add selects the new slot")
+	undo.undo()
+	_expect((solid.get("materials") as Array).size() == before_n + 1, "undo restores one added slot")
+	_expect(actions.material_slot == before_n, "undo restores the previous slot")
+	undo.redo()
+	_expect((solid.get("materials") as Array).size() == before_n + 2, "redo restores both added slots")
+	_expect(actions.material_slot == before_n + 1, "redo restores the new slot")
+
+
+func _check_signed_extrude_after_inset() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(4, 3, 4)) == 0, "room box builds")
+	var top: int = _top_face(solid)
+	_expect(solid.call("inset_faces", PackedInt64Array([top]), 0.45) == 0, "room inset succeeds")
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var said: Array[String] = []
+	actions.reported.connect(func(text: String) -> void: said.append(text))
+	actions.amount = -1.0
+	actions.run("extrude_faces")
+	_expect(said.is_empty() or not said[0].contains("failed"), "a signed inward extrude after inset commits, got %s" % [said])
+	_expect(solid.call("face_count") > 10, "the room extrusion added faces, got %d" % solid.call("face_count"))
+	var stabbed: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(stabbed)
+	_expect(stabbed.call("make_box", Vector3(2, 3, 2)) == 0, "stab box builds")
+	var cap: int = _top_face(stabbed)
+	selection.set_objects([stabbed])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([cap]))
+	actions.amount = -4.0
+	said.clear()
+	actions.run("extrude_faces")
+	_expect(not said.is_empty() and said[0].contains("pierce"),
+		"a numeric stab still refuses at commit with the embedding copy, got %s" % [said])
 
 
 func _has_property(node: Object, prop: String) -> bool:

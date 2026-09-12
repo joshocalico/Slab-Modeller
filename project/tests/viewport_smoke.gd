@@ -104,6 +104,21 @@ func case_edge_click_past_the_radius_selects_nothing() -> void:
 	expect(_session.state().ids.is_empty(), "a click well outside the radius picks no edge")
 
 
+func case_e_with_a_face_selected_stops() -> void:
+	var box: Node3D = _world.box()
+	_select(box, SlabSelection.Mode.FACE)
+	var face: int = _world.top_face(box)
+	_session.state().set_ids(PackedInt64Array([face]))
+	var actions := preload("res://addons/slab/slab_actions.gd").new(_session.state())
+	_session.bind_actions(actions)
+	var before: int = box.call("face_count")
+
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_E))
+
+	expect(verdict == SlabViewport.Verdict.STOP, "E is claimed so Godot Rotate does not run")
+	expect(box.call("face_count") == before + 4, "E still extrudes, faces %d after %d" % [box.call("face_count"), before])
+
+
 func case_mode_key_claims_the_press_so_godot_never_sees_it() -> void:
 	expect(_host.selected_nodes().is_empty(), "mode keys must stop even with nothing selected")
 	for mode in SlabSelection.MODE_LABELS:

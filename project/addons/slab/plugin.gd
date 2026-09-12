@@ -8,6 +8,7 @@ const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabSweepScript := preload("res://addons/slab/slab_sweep.gd")
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
+const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
@@ -17,27 +18,37 @@ var _host: RefCounted
 var _session: RefCounted
 var _selection: RefCounted
 var _actions: RefCounted
+var _paint: RefCounted
 var _panel: Control
 var _strip: Control
 var _gizmos: Array = []
 var _solid_gizmo: EditorNode3DGizmoPlugin
 var _subgizmo_token := ""
 var _subgizmo_solid: Node3D = null
+var _workspace := "3D"
 
 
 func _enter_tree() -> void:
 	set_input_event_forwarding_always_enabled()
+	set_process_shortcut_input(true)
 	_host = SlabEditorHostLive.with_undo(get_undo_redo())
 	_session = SlabViewport.new(_host)
 	_selection = _session.state()
 	_actions = SlabActions.new(_selection, get_undo_redo())
 	_session.bind_actions(_actions)
+	_paint = SlabPaint.new()
+	_paint.bind(_selection, _actions, get_undo_redo())
+	_session.bind_paint(_paint)
+	if _paint.has_signal("changed"):
+		_paint.changed.connect(_refresh_gizmos)
 	_add_gizmos()
 	add_custom_type("SlabSweep", "Node3D", SlabSweepScript, SlabIcons.texture("Curve3D", EditorInterface.get_editor_scale()))
 
 	var metrics: RefCounted = _session.metrics()
 	_panel = SlabPanel.new()
 	_panel.setup(_selection, _actions, metrics)
+	_panel.bind_undo(get_undo_redo())
+	_panel.bind_paint(_paint)
 	add_control_to_bottom_panel(_panel, "Slab")
 	make_bottom_panel_item_visible(_panel)
 
@@ -49,6 +60,7 @@ func _enter_tree() -> void:
 	_selection.changed.connect(_refresh_gizmos)
 	_selection.hover_changed.connect(_refresh_gizmos)
 	_on_editor_selection_changed()
+	main_screen_changed.connect(_on_main_screen_changed)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
@@ -56,12 +68,18 @@ func _enter_tree() -> void:
 func _exit_tree() -> void:
 	if _host:
 		_host.disconnect_host_selection(_on_editor_selection_changed)
+	if main_screen_changed.is_connected(_on_main_screen_changed):
+		main_screen_changed.disconnect(_on_main_screen_changed)
 	if _selection:
 		if _selection.changed.is_connected(_refresh_gizmos):
 			_selection.changed.disconnect(_refresh_gizmos)
 		if _selection.hover_changed.is_connected(_refresh_gizmos):
 			_selection.hover_changed.disconnect(_refresh_gizmos)
+	if _paint:
+		if _paint.has_signal("changed") and _paint.changed.is_connected(_refresh_gizmos):
+			_paint.changed.disconnect(_refresh_gizmos)
 	if _panel:
+		_panel.bind_undo(null)
 		remove_control_from_bottom_panel(_panel)
 		_panel.queue_free()
 		_panel = null
@@ -76,6 +94,7 @@ func _exit_tree() -> void:
 	_gizmos.clear()
 	_solid_gizmo = null
 	_actions = null
+	_paint = null
 	_selection = null
 	_session = null
 	_host = null
@@ -88,9 +107,110 @@ func _handles(object: Object) -> bool:
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 	if _session == null:
 		return AFTER_GUI_INPUT_PASS
+	if event is InputEventKey and get_viewport().is_input_handled():
+		return AFTER_GUI_INPUT_STOP
 	var verdict: int = _session.handle(viewport_camera, event)
 	_refresh_gizmos()
+	if verdict == SlabViewport.Verdict.STOP and event is InputEventKey:
+		get_viewport().set_input_as_handled()
 	return SlabViewport.after_gui_input(verdict)
+
+
+func _shortcut_input(event: InputEvent) -> void:
+	if _session == null:
+		return
+	var host_viewport := get_viewport()
+	if host_viewport != null and host_viewport.is_input_handled():
+		return
+	var viewport_3d := EditorInterface.get_editor_viewport_3d(0)
+	if not should_claim_shortcut(event, viewport_3d, host_viewport, _workspace):
+		return
+	var camera: Camera3D = viewport_3d.get_camera_3d() if viewport_3d != null else null
+	if camera == null:
+		return
+	var verdict: int = _session.handle(camera, event)
+	_refresh_gizmos()
+	if verdict == SlabViewport.Verdict.STOP and host_viewport != null:
+		host_viewport.set_input_as_handled()
+
+
+func _on_main_screen_changed(screen_name: String) -> void:
+	_workspace = screen_name
+
+
+static func should_claim_shortcut(
+	event: InputEvent,
+	viewport_3d: Node,
+	host_viewport: Viewport,
+	workspace: String = "3D"
+) -> bool:
+	if not is_plain_modeling_key(event):
+		return false
+	if not spatial_editor_is_active(viewport_3d, workspace):
+		return false
+	var focus: Control = focus_owner(host_viewport)
+	if focus_eats_keys(focus):
+		return false
+	return not focus_is_outside_spatial_editor(focus, viewport_3d)
+
+
+static func is_plain_modeling_key(event: InputEvent) -> bool:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return false
+	return not (event.ctrl_pressed or event.meta_pressed or event.alt_pressed)
+
+
+static func spatial_editor_is_active(viewport_3d: Node, workspace: String = "3D") -> bool:
+	if workspace != "3D":
+		return false
+	if viewport_3d == null or not viewport_3d.is_inside_tree():
+		return false
+	return ancestor_visible_in_tree(viewport_3d)
+
+
+static func ancestor_visible_in_tree(node: Node) -> bool:
+	var current: Node = node
+	while current != null:
+		if current is CanvasItem:
+			return (current as CanvasItem).is_visible_in_tree()
+		if current is Node3D:
+			return (current as Node3D).is_visible_in_tree()
+		current = current.get_parent()
+	return true
+
+
+static func focus_is_outside_spatial_editor(focus: Control, viewport_3d: Node) -> bool:
+	if focus == null:
+		return false
+	var spatial: Node = spatial_editor_root(viewport_3d)
+	if spatial == null:
+		return true
+	return not (spatial == focus or spatial.is_ancestor_of(focus))
+
+
+static func spatial_editor_root(viewport_3d: Node) -> Node:
+	var node: Node = viewport_3d
+	while node != null:
+		var cls: String = node.get_class()
+		if cls == "Node3DEditor" or cls == "Node3DEditorViewport":
+			return node
+		node = node.get_parent()
+	return viewport_3d
+
+
+static func focus_owner(viewport: Viewport) -> Control:
+	if viewport == null:
+		return null
+	return viewport.gui_get_focus_owner()
+
+
+static func focus_eats_keys(focus: Control) -> bool:
+	if focus == null:
+		return false
+	if focus is LineEdit or focus is TextEdit or focus is CodeEdit:
+		return true
+	var parent: Node = focus.get_parent()
+	return parent is SpinBox or parent is LineEdit
 
 
 func _on_editor_selection_changed() -> void:
@@ -145,7 +265,7 @@ func _id_tokens(ids: PackedInt64Array) -> PackedStringArray:
 
 func _add_gizmos() -> void:
 	_solid_gizmo = SolidGizmo.new()
-	_solid_gizmo.setup(_selection, get_undo_redo())
+	_solid_gizmo.setup(_selection, get_undo_redo(), _paint)
 	_gizmos = [_solid_gizmo, SocketGizmo.new(), SweepGizmo.new()]
 	for gizmo in _gizmos:
 		add_node_3d_gizmo_plugin(gizmo)

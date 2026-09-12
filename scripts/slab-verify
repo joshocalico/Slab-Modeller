@@ -20,7 +20,7 @@ step "build extension and kernel test" scons target=template_debug -j8
 step "kernel unit tests" bin/slab_kernel_test
 step "extension loads in godot" scripts/godot --headless --path project --script res://tests/godot_smoke.gd
 
-for extra in solid_smoke sweep_smoke panel_smoke pick_smoke viewport_smoke chrome_smoke demo_load; do
+for extra in solid_smoke sweep_smoke panel_smoke pick_smoke viewport_smoke chrome_smoke paint_smoke demo_load; do
 	if [[ -f "project/tests/${extra}.gd" ]]; then
 		step "${extra}" scripts/godot --headless --path project --script "res://tests/${extra}.gd"
 	fi
@@ -28,7 +28,7 @@ done
 
 step "editor plugin initializes clean" bash -c '
 	out="$(scripts/godot --editor --headless --path project --quit-after 2 2>&1)"
-	echo "${out}" | grep -E "SCRIPT ERROR|Parse Error|Failed to load script" && exit 1
+	echo "${out}" | grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Invalid call" && exit 1
 	exit 0
 '
 
