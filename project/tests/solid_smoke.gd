@@ -121,6 +121,7 @@ func _init() -> void:
 	_check_shapes_stay_off_the_solid()
 	_check_two_materials()
 	_check_material_undo()
+	_check_fallback_lighting()
 	_check_signed_extrude_after_inset()
 	_finish()
 
@@ -218,6 +219,44 @@ func _check_material_undo() -> void:
 	undo.redo()
 	_expect((solid.get("materials") as Array).size() == before_n + 2, "redo restores both added slots")
 	_expect(actions.material_slot == before_n + 1, "redo restores the new slot")
+
+
+func _check_fallback_lighting() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 2, 2)) == 0, "fallback box builds")
+	var proto_color: Color = solid.get("prototype_color")
+	var mesh_node: MeshInstance3D = solid.get_node_or_null("Mesh")
+	_expect(mesh_node != null, "fallback box owns a Mesh child")
+	if mesh_node == null:
+		return
+	var fallback: Material = mesh_node.get_surface_override_material(0)
+	_expect(fallback is StandardMaterial3D, "empty slots use a StandardMaterial3D prototype")
+	if fallback is StandardMaterial3D:
+		_expect(fallback.shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL,
+			"the prototype is lit per-pixel, got %s" % fallback.shading_mode)
+		_expect(absf(fallback.roughness - 0.7) < 0.001, "prototype roughness is 0.7, got %s" % fallback.roughness)
+		_expect(fallback.albedo_color.is_equal_approx(proto_color),
+			"prototype albedo keeps the graybox color, got %s" % fallback.albedo_color)
+	solid.set("prototype_color", Color(0.2, 0.35, 0.55))
+	var retinted: Material = mesh_node.get_surface_override_material(0)
+	_expect(retinted is StandardMaterial3D and (retinted as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_PER_PIXEL,
+		"retinting the prototype keeps per-pixel lighting")
+	_expect(retinted is StandardMaterial3D and (retinted as StandardMaterial3D).albedo_color.is_equal_approx(Color(0.2, 0.35, 0.55)),
+		"retinting still writes the prototype color")
+
+	var custom := StandardMaterial3D.new()
+	custom.albedo_color = Color(0.91, 0.22, 0.18)
+	custom.roughness = 0.15
+	custom.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	solid.set("materials", [custom])
+	var applied: Material = mesh_node.get_surface_override_material(0)
+	_expect(applied == custom, "a supplied material is the surface override, not a prototype copy")
+	_expect(custom.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED,
+		"a supplied unshaded material stays unshaded")
+	_expect(absf(custom.roughness - 0.15) < 0.001, "supplied roughness is left alone, got %s" % custom.roughness)
+	_expect(custom.albedo_color.is_equal_approx(Color(0.91, 0.22, 0.18)),
+		"supplied albedo is left alone")
 
 
 func _check_signed_extrude_after_inset() -> void:

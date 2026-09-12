@@ -938,7 +938,7 @@ void SlabSolid::_rebuild() {
 			proto.instantiate();
 			proto->set_albedo(prototype_color);
 			proto->set_roughness(0.7f);
-			proto->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+			proto->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
 			mat = proto;
 		}
 		mesh_instance->set_surface_override_material(i, mat);
