@@ -37,6 +37,7 @@ Use Godot's `AnimationPlayer` for unique timing or multi-part sequences: add it 
 | Esc | Release mouse and stop auto-run; keyboard move/look still work |
 | Left click | Recapture mouse |
 | R | Reset to this instance’s transform at `_ready`; also stops auto-run |
+| F3 | Toggle a passive diagnostic overlay with feet XYZ, yaw, grounded state, floor collider/platform, velocity, platform velocity, and auto-run state |
 
 Falls below y = −6 also reset to that spawn transform.
 

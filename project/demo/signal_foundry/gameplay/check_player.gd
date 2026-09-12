@@ -81,6 +81,17 @@ func run() -> void:
 	expect(is_equal_approx(player.floor_snap_length, 0.35), "floor snap 0.35")
 	expect(player.is_on_floor(), "spawn stands on the floor")
 	expect(player.spawn_transform.origin.is_equal_approx(Vector3(0, 0, 0)), "spawn is the instance transform")
+	var diagnostics: Control = player.get_node("HUD/Diagnostics")
+	var diagnostic_text: Label = player.get_node("HUD/Diagnostics/Readout")
+	expect(not diagnostics.visible, "F3 diagnostics start hidden")
+	tap_player(KEY_F3)
+	expect(diagnostics.visible, "F3 shows diagnostics")
+	expect(diagnostic_text.text.contains("feet  X"), "diagnostics show global feet coordinates")
+	expect(diagnostic_text.text.contains("floor  YES"), "diagnostics show grounded state")
+	expect(diagnostic_text.text.contains("StaticBody3D"), "diagnostics identify floor collider, text=%s" % diagnostic_text.text)
+	expect(diagnostic_text.text.contains("autorun  OFF"), "diagnostics show autorun state")
+	tap_player(KEY_F3)
+	expect(not diagnostics.visible, "second F3 hides diagnostics")
 
 	player.position = Vector3(1.5, 2.0, -1.0)
 	player.rotation.y = 0.4

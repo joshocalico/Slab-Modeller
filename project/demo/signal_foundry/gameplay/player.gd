@@ -29,10 +29,14 @@ var jump_buffer := 0.0
 var auto_run := false
 var energy_cells := 0
 var checkpoint_name := "START"
+var diagnostics_visible := false
+var floor_collider_name := "—"
 
 @onready var camera: Camera3D = $Camera3D
 @onready var objective_label: Label = $HUD/Margin/Rows/Objective
 @onready var notice_label: Label = $HUD/Margin/Rows/Notice
+@onready var diagnostics_panel: Control = $HUD/Diagnostics
+@onready var diagnostics_label: Label = $HUD/Diagnostics/Readout
 
 var notice_time := 0.0
 
@@ -55,12 +59,14 @@ func _ready() -> void:
 	_bind_action("foundry_look_right", KEY_KP_6)
 	_bind_action("foundry_look_up", KEY_KP_8)
 	_bind_action("foundry_look_down", KEY_KP_2)
+	_bind_action("foundry_diagnostics", KEY_F3)
 	floor_snap_length = 0.35
 	spawn_transform = global_transform
 	spawn_pitch = camera.rotation.x
 	pitch = spawn_pitch
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_update_hud()
+	_update_diagnostics()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -83,6 +89,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			rotation.y += YAW_STEP
 		elif code == KEY_E:
 			rotation.y -= YAW_STEP
+		elif code == KEY_F3:
+			diagnostics_visible = not diagnostics_visible
+			diagnostics_panel.visible = diagnostics_visible
+			_update_diagnostics()
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -137,6 +147,9 @@ func _physics_process(dt: float) -> void:
 		if not test_move(global_transform, lift) and not test_move(global_transform.translated(lift), horizontal):
 			global_position.y += STEP_HEIGHT
 	move_and_slide()
+	_update_floor_collider()
+	if diagnostics_visible:
+		_update_diagnostics()
 	if global_position.y < FALL_RESET_Y:
 		_reset_to_spawn()
 
@@ -189,6 +202,48 @@ func show_notice(message: String, duration: float = 2.2) -> void:
 
 func _update_hud() -> void:
 	objective_label.text = "ENERGY  %d / 3    ·    CHECKPOINT  %s" % [mini(energy_cells, 3), checkpoint_name]
+
+
+func _update_floor_collider() -> void:
+	if not is_on_floor():
+		floor_collider_name = "—"
+		return
+	for index in get_slide_collision_count():
+		var collision := get_slide_collision(index)
+		if collision.get_normal().dot(Vector3.UP) < 0.5:
+			continue
+		var collider := collision.get_collider()
+		if collider is Node:
+			floor_collider_name = _collider_label(collider as Node)
+			return
+	var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.1, global_position + Vector3.DOWN * 0.5)
+	query.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var ray_collider: Object = hit.get("collider")
+	if ray_collider is Node:
+		floor_collider_name = _collider_label(ray_collider as Node)
+	elif floor_collider_name == "—":
+		floor_collider_name = "unknown"
+
+
+func _collider_label(collider_node: Node) -> String:
+	if collider_node.name == "__body" and collider_node.get_parent() != null:
+		return "%s/__body" % collider_node.get_parent().name
+	return str(collider_node.name)
+
+
+func _update_diagnostics() -> void:
+	var yaw := fposmod(rad_to_deg(rotation.y) + 180.0, 360.0) - 180.0
+	var platform_velocity := get_platform_velocity()
+	diagnostics_label.text = (
+		"F3  PLAYER DIAGNOSTICS\n"
+		+ "feet  X %7.2f   Y %7.2f   Z %7.2f\n" % [global_position.x, global_position.y, global_position.z]
+		+ "yaw   %7.1f°   floor  %s\n" % [yaw, "YES" if is_on_floor() else "NO"]
+		+ "floor  %s\n" % floor_collider_name
+		+ "velocity  %6.2f  %6.2f  %6.2f\n" % [velocity.x, velocity.y, velocity.z]
+		+ "platform  %6.2f  %6.2f  %6.2f   autorun  %s"
+		% [platform_velocity.x, platform_velocity.y, platform_velocity.z, "ON" if auto_run else "OFF"]
+	)
 
 
 func _bind_action(action: String, code: Key) -> void:

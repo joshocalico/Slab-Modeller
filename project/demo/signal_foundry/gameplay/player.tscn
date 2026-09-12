@@ -47,3 +47,25 @@ theme_override_constants/shadow_offset_x = 2
 theme_override_constants/shadow_offset_y = 2
 theme_override_font_sizes/font_size = 22
 text = ""
+
+[node name="Diagnostics" type="MarginContainer" parent="HUD"]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -510.0
+offset_top = 20.0
+offset_right = -24.0
+offset_bottom = 176.0
+grow_horizontal = 0
+mouse_filter = 2
+
+[node name="Readout" type="Label" parent="HUD/Diagnostics"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 1, 0.94, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.95)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+theme_override_font_sizes/font_size = 16
+text = "F3  PLAYER DIAGNOSTICS"
+horizontal_alignment = 2
