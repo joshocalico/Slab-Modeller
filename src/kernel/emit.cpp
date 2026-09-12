@@ -1,4 +1,5 @@
 #include "emit.hpp"
+#include "triangulate.hpp"
 
 #include <godot_cpp/core/math.hpp>
 
@@ -65,7 +66,17 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		if (corners.size() < 3) {
 			continue;
 		}
-		const godot::Vector3 n = p_mesh.face_normal(id);
+		godot::Vector3 n = p_mesh.face_normal(id);
+		if (n.length_squared() == 0.0f) {
+			const godot::Vector3 a = p_mesh.position(corners[0]);
+			for (size_t i = 1; i + 1 < corners.size(); i++) {
+				const godot::Vector3 cand = (p_mesh.position(corners[i]) - a).cross(p_mesh.position(corners[i + 1]) - a);
+				if (cand.length_squared() > 0.0f) {
+					n = cand.normalized();
+					break;
+				}
+			}
+		}
 		const FaceAttrs attrs = p_mesh.attrs(id);
 		UvAxis axis = attrs.uv_axis;
 		if (axis == UvAxis::AUTO) {
@@ -73,17 +84,21 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		}
 		const godot::Vector2 centroid = project_uv(p_mesh.face_centroid(id), axis);
 		const int32_t base = int32_t(r_out.verts.size());
+		std::vector<IVec3> loop;
+		loop.reserve(corners.size());
 		for (const VertexId v : corners) {
 			const godot::Vector3 p = p_mesh.position(v);
 			r_out.verts.push_back(p);
 			r_out.normals.push_back(n);
 			r_out.uvs.push_back(apply_uv(p, centroid, attrs, axis));
+			loop.push_back(p_mesh.position_i(v));
 		}
-		const int32_t m = int32_t(corners.size());
-		for (int32_t i = 1; i + 1 < m; i++) {
-			r_out.indices.push_back(base);
-			r_out.indices.push_back(base + i + 1);
-			r_out.indices.push_back(base + i);
+		std::vector<int32_t> tris;
+		triangulate_loop(loop, tris);
+		for (size_t i = 0; i + 2 < tris.size(); i += 3) {
+			r_out.indices.push_back(base + tris[i]);
+			r_out.indices.push_back(base + tris[i + 1]);
+			r_out.indices.push_back(base + tris[i + 2]);
 			r_out.provenance.push_back(id);
 			r_out.slots.push_back(attrs.material_slot);
 		}

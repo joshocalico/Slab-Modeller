@@ -1,4 +1,5 @@
 #include "mesh.hpp"
+#include "triangulate.hpp"
 
 #include <cstdint>
 #include <unordered_set>
@@ -99,148 +100,15 @@ bool _point_strict_in_tri_2d(const IVec3 &p_p, const IVec3 &p_a, const IVec3 &p_
 	return o1 != 0 && o1 == o2 && o2 == o3;
 }
 
-bool _on_closed_seg_2d(const IVec3 &p_p, const IVec3 &p_a, const IVec3 &p_b, int p_axis) {
-	if (_o2(p_a, p_b, p_p, p_axis) != 0) {
-		return false;
-	}
-	int32_t px, py, ax, ay, bx, by;
-	_xy(p_p, p_axis, px, py);
-	_xy(p_a, p_axis, ax, ay);
-	_xy(p_b, p_axis, bx, by);
-	const int32_t minx = ax < bx ? ax : bx;
-	const int32_t maxx = ax < bx ? bx : ax;
-	const int32_t miny = ay < by ? ay : by;
-	const int32_t maxy = ay < by ? by : ay;
-	return px >= minx && px <= maxx && py >= miny && py <= maxy;
-}
-
-bool _point_in_tri_closed_2d(const IVec3 &p_p, const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c, int p_axis) {
-	const int tsign = _o2(p_a, p_b, p_c, p_axis);
-	if (tsign == 0) {
-		return false;
-	}
-	const int o1 = _o2(p_a, p_b, p_p, p_axis);
-	const int o2 = _o2(p_b, p_c, p_p, p_axis);
-	const int o3 = _o2(p_c, p_a, p_p, p_axis);
-	return (o1 == 0 || o1 == tsign) && (o2 == 0 || o2 == tsign) && (o3 == 0 || o3 == tsign);
-}
-
-int _loop_axis(const std::vector<IVec3> &p_loop) {
-	const size_t n = p_loop.size();
-	for (size_t i = 0; i < n; i++) {
-		for (size_t j = i + 1; j < n; j++) {
-			for (size_t k = j + 1; k < n; k++) {
-				if (!_zero_normal(p_loop[i], p_loop[j], p_loop[k])) {
-					return _drop_axis(p_loop[i], p_loop[j], p_loop[k]);
-				}
-			}
-		}
-	}
-	return 2;
-}
-
-int _loop_sign(const std::vector<IVec3> &p_loop, int p_axis) {
-	__int128 s = 0;
-	const size_t n = p_loop.size();
-	for (size_t i = 0; i < n; i++) {
-		int32_t x1, y1, x2, y2;
-		_xy(p_loop[i], p_axis, x1, y1);
-		_xy(p_loop[(i + 1) % n], p_axis, x2, y2);
-		s += (__int128)x1 * y2 - (__int128)x2 * y1;
-	}
-	if (s > 0) {
-		return 1;
-	}
-	if (s < 0) {
-		return -1;
-	}
-	return 0;
-}
-
-void _push_tri(std::vector<Tri> &r_tris, const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c) {
-	if (_zero_normal(p_a, p_b, p_c)) {
-		return;
-	}
-	r_tris.push_back(Tri{ p_a, p_c, p_b });
-}
-
-void _fan_tris(const std::vector<IVec3> &p_loop, std::vector<Tri> &r_tris) {
-	for (size_t i = 1; i + 1 < p_loop.size(); i++) {
-		_push_tri(r_tris, p_loop[0], p_loop[i], p_loop[i + 1]);
-	}
-}
-
 void _triangulate(const std::vector<IVec3> &p_loop, std::vector<Tri> &r_tris) {
-	const size_t n = p_loop.size();
-	if (n < 3) {
-		return;
-	}
-	const int axis = _loop_axis(p_loop);
-	const int sign = _loop_sign(p_loop, axis);
-	if (sign == 0) {
-		return;
-	}
-	bool convex = true;
-	for (size_t i = 0; i < n; i++) {
-		const int o = _o2(p_loop[(i + n - 1) % n], p_loop[i], p_loop[(i + 1) % n], axis);
-		if (o == -sign) {
-			convex = false;
-			break;
-		}
-	}
-	if (convex) {
-		_fan_tris(p_loop, r_tris);
-		return;
-	}
-	// A fan from vertex 0 of a reflex n-gon covers the exterior.
-	std::vector<size_t> idx(n);
-	for (size_t i = 0; i < n; i++) {
-		idx[i] = i;
-	}
-	int guard = int(n) * int(n) + 8;
-	while (idx.size() > 3 && guard-- > 0) {
-		bool cut = false;
-		const int m = int(idx.size());
-		for (int i = 0; i < m; i++) {
-			const IVec3 &a = p_loop[idx[(i + m - 1) % m]];
-			const IVec3 &b = p_loop[idx[size_t(i)]];
-			const IVec3 &c = p_loop[idx[(i + 1) % m]];
-			const int o = _o2(a, b, c, axis);
-			if (o == 0) {
-				if (_on_closed_seg_2d(b, a, c, axis)) {
-					idx.erase(idx.begin() + i);
-					cut = true;
-					break;
-				}
-				continue;
-			}
-			if (o != sign) {
-				continue;
-			}
-			bool packed = false;
-			for (int k = 0; k < m; k++) {
-				if (k == (i + m - 1) % m || k == i || k == (i + 1) % m) {
-					continue;
-				}
-				if (_point_in_tri_closed_2d(p_loop[idx[size_t(k)]], a, b, c, axis)) {
-					packed = true;
-					break;
-				}
-			}
-			if (packed) {
-				continue;
-			}
-			_push_tri(r_tris, a, b, c);
-			idx.erase(idx.begin() + i);
-			cut = true;
-			break;
-		}
-		if (!cut) {
-			break;
-		}
-	}
-	if (idx.size() == 3) {
-		_push_tri(r_tris, p_loop[idx[0]], p_loop[idx[1]], p_loop[idx[2]]);
+	std::vector<int32_t> indices;
+	triangulate_loop(p_loop, indices);
+	for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+		r_tris.push_back(Tri{
+				p_loop[size_t(indices[i])],
+				p_loop[size_t(indices[i + 1])],
+				p_loop[size_t(indices[i + 2])],
+		});
 	}
 }
 
