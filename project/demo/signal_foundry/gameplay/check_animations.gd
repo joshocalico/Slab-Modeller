@@ -95,10 +95,21 @@ func run() -> void:
 	player.position = Vector3(-3, 2, -3)
 	var hazard: Area3D = hazard_scene.instantiate()
 	world.add_child(hazard)
+	hazard.footprint_size = Vector2(24, 1)
 	var hazard_shape: BoxShape3D = hazard.get_node("CollisionShape3D").shape
 	var hazard_mesh: BoxMesh = hazard.get_node("Visual/Mesh").mesh
 	expect(hazard_mesh.size.x == hazard_shape.size.x and hazard_mesh.size.z == hazard_shape.size.z,
-		"hazard visual footprint matches its 2 by 2 trigger")
+		"hazard visual footprint matches its trigger")
+	expect(hazard_shape.size.is_equal_approx(Vector3(24, 0.5, 1)), "hazard footprint export preserves trigger height")
+	expect(hazard_mesh.size.is_equal_approx(Vector3(24, 0.12, 1)), "hazard footprint export preserves visual height")
+	expect(hazard.scale.is_equal_approx(Vector3.ONE), "wide hazard uses a unit CollisionObject3D scale")
+	var other_hazard: Area3D = hazard_scene.instantiate()
+	world.add_child(other_hazard)
+	var other_shape: BoxShape3D = other_hazard.get_node("CollisionShape3D").shape
+	var other_mesh: BoxMesh = other_hazard.get_node("Visual/Mesh").mesh
+	expect(other_shape != hazard_shape and other_mesh != hazard_mesh, "hazard instances own independent footprint resources")
+	expect(other_shape.size.is_equal_approx(Vector3(2, 0.5, 2)), "resizing one hazard leaves another trigger at its default")
+	expect(other_mesh.size.is_equal_approx(Vector3(2, 0.12, 2)), "resizing one hazard leaves another visual at its default")
 	var hazard_visual: Node3D = hazard.get_node("Visual")
 	var visual_scale := hazard_visual.scale
 	hazard._process(0.25)

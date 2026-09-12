@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://demo/signal_foundry/gameplay/hazard_reset.gd" id="1"]
 
 [sub_resource type="BoxShape3D" id="TriggerShape"]
+resource_local_to_scene = true
 size = Vector3(2, 0.5, 2)
 
 [sub_resource type="StandardMaterial3D" id="HazardMaterial"]
@@ -14,6 +15,7 @@ emission = Color(1, 0.015, 0.005, 1)
 emission_energy_multiplier = 3.0
 
 [sub_resource type="BoxMesh" id="HazardMesh"]
+resource_local_to_scene = true
 material = SubResource("HazardMaterial")
 size = Vector3(2, 0.12, 2)
 
