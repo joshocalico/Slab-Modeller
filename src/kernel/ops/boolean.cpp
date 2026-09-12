@@ -232,34 +232,80 @@ godot::Vector3 _normal(const std::vector<IVec3> &p_loop) {
 	return godot::Vector3();
 }
 
-bool _ray_tri(const godot::Vector3 &p_o, const godot::Vector3 &p_d, const godot::Vector3 &p_a, const godot::Vector3 &p_b, const godot::Vector3 &p_c) {
-	const godot::Vector3 e1 = p_b - p_a;
-	const godot::Vector3 e2 = p_c - p_a;
-	const godot::Vector3 p = p_d.cross(e2);
-	const float det = e1.dot(p);
-	if (godot::Math::abs(det) < 1e-12f) {
-		return false;
+void _xy_axis(const godot::Vector3 &p_p, int p_axis, float &r_x, float &r_y) {
+	if (p_axis == 0) {
+		r_x = p_p.y;
+		r_y = p_p.z;
+		return;
 	}
-	const float inv = 1.0f / det;
-	const godot::Vector3 tvec = p_o - p_a;
-	const float u = tvec.dot(p) * inv;
-	if (u < 0.0f || u > 1.0f) {
-		return false;
+	if (p_axis == 1) {
+		r_x = p_p.x;
+		r_y = p_p.z;
+		return;
 	}
-	const godot::Vector3 q = tvec.cross(e1);
-	const float v = p_d.dot(q) * inv;
-	if (v < 0.0f || u + v > 1.0f) {
-		return false;
-	}
-	return e2.dot(q) * inv > 1e-5f;
+	r_x = p_p.x;
+	r_y = p_p.y;
 }
 
-bool _point_inside(const Mesh &p_mesh, const godot::Vector3 &p_p) {
-	const godot::AABB box = p_mesh.local_aabb().grow(2.0f / float(LATTICE));
-	if (!box.has_point(p_p)) {
+int _axis_of(const godot::Vector3 &p_n) {
+	const float ax = godot::Math::abs(p_n.x);
+	const float ay = godot::Math::abs(p_n.y);
+	const float az = godot::Math::abs(p_n.z);
+	if (ax >= ay && ax >= az) {
+		return 0;
+	}
+	if (ay >= az) {
+		return 1;
+	}
+	return 2;
+}
+
+bool _point_in_loop(const std::vector<IVec3> &p_loop, const godot::Vector3 &p_p, const godot::Vector3 &p_n) {
+	const int n = int(p_loop.size());
+	if (n < 3 || p_n.length_squared() == 0.0f) {
 		return false;
 	}
-	const godot::Vector3 dir(1.0f, 0.013f, 0.007f);
+	const int axis = _axis_of(p_n);
+	float px, py;
+	_xy_axis(p_p, axis, px, py);
+	bool inside = false;
+	for (int i = 0, j = n - 1; i < n; j = i++) {
+		float xi, yi, xj, yj;
+		_xy_axis(dequantize(p_loop[i]), axis, xi, yi);
+		_xy_axis(dequantize(p_loop[j]), axis, xj, yj);
+		if ((yi > py) == (yj > py)) {
+			continue;
+		}
+		const float den = yj - yi;
+		if (den == 0.0f) {
+			continue;
+		}
+		const float xhit = (xj - xi) * (py - yi) / den + xi;
+		if (px < xhit) {
+			inside = !inside;
+		}
+	}
+	return inside;
+}
+
+bool _ray_hits_loop(const godot::Vector3 &p_o, const godot::Vector3 &p_d, const std::vector<IVec3> &p_loop) {
+	const godot::Vector3 n = _normal(p_loop);
+	if (n.length_squared() == 0.0f) {
+		return false;
+	}
+	const float den = p_d.dot(n);
+	if (godot::Math::abs(den) < 1e-12f) {
+		return false;
+	}
+	const godot::Vector3 a = dequantize(p_loop[0]);
+	const float t = (a - p_o).dot(n) / den;
+	if (t <= 1e-5f) {
+		return false;
+	}
+	return _point_in_loop(p_loop, p_o + p_d * t, n);
+}
+
+bool _inside_ray(const Mesh &p_mesh, const godot::Vector3 &p_p, const godot::Vector3 &p_d) {
 	int hits = 0;
 	std::vector<FaceId> faces;
 	p_mesh.all_faces(faces);
@@ -269,14 +315,35 @@ bool _point_inside(const Mesh &p_mesh, const godot::Vector3 &p_p) {
 		if (corners.size() < 3) {
 			continue;
 		}
-		const godot::Vector3 a = p_mesh.position(corners[0]);
-		for (size_t i = 1; i + 1 < corners.size(); i++) {
-			if (_ray_tri(p_p, dir, a, p_mesh.position(corners[i]), p_mesh.position(corners[i + 1]))) {
-				hits++;
-			}
+		std::vector<IVec3> loop;
+		loop.reserve(corners.size());
+		for (const VertexId v : corners) {
+			loop.push_back(p_mesh.position_i(v));
+		}
+		if (_ray_hits_loop(p_p, p_d, loop)) {
+			hits++;
 		}
 	}
 	return (hits % 2) == 1;
+}
+
+bool _point_inside(const Mesh &p_mesh, const godot::Vector3 &p_p) {
+	const godot::AABB box = p_mesh.local_aabb().grow(2.0f / float(LATTICE));
+	if (!box.has_point(p_p)) {
+		return false;
+	}
+	const godot::Vector3 dirs[3] = {
+		godot::Vector3(1.0f, 0.013f, 0.007f),
+		godot::Vector3(0.011f, 1.0f, -0.017f),
+		godot::Vector3(-0.019f, 0.009f, 1.0f),
+	};
+	int votes = 0;
+	for (const godot::Vector3 &d : dirs) {
+		if (_inside_ray(p_mesh, p_p, d)) {
+			votes++;
+		}
+	}
+	return votes >= 2;
 }
 
 void _shatter(const Frag &p_src, const std::vector<Plane> &p_planes, std::vector<Frag> &r_out) {
@@ -458,21 +525,6 @@ void _reverse(std::vector<IVec3> &p_loop) {
 	std::reverse(p_loop.begin() + 1, p_loop.end());
 }
 
-bool _point_in_convex_loop(const std::vector<IVec3> &p_loop, const godot::Vector3 &p_p, const godot::Vector3 &p_n) {
-	const int n = int(p_loop.size());
-	if (n < 3 || p_n.length_squared() == 0.0f) {
-		return false;
-	}
-	for (int i = 0; i < n; i++) {
-		const godot::Vector3 a = dequantize(p_loop[i]);
-		const godot::Vector3 b = dequantize(p_loop[(i + 1) % n]);
-		if ((b - a).cross(p_p - a).dot(p_n) < -1e-6f) {
-			return false;
-		}
-	}
-	return true;
-}
-
 bool _on_surface(const Mesh &p_mesh, const godot::Vector3 &p_p, godot::Vector3 &r_n) {
 	std::vector<FaceId> faces;
 	p_mesh.all_faces(faces);
@@ -495,7 +547,7 @@ bool _on_surface(const Mesh &p_mesh, const godot::Vector3 &p_p, godot::Vector3 &
 		for (const VertexId v : corners) {
 			loop.push_back(p_mesh.position_i(v));
 		}
-		if (_point_in_convex_loop(loop, p_p, n)) {
+		if (_point_in_loop(loop, p_p, n)) {
 			r_n = n;
 			return true;
 		}
@@ -562,63 +614,6 @@ void _dissolve_coplanar(MeshEdit &p_edit) {
 	}
 }
 
-bool _collinear_on_face(const Mesh &p_mesh, FaceId p_face, VertexId p_v) {
-	std::vector<VertexId> corners;
-	p_mesh.face_corners(p_face, corners);
-	const int n = int(corners.size());
-	for (int i = 0; i < n; i++) {
-		if (corners[size_t(i)].slot != p_v.slot || corners[size_t(i)].gen != p_v.gen) {
-			continue;
-		}
-		return _collinear(p_mesh.position_i(corners[size_t((i + n - 1) % n)]), p_mesh.position_i(corners[size_t(i)]),
-				p_mesh.position_i(corners[size_t((i + 1) % n)]));
-	}
-	return false;
-}
-
-void _strip_collinear(MeshEdit &p_edit) {
-	for (;;) {
-		std::vector<VertexId> verts;
-		p_edit.scratch().all_vertices(verts);
-		bool did = false;
-		for (const VertexId v : verts) {
-			if (!p_edit.scratch().alive(v)) {
-				continue;
-			}
-			std::vector<FaceId> faces;
-			p_edit.scratch().vertex_faces(v, faces);
-			if (faces.size() < 2) {
-				continue;
-			}
-			bool all_col = true;
-			for (const FaceId f : faces) {
-				if (!_collinear_on_face(p_edit.scratch(), f, v)) {
-					all_col = false;
-					break;
-				}
-			}
-			if (!all_col) {
-				continue;
-			}
-			std::vector<EdgeId> edges;
-			p_edit.scratch().vertex_edges(v, edges);
-			for (const EdgeId id : edges) {
-				if (!p_edit.scratch().alive(id)) {
-					continue;
-				}
-				if (p_edit.collapse_edge(id).ok()) {
-					did = true;
-					break;
-				}
-				p_edit.clear_fault();
-			}
-		}
-		if (!did) {
-			return;
-		}
-	}
-}
-
 MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	std::vector<Plane> planes_a;
 	std::vector<Plane> planes_b;
@@ -660,8 +655,11 @@ MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	if (!assembled.ok()) {
 		return assembled;
 	}
+	// Collapsing collinear Steiner vertices after a Boolean warps planar
+	// n-gons: a vertex can be locally collinear on every incident face and
+	// still sit at the meeting of distinct edges. Sliding it along one edge
+	// takes the others off-plane (workshop window SELF_INTERSECTION).
 	_dissolve_coplanar(p_edit);
-	_strip_collinear(p_edit);
 	return p_edit.last_fault();
 }
 
