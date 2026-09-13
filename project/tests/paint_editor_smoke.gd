@@ -31,6 +31,8 @@ func _run() -> void:
 	await create_timer(0.5).timeout
 	var plugin := _plugin(root)
 	var panel: Control = plugin.get("_panel")
+	plugin.call("make_bottom_panel_item_visible", panel)
+	await process_frame
 	var selection: RefCounted = plugin.get("_selection")
 	selection.set_objects([solid])
 	await _click(_mode(panel, 3))
@@ -68,7 +70,9 @@ func _run() -> void:
 			thumbnail = child
 			break
 	_check(picker_wrap.get_global_rect().encloses(picker.get_global_rect()), "loaded_material_picker_fits_its_slot")
-	_check(actions_row.get_global_rect().grow(1.0).encloses(picker_wrap.get_global_rect()), "loaded_material_picker_fits_action_row")
+	var paint_inspector: Control = panel.find_child("PaintInspector", true, false)
+	_check(paint_inspector.get_global_rect().grow(1.0).encloses(picker_wrap.get_global_rect()), "loaded_material_picker_fits_paint_inspector")
+	_check(actions_row.get_global_rect().grow(1.0).encloses(picker_wrap.get_global_rect()), "loaded_material_picker_fits_complete_action_wrapper")
 	_check(thumbnail != null and picker.get_global_rect().encloses(thumbnail.get_global_rect()), "loaded_material_thumbnail_is_fully_visible")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-picker", "capture_rect": panel.get_global_rect()}, "after")
 	var paint: RefCounted = panel.get("_paint")
@@ -114,6 +118,11 @@ func _run() -> void:
 	surface.get_viewport().push_input(frame)
 	await create_timer(0.5).timeout
 	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_painting")
+	await _click(_button_named(panel, "Pixel"))
+	var save: Button = _button_named(panel, "Save Paint")
+	var help: Label = panel.find_child("PaintHelp", true, false)
+	_check(save.visible and actions_row.get_global_rect().grow(1.0).encloses(save.get_global_rect()), "pixel_save_fits_complete_action_wrapper")
+	_check(help.visible and actions_row.get_global_rect().grow(1.0).encloses(help.get_global_rect()), "pixel_help_fits_complete_action_wrapper")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)

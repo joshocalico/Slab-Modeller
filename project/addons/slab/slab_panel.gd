@@ -57,8 +57,10 @@ var _unique_button: Button
 var _paint_assign: Button
 var _paint_save: Button
 var _paint_sample: Button
-var _paint_actions: ScrollContainer
-var _paint_action_tools: HBoxContainer
+var _paint_actions: VBoxContainer
+var _paint_action_tools: VBoxContainer
+var _paint_inspector: ScrollContainer
+var _paint_inspector_fields: VBoxContainer
 var _paint_help: Label
 var _paint_picker_wrap: Control
 var _paint_picker: Node
@@ -263,14 +265,6 @@ func _paint_body_maximum_tool_minimum_height() -> float:
 	for child in _paint_body.get_children():
 		if child is Control:
 			var child_height := (child as Control).get_combined_minimum_size().y
-			# Hidden controls report no combined minimum. Keep the Material/UV rows in
-			# the Paint workspace envelope so switching tools cannot move the splitter.
-			if child == _paint_actions:
-				child_height = maxf(child_height, _scaled(PAINT_PICKER_HEIGHT))
-			elif child == _paint_uv_controls:
-				child_height = maxf(child_height, _scaled(PAINT_UV_ROW_HEIGHT))
-			elif child == _paint_palette:
-				child_height = maxf(child_height, _scaled(PAINT_PALETTE_HEIGHT))
 			height += child_height
 			count += 1
 	return height + maxf(0, count - 1) * _paint_body.get_theme_constant("separation")
@@ -1008,9 +1002,26 @@ func _paint_block() -> Control:
 	body.clip_contents = true
 	body.add_theme_constant_override("separation", 3)
 	body.add_child(_paint_target_row())
-	body.add_child(_paint_action_row())
+	var split := HBoxContainer.new()
+	split.name = "PaintWorkspaceSplit"
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override("separation", 8)
+	var inspector_scroll := ScrollContainer.new()
+	_paint_inspector = inspector_scroll
+	inspector_scroll.name = "PaintInspector"
+	inspector_scroll.custom_minimum_size.x = _scaled(350.0)
+	inspector_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	inspector_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	var inspector := VBoxContainer.new()
+	_paint_inspector_fields = inspector
+	inspector.name = "PaintInspectorFields"
+	inspector.custom_minimum_size.x = _scaled(342.0)
+	inspector.add_theme_constant_override("separation", 4)
+	inspector_scroll.add_child(inspector)
+	inspector.add_child(_paint_action_row())
 	_paint_uv_controls = _paint_uv_control_row()
-	body.add_child(_paint_uv_controls)
+	inspector.add_child(_paint_uv_controls)
 	_paint_palette = ScrollContainer.new()
 	_paint_palette.name = "PaintPalette"
 	_paint_palette.custom_minimum_size.y = _scaled(PAINT_PALETTE_HEIGHT)
@@ -1025,10 +1036,14 @@ func _paint_block() -> Control:
 	_paint_chips.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_paint_chips.add_theme_constant_override("separation", 6)
 	_paint_palette.add_child(_paint_chips)
-	body.add_child(_paint_palette)
+	inspector.add_child(_paint_palette)
+	_paint_brush = _brush_column()
+	inspector.add_child(_paint_brush)
+	split.add_child(inspector_scroll)
 	var row := HBoxContainer.new()
 	row.name = "PaintCanvasRow"
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.clip_contents = true
 	row.add_theme_constant_override("separation", 8)
 	_paint_canvas = SlabPaintCanvas.new()
@@ -1093,9 +1108,8 @@ func _paint_block() -> Control:
 	_paint_fit_uv.offset_bottom = 29
 	_paint_fit_uv.pressed.connect(_paint_canvas.frame_uv)
 	row.add_child(_paint_canvas)
-	_paint_brush = _brush_column()
-	row.add_child(_paint_brush)
-	body.add_child(row)
+	split.add_child(row)
+	body.add_child(split)
 	return body
 
 
@@ -1113,116 +1127,113 @@ func _paint_target_row() -> Control:
 	row.add_child(_paint_tool_uv)
 	row.add_child(_paint_tool_pixel)
 	_paint_face = _paint_caption("Face", "none")
+	_paint_face.visible = false
 	_paint_face.clip_text = true
 	_paint_face.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_paint_face.size_flags_stretch_ratio = 2.0
 	_paint_mat = _paint_caption("Material", "none")
 	_paint_dirty = _paint_caption("Save", "")
 	_paint_dirty.name = "PaintDirty"
+	_paint_dirty.visible = false
 	row.add_child(_paint_face)
-	row.add_child(_paint_mat)
 	row.add_child(_paint_dirty)
 	return row
 
 
 func _paint_action_row() -> Control:
-	var scroll := ScrollContainer.new()
-	_paint_actions = scroll
-	scroll.name = "PaintActions"
-	scroll.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
-	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.clip_contents = true
-	var tools := HBoxContainer.new()
+	var tools := VBoxContainer.new()
+	_paint_actions = tools
+	tools.name = "PaintActions"
 	_paint_action_tools = tools
-	tools.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
 	tools.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tools.clip_contents = true
-	tools.add_theme_constant_override("separation", 8)
+	tools.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	tools.add_theme_constant_override("separation", 4)
+	tools.add_child(_paint_mat)
+	var buttons := HFlowContainer.new()
+	buttons.name = "PaintActionButtons"
+	buttons.add_theme_constant_override("h_separation", 4)
 	_paint_assign = _named_action("Assign", "MaterialPreviewCube", "Assign the active material to the selected faces.", func() -> void:
 		if _paint:
 			_paint.assign_active_to_selection()
 	)
 	_paint_assign.name = "PaintAssign"
-	tools.add_child(_paint_assign)
+	buttons.add_child(_paint_assign)
 	_unique_button = _named_action("Make Unique", "Duplicate", "Copies this solid's material so painting does not rewrite shared tiles.", func() -> void:
 		if _paint:
 			_paint.make_unique()
 	)
-	tools.add_child(_unique_button)
+	buttons.add_child(_unique_button)
 	_paint_save = _named_action("Save Paint", "Save", "Write the painted image to PNG, then save the scene.", func() -> void:
 		if _paint:
 			_paint.save_png(_paint.default_save_path())
 	)
 	_paint_save.name = "PaintSave"
-	tools.add_child(_paint_save)
+	buttons.add_child(_paint_save)
 	_paint_sample = _named_action("Sample", "ListSelect", "Use the selected faces' common material as the brush. Alt-click a viewport face to sample it directly.", func() -> void:
 		if _paint:
 			_paint.sample_selection()
 	)
 	_paint_sample.name = "PaintSample"
-	tools.add_child(_paint_sample)
+	buttons.add_child(_paint_sample)
+	tools.add_child(buttons)
 	_paint_picker_wrap = _paint_picker_slot()
 	tools.add_child(_paint_picker_wrap)
 	_paint_help = Label.new()
 	_paint_help.name = "PaintHelp"
 	_paint_help.add_theme_font_size_override("font_size", _font(13))
 	_paint_help.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_paint_help.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_paint_help.clip_text = true
-	_paint_help.custom_minimum_size.x = _scaled(128.0)
+	_paint_help.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_paint_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_paint_help.custom_minimum_size.x = 0.0
 	tools.add_child(_paint_help)
-	scroll.add_child(tools)
-	return scroll
+	return tools
 
 
 func _paint_uv_control_row() -> Control:
-	var scroll := ScrollContainer.new()
-	scroll.name = "PaintUvControls"
-	scroll.custom_minimum_size.y = _scaled(PAINT_UV_ROW_HEIGHT)
-	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.clip_contents = true
-	var fields := HBoxContainer.new()
-	fields.name = "PaintUvFields"
-	fields.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	var fields := VBoxContainer.new()
+	fields.name = "PaintUvControls"
+	fields.custom_minimum_size.y = _scaled(PAINT_UV_ROW_HEIGHT)
+	fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fields.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	fields.add_theme_constant_override("separation", 8)
-	fields.add_child(_compact_spin("Repeat U", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
+	fields.add_theme_constant_override("separation", 4)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 4)
+	grid.add_theme_constant_override("v_separation", 4)
+	grid.add_child(_compact_spin("Repeat U", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
 		_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
 	, "Texture repeats across the face in U.", &"paint_uv_repeat_u"))
-	fields.add_child(_compact_spin("Repeat V", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
+	grid.add_child(_compact_spin("Repeat V", 0.05, 64.0, 0.05, 1.0, func(v: float) -> void:
 		_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
 	, "Texture repeats across the face in V.", &"paint_uv_repeat_v"))
-	fields.add_child(_compact_spin("Offset U", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
+	grid.add_child(_compact_spin("Offset U", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
 		_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
 	, "Texture offset in U.", &"paint_uv_offset_u"))
-	fields.add_child(_compact_spin("Offset V", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
+	grid.add_child(_compact_spin("Offset V", -64.0, 64.0, 0.05, 0.0, func(v: float) -> void:
 		_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
 	, "Texture offset in V.", &"paint_uv_offset_v"))
-	fields.add_child(_compact_spin("Rotation", -360.0, 360.0, 1.0, 0.0, func(v: float) -> void:
+	grid.add_child(_compact_spin("Rotation", -360.0, 360.0, 1.0, 0.0, func(v: float) -> void:
 		_actions.uv_rotation_degrees = v
 	, "Texture rotation in degrees.", &"paint_uv_rotation"))
-	fields.add_child(_named_action("Apply UV", "ImageTexture", "Apply these UV values to the selected face.", func() -> void:
+	fields.add_child(grid)
+	var actions := HFlowContainer.new()
+	actions.add_theme_constant_override("h_separation", 4)
+	actions.add_child(_named_action("Apply UV", "ImageTexture", "Apply these UV values to the selected face.", func() -> void:
 		if _paint:
 			for spin in _spins_under(_paint_uv_controls):
 				spin.apply()
 			_paint.apply_uv()
 	))
-	fields.add_child(_named_action("Reset UV", "Reload", "Reset repeats, offsets and rotation on the selected face.", func() -> void:
+	actions.add_child(_named_action("Reset UV", "Reload", "Reset repeats, offsets and rotation on the selected face.", func() -> void:
 		if _paint:
 			_paint.reset_uv()
 	))
-	fields.add_child(_named_action("UV 90°", "ToolRotate", "Rotate UV placement by ninety degrees.", func() -> void:
+	actions.add_child(_named_action("UV 90°", "ToolRotate", "Rotate UV placement by ninety degrees.", func() -> void:
 		if _paint:
 			_paint.rotate_uv_90()
 	))
-	scroll.add_child(fields)
-	return scroll
+	fields.add_child(actions)
+	return fields
 
 
 func _paint_picker_slot() -> Control:
@@ -1440,6 +1451,9 @@ func _refresh_paint_chrome() -> void:
 		_paint_face.text = "%s · %d %s · %s" % [_selection.solid.name, count,
 			"face" if count == 1 else "faces", _paint.selected_material_summary()]
 	_paint_face.tooltip_text = _paint_face.text
+	if _selection_context != null and _paint != null and _paint.active:
+		_selection_context.text = _paint_face.text
+		_selection_context.tooltip_text = _paint_face.text
 	var mat_text := "none"
 	if _paint != null:
 		var mat: Variant = _paint.material() if _paint.is_pixel() else _paint.brush_material()
@@ -1450,9 +1464,10 @@ func _refresh_paint_chrome() -> void:
 			mat_text += " (unique)"
 	_paint_mat.text = "%s: %s" % ["Texture" if _paint != null and _paint.is_pixel() else "Brush", mat_text]
 	_paint_mat.clip_text = true
+	_paint_mat.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_paint_mat.tooltip_text = _paint_mat.text
 	_paint_dirty.text = _paint.save_status() if _paint != null else ""
-	_paint_dirty.visible = not _paint_dirty.text.is_empty()
+	_paint_dirty.visible = false
 	_paint_dirty.clip_text = true
 	_paint_dirty.tooltip_text = _paint_dirty.text
 	var pixel: bool = _paint != null and _paint.is_pixel()
@@ -1465,9 +1480,6 @@ func _refresh_paint_chrome() -> void:
 	_paint_help.visible = pixel
 	_paint_help.text = _pixel_help_text()
 	_paint_help.tooltip_text = _paint_help.text
-	var action_height := _scaled(PAINT_ROW_HEIGHT if pixel else PAINT_PICKER_HEIGHT)
-	_paint_actions.custom_minimum_size.y = action_height
-	_paint_action_tools.custom_minimum_size.y = action_height
 	if _paint_tool_uv != null and _paint != null:
 		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
 		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
@@ -1485,6 +1497,10 @@ func _refresh_paint_chrome() -> void:
 		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
 	if _paint_brush != null:
 		_paint_brush.visible = _paint != null and _paint.is_pixel()
+	if _paint_inspector != null:
+		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if pixel else 350.0)
+	if _paint_inspector_fields != null:
+		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if pixel else 342.0)
 	if _paint != null:
 		_set_spin(&"paint_uv_repeat_u", _actions.uv_scale.x)
 		_set_spin(&"paint_uv_repeat_v", _actions.uv_scale.y)

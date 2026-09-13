@@ -18,13 +18,45 @@ Keep tool options adjacent to the tool that owns them. Preserve separate remembe
 
 ## Protect the modelling view
 
-Surface Paint currently leaves the dock enlarged when returning to modelling. Godot exposes no public bottom-panel splitter height control, so do not resize private editor ancestors. Keep the compact modelling minimum and let the user collapse the dock. Check both a compact dock and a loaded material thumbnail before accepting a layout.
+Godot exposes no public bottom-panel splitter height control, so do not resize private editor ancestors. Keep the compact modelling minimum and let the user resize or collapse the dock. Check both a compact dock and a loaded material thumbnail before accepting a layout. The side-inspector Paint layout now fits the authoring dock without expanding it on entry.
 
 ## Keep the first design pass focused
 
 Placement and persistent target context now have native editor evidence. The remaining layout work should give active operation settings and Apply/Cancel a consistent location, reduce duplicate material and UV controls, and preserve enough viewport space for picking. Compare compact layouts using a selected face with a loaded material before choosing one.
 
 Selection conversion also matters during authoring. Rounding a roof requires its perimeter edges; selecting the top face should provide a direct route to that set. Judge this and other modelling additions by building another part of Signal Foundry with them.
+
+## Consolidate surface editing without losing capabilities
+
+The legacy Materials & UV panel and Surface Paint share scale, offset, rotation, Apply, Reset, and quarter-turn actions. Consolidating those controls requires moving three substantive controls into Surface Paint first: Unwrap, Pixels/metre, and Texture px. Texture px also determines the blank image size for Pixel's Make Unique workflow, so it must be reachable there.
+
+Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain useful and must stay available.
+
+Preserve brush identity across solids. Surface Paint chooses a material resource, then Assign applies it to selected faces. A target-local numeric slot is not a transferable brush. The material picker currently assigns its loaded resource immediately; Sample adopts the selected material and UV values. Migration must make these differing actions explicit.
+
+The legacy Add Material creates a blank, unassigned slot. Decide on an explicit New Material workflow before removing it or rewriting the house tutorial around loaded resources. UV Larger and UV Smaller are expressible through Repeat fields or canvas scaling, but their one-click doubling and halving behavior should be retained if it earns space in the revised layout.
+
+Update the house, unwrap, pixel-paint, and panel-reference pages together with the control migration. Current tests also depend on density, resolution, slot creation, and the legacy action inventory. Tests must follow the replacement workflow rather than preserve obsolete controls.
+
+## Paint layout comparison
+
+The native 1225 × 768 editor gives Slab about 815 screen pixels between Godot's sidebars. With Paint open, the divider is at Y=409. Material/UV's canvas spans approximately Y=603–738, while Pixel's spans Y=516–738. Switching tools keeps the divider stable.
+
+Compared stacked controls, a left properties column beside the canvas, and a canvas-first toolbar with disclosed numeric fields. The side column is a candidate because paired U/V fields avoid horizontal scrolling and leave the canvas independent of property scrolling. It also reduces canvas width. The HTML sketches clipped lower fields at full size, so their proposed viewport-height gains are not acceptance evidence. A disposable Godot prototype must measure the actual controls, loaded picker, canvas, and scroll behavior before production adoption.
+
+The initial native study moved actual controls beside the canvas. At the same dock height, the canvas changed from approximately 812 by 135 to 588 by 268 reference screen pixels. Its 222-pixel properties column fit the loaded material picker, paired UV fields, and Apply controls without vertical scrolling. That prototype doubled canvas height but did not establish a viewport-height gain. Its mode tabs and clipped duplicate target text needed further work. Advanced mapping controls still need a separate placement pass.
+
+Production uses compact mode tabs above both columns, one selected-face/material summary in the Slab header, and Brush or Texture identity beside the actions. The native Signal Foundry replay entered Paint with the divider at Y=466 and a UV canvas approximately 561 by 186 screen pixels. Compared with the earlier stacked layout, the modelling view gained 57 pixels of height and the UV canvas gained 51. Pixel uses a narrower inspector and keeps the same dock height. These measurements describe this editor size and saved dock position, not a fixed layout on every display.
+
+The inspector owns scrolling. Its action and UV sections use natural container heights; nested fixed-height scroll sections clipped the loaded picker and Apply buttons on initial entry. Material palette chips and Pixel's lower brush controls require a short scroll at the compact height. This is an accepted limitation of this checkpoint, not evidence that all controls fit at once. The study script now captures and checks the production layout rather than reparenting controls.
+
+Native acceptance covered first entry, typed Rotation 15 without Enter followed by Apply UV, a UV canvas drag, Make Unique, Pixel canvas painting, scrolling to Opacity and Show UV, and returning to Face mode. Undo and Save restored Signal Foundry with no scene diff. The full verifier passed.
+
+## Reference workflows
+
+ProBuilder's [UV Editor](https://docs.unity3d.com/Packages/com.unity.probuilder@6.1/manual/uv-editor.html) separates its canvas from a context-sensitive Actions panel and distinguishes automatic mapping from manual UV editing. UModeler's [UV workflow](https://unity.umodeler.com/manual/editable-mesh/uv-editor/uv-editor-guide) moves from unwrapping through island placement to checking the applied texture. Its [painting inspector](https://unity.umodeler.com/manual/editable-mesh/painting-3d-editor/painting-mode-guide) groups setup and tools into collapsible sections.
+
+For Slab, these support making mapping state and the next action visible, giving unwrap a clear place beside placement, and grouping secondary setup without hiding the canvas. They do not establish that Slab matches either product's capabilities or usability.
 
 ## Acceptance
 

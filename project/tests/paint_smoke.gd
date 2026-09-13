@@ -845,8 +845,8 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(target != null and actions_row != null and palette != null, "paint rows exist")
 	_expect(target.custom_minimum_size.y <= SlabPanel.PAINT_ROW_HEIGHT + 0.5,
 		"the target row is an explicit %s px band" % SlabPanel.PAINT_ROW_HEIGHT)
-	_expect(actions_row.custom_minimum_size.y <= SlabPanel.PAINT_PICKER_HEIGHT + 0.5,
-		"the action row fits the native picker in a %s px band" % SlabPanel.PAINT_PICKER_HEIGHT)
+	_expect(actions_row.get_combined_minimum_size().y > SlabPanel.PAINT_PICKER_HEIGHT,
+		"the inspector naturally reserves its buttons and native picker")
 	_expect(not _rects_overlap(target.get_global_rect(), actions_row.get_global_rect()),
 		"target and actions do not overlap, %s vs %s" % [target.get_global_rect(), actions_row.get_global_rect()])
 	_expect(not palette.visible and not panel.find_child("PaintAssign", true, false).visible
@@ -859,6 +859,7 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(not _rects_overlap(actions_row.get_global_rect(), canvas.get_global_rect()),
 		"compact Pixel actions do not overlap the larger canvas")
 	var pixel_canvas_height := canvas.size.y
+	var pixel_canvas_width := canvas.size.x
 	var pixel_help: Label = panel.find_child("PaintHelp", true, false)
 	_expect(pixel_help.visible and pixel_help.text.contains("Save Paint"),
 		"editable Pixel texture has visible painting and saving guidance")
@@ -866,8 +867,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(face_label != null and face_label.text.begins_with("%s · 1 face · " % solid.name)
 		and face_label.text.ends_with(paint.selected_material_summary()),
 		"the target row describes the selected face count, got %s" % (face_label.text if face_label else "missing"))
-	_expect(face_label != null and face_label.get_global_rect().size.x >= 48.0,
-		"Face is readable, size=%s" % (face_label.get_global_rect().size if face_label else Vector2.ZERO))
+	var header_context: Label = panel.find_child("SelectionContext", true, false)
+	_expect(header_context != null and header_context.text == face_label.text,
+		"the persistent header carries the selected face and material context")
 	var original_name := solid.name
 	solid.name = "PowerHouseExteriorCourtyardNorthRetainingWall"
 	panel.call("_refresh_paint_chrome")
@@ -875,8 +877,8 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(face_label.text.begins_with(solid.name + " · 1 face · ")
 		and face_label.tooltip_text == face_label.text,
 		"a clipped long target keeps its complete name and count in the tooltip")
-	_expect(target.get_global_rect().grow(0.5).encloses(face_label.get_global_rect()),
-		"the long target summary stays inside the compact row")
+	_expect(header_context.tooltip_text == face_label.text,
+		"the long authoritative target stays complete in the header tooltip")
 	solid.name = original_name
 	panel.call("_refresh_paint_chrome")
 	selection.set_ids(PackedInt64Array())
@@ -978,10 +980,10 @@ func _check_canvas_letterbox_and_press() -> void:
 		"Material/UV restores material placement controls")
 	_expect(not save_button.visible and not pixel_help.visible,
 		"Material/UV hides pixel-only save controls and guidance")
-	_expect(pixel_canvas_height > canvas.size.y + 20.0,
-		"Pixel gives recovered control-row space to the image canvas")
+	_expect(absf(pixel_canvas_height - canvas.size.y) <= 1.0 and pixel_canvas_width > canvas.size.x + 20.0,
+		"Pixel keeps the same canvas height and a wider canvas with its narrower brush inspector")
 	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
-		"Material/UV palette stays above its canvas")
+		"Material/UV palette stays beside the canvas without overlap")
 	var fit_uv: Button = panel.find_child("PaintFitUv", true, false)
 	_expect(fit_uv != null and fit_uv.visible, "Material/UV exposes an explicit Fit UV control")
 	_expect(fit_uv != null and fit_uv.position.x >= 8.0 and fit_uv.position.x + fit_uv.size.x <= canvas.size.x - 7.0,
