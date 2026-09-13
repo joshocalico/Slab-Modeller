@@ -15,7 +15,7 @@ Selecting all 145 room faces and entering Paint showed a single Limestone materi
 - Brush identifies the material used by Material / UV clicks. Texture identifies the bound pixel-paint material.
 - A sampled material transfers between solids by resource identity, regardless of local slot numbering.
 - In-mode selection changes preserve the chosen material brush.
-- Palette chips choose a brush; Assign or a viewport click applies it. The resource picker retains its existing immediate-assignment behavior.
+- Palette chips and the resource picker choose a brush; Assign or a viewport click applies it.
 - Mixed and empty selections do not silently choose an arbitrary assignable material on entry.
 
 ## Native verification
@@ -57,3 +57,15 @@ Editing Albedo Color to c98239 exposed a stale preview: the Inspector sphere cha
 Before Assign, Save produced no scene diff, despite Godot marking the Inspector edit dirty. Assign followed by Save produced three roof material slots and copper faces, with the original 18 faces and volume 3.87238744273782. One native Undo and Save restored the scene exactly.
 
 The final rendered paint regression passed with zero failures. It clicks the picker preview, checks choice leaves the solid unchanged, applies through Assign, and verifies exact Undo and Redo. Its Inspector final-property-edit path updates preview pixels without manually emitting Resource.changed. The complete verifier, the final editor-boundary chrome check, documentation links, and website build passed.
+
+## First face selection and empty gestures
+
+In the saved Signal Foundry scene, entering Surface Paint from Object mode showed Select a face to paint and Brush: none. Clicking the MaintenanceBayRoof side instead reported Choose or sample a material before painting, leaving the selection empty. Dragging the native Y handle above the roof also created a Translate history entry and dirtied the scene. The displayed node position did not change during that reproduction. Undo restored the clean scene.
+
+The corrected native replay used Front Orthogonal at 1225 by 768. Entering Paint with no face IDs and dragging from `(613, 193)` to `(613, 157)` left History at The Beginning. Clicking the roof side at `(760, 273)` selected one face and adopted Teal Steel, its image, and UV values without dirtying the scene. Switching to Pixel, dragging the newly centred Y handle through empty sky, and clicking empty sky preserved that face and the clean history. The saved scene and texture stayed unchanged.
+
+The rendered native-input fixture checks that its initial Y-axis coordinate misses geometry. Paint preserves exact mesh bytes, node transform, history version, and empty selection. After leaving Paint and restoring the fixture's original element selection, the same coordinate gesture changes the mesh, creates history, and supports exact Undo restoration. All nine checks passed. The fixture sends held-button motion through Godot's connected viewport input handler; the saved-scene computer-use drag alone did not establish post-exit movement.
+
+Headless coverage checks both paint modes, dragging from empty space onto geometry, first-click adoption, default-material selection without edits, and release of gesture ownership. The full verifier passed all gates. Documentation verification passed for 28 pages and 72 references, and the website production build passed.
+
+Godot's view-name menu also offers View Transform Gizmo. A native toggle hid and restored the widget while retaining the selected solid, Inspector, and Paint workspace without editing the scene. The pixel-paint guide documents this manual option. Automatic hiding remains unresolved.

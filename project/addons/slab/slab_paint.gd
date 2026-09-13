@@ -28,6 +28,7 @@ var active: bool = false:
 		if not value:
 			cancel_stroke()
 			cancel_uv_drag()
+			_left_gesture_owned = false
 		active = value
 		changed.emit()
 
@@ -37,6 +38,7 @@ var tool: int = Tool.MATERIAL_UV:
 			return
 		cancel_stroke()
 		cancel_uv_drag()
+		_left_gesture_owned = false
 		tool = value
 		if active:
 			if tool == Tool.MATERIAL_UV:
@@ -50,6 +52,7 @@ var brush_radius: float = 8.0
 var brush_opacity: float = 1.0
 var dirty: bool = false
 var stroke_active: bool = false
+var _left_gesture_owned := false
 
 var _undo: Object = null
 var _selection: RefCounted
@@ -102,6 +105,7 @@ func bind(selection: RefCounted, actions: RefCounted, undo: Object, host: RefCou
 
 
 func enter() -> void:
+	_left_gesture_owned = false
 	active = true
 	if _selection != null:
 		_selection.mode = 3
@@ -110,6 +114,7 @@ func enter() -> void:
 
 
 func exit() -> void:
+	_left_gesture_owned = false
 	cancel_stroke()
 	_free_brush()
 	active = false
@@ -666,6 +671,7 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 		return VERDICT_PASS
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
+			_left_gesture_owned = false
 			if stroke_active:
 				cancel_stroke()
 			elif uv_drag_active:
@@ -682,8 +688,9 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 	if world_root != null and camera != null:
 		hit = SlabPick.pick_world_hit(world_root, camera, event.position)
 	if event is InputEventMouseButton and event.pressed:
+		_left_gesture_owned = not event.alt_pressed and not event.shift_pressed and not event.ctrl_pressed and not event.meta_pressed
 		if hit.is_empty():
-			return VERDICT_PASS
+			return VERDICT_STOP if _left_gesture_owned else VERDICT_PASS
 		var solid: Node3D = hit.get("solid")
 		var face: int = int(hit.get("id", 0))
 		if not SlabPaintUv.faces_camera(solid, face, camera, hit["world"]):
@@ -695,7 +702,16 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 			else:
 				var brush := _brush_material
 				if brush == null:
-					_report("Choose or sample a material before painting.")
+					var owned_gesture := _left_gesture_owned
+					_focus_target(solid)
+					_selection.set_objects([solid])
+					_selection.set_ids(PackedInt64Array([face]))
+					_left_gesture_owned = owned_gesture
+					_adopt_selection_material()
+					if _brush_material != null:
+						_report("Selected face and adopted %s as the Brush." % material_label(_brush_material, _actions.material_slot))
+					else:
+						_report("Selected face uses the default material. Choose a Brush to paint it.")
 					return VERDICT_STOP
 				_focus_target(solid)
 				_selection.set_objects([solid])
@@ -717,8 +733,11 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 	if event is InputEventMouseButton and not event.pressed:
 		if stroke_active:
 			end_stroke()
+			_left_gesture_owned = false
 			return VERDICT_STOP
-		return VERDICT_PASS
+		var owned := _left_gesture_owned
+		_left_gesture_owned = false
+		return VERDICT_STOP if owned else VERDICT_PASS
 	if event is InputEventMouseMotion:
 		_sync_brush_preview(world_root, camera, event.position)
 	if event is InputEventMouseMotion and stroke_active:
@@ -736,7 +755,7 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 			return VERDICT_STOP
 		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
 		return VERDICT_STOP
-	return VERDICT_PASS
+	return VERDICT_STOP if _left_gesture_owned else VERDICT_PASS
 
 
 func _focus_target(solid: Node3D) -> void:
@@ -1130,6 +1149,7 @@ func _adopt_selection_material() -> void:
 
 
 func _on_selection_changed() -> void:
+	_left_gesture_owned = false
 	if not active:
 		return
 	if _selection.mode != 3:

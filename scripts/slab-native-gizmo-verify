@@ -26,4 +26,11 @@ else
   echo "FAIL native cancellation (see $run_dir/cancel.log)"
   failures=$((failures + 1))
 fi
+printf '{"scene":"res://demo/signal_foundry/signal_foundry.tscn","node":"MaintenanceBayRoof","paint_empty_gesture":true,"tool":"W","axis_index":1,"front_view":true,"delay":0.5,"capture_prefix":"%s/paint-empty"}\n' "$run_dir" > "$run_dir/paint-empty.json"
+if scripts/godot "${extra[@]}" --path project --script res://tests/native_gizmo_editor_smoke.gd -- "$run_dir/paint-empty.json" > "$run_dir/paint-empty.log" 2>&1; then
+  echo "PASS Surface Paint empty gizmo gesture ownership"
+else
+  echo "FAIL Surface Paint empty gizmo gesture ownership (see $run_dir/paint-empty.log)"
+  failures=$((failures + 1))
+fi
 exit "$failures"

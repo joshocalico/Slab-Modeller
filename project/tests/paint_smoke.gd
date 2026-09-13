@@ -570,26 +570,93 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	cam.look_at_from_position(Vector3(6, 8, 10), Vector3(1, 1.5, 1), Vector3.UP)
 	cam.current = true
 	var top: int = _top_face(solid)
+	var existing := StandardMaterial3D.new()
+	existing.resource_name = "Existing roof"
+	solid.set("materials", [existing])
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
-	selection.set_ids(PackedInt64Array([top]))
+	selection.set_ids(PackedInt64Array())
 	paint.enter()
-	paint.tool = SlabPaint.Tool.PIXEL
-	paint.make_unique()
 	var screen: Vector2 = cam.unproject_position(solid.to_global(solid.call("face_centroid", top)))
 	var faces: int = solid.call("face_count")
 	var down := InputEventMouseButton.new()
 	down.button_index = MOUSE_BUTTON_LEFT
 	down.pressed = true
-	down.position = screen
-	var verdict: int = session.handle(cam, down)
-	_expect(verdict == SlabViewport.Verdict.STOP, "a paint click is claimed")
 	var up := InputEventMouseButton.new()
 	up.button_index = MOUSE_BUTTON_LEFT
 	up.pressed = false
+	var material_miss := Vector2(-1000, -1000)
+	down.position = material_miss
+	var material_press: int = session.handle(cam, down)
+	var material_cross := InputEventMouseMotion.new()
+	material_cross.position = screen
+	material_cross.button_mask = MOUSE_BUTTON_MASK_LEFT
+	var material_drag: int = session.handle(cam, material_cross)
 	up.position = screen
-	session.handle(cam, up)
+	var material_release: int = session.handle(cam, up)
+	_expect(material_press == SlabViewport.Verdict.STOP and material_drag == SlabViewport.Verdict.STOP
+		and material_release == SlabViewport.Verdict.STOP and selection.ids.is_empty(),
+		"Material/UV owns an empty press crossing geometry without selecting")
+	down.position = screen
+	var before_adopt_data: PackedByteArray = solid.get("data")
+	var before_adopt_history: int = undo.actions.size()
+	var verdict: int = session.handle(cam, down)
+	_expect(verdict == SlabViewport.Verdict.STOP and selection.ids == PackedInt64Array([top])
+		and paint.brush_material() == existing and solid.get("data") == before_adopt_data
+		and undo.actions.size() == before_adopt_history,
+		"first Material/UV click selects a face and adopts its existing material without editing")
+	up.position = screen
+	_expect(session.handle(cam, up) == SlabViewport.Verdict.STOP,
+		"first no-Brush face gesture stays owned through release")
+	paint.exit()
+	solid.set("materials", [])
+	selection.set_ids(PackedInt64Array())
+	paint.enter()
+	var before_default_data: PackedByteArray = solid.get("data")
+	var before_default_history: int = undo.actions.size()
+	down.position = screen
+	up.position = screen
+	_expect(session.handle(cam, down) == SlabViewport.Verdict.STOP
+		and session.handle(cam, up) == SlabViewport.Verdict.STOP
+		and selection.ids == PackedInt64Array([top]) and paint.brush_material() == null
+		and solid.get("data") == before_default_data and undo.actions.size() == before_default_history,
+		"first click selects a default-material face and asks for a Brush without editing")
+	paint.exit()
+	solid.set("materials", [existing])
+	selection.set_ids(PackedInt64Array([top]))
+	paint.enter()
+	paint.tool = SlabPaint.Tool.PIXEL
+	paint.make_unique()
 	_expect(solid.call("face_count") == faces, "a 3D paint click does not extrude")
+	var before_empty_data: PackedByteArray = solid.get("data")
+	var before_empty_transform: Transform3D = solid.transform
+	var before_empty_history: int = undo.actions.size()
+	selection.set_ids(PackedInt64Array())
+	var empty := Vector2(-1000, -1000)
+	down.position = empty
+	var empty_press: int = session.handle(cam, down)
+	var empty_motion := InputEventMouseMotion.new()
+	empty_motion.position = screen
+	empty_motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	var empty_drag: int = session.handle(cam, empty_motion)
+	up.position = screen
+	var empty_release: int = session.handle(cam, up)
+	_expect(empty_press == SlabViewport.Verdict.STOP and empty_drag == SlabViewport.Verdict.STOP
+		and empty_release == SlabViewport.Verdict.STOP,
+		"an empty unmodified Paint gesture stays owned through motion and release")
+	_expect(solid.get("data") == before_empty_data and solid.transform == before_empty_transform
+		and undo.actions.size() == before_empty_history and selection.ids.is_empty(),
+		"an empty Paint gesture cannot select, paint, transform, or create history")
+	var idle_motion := InputEventMouseMotion.new()
+	idle_motion.position = empty
+	_expect(session.handle(cam, idle_motion) == SlabViewport.Verdict.PASS,
+		"Paint releases empty-gesture ownership after mouse-up")
+	down.alt_pressed = true
+	up.alt_pressed = true
+	_expect(session.handle(cam, down) == SlabViewport.Verdict.PASS and session.handle(cam, up) == SlabViewport.Verdict.PASS,
+		"Alt-click miss keeps its existing pass-through contract")
+	down.alt_pressed = false
+	up.alt_pressed = false
 	var key := InputEventKey.new()
 	key.keycode = KEY_E
 	key.pressed = true

@@ -11,6 +11,7 @@ extends SceneTree
 
 const Selection := preload("res://addons/slab/slab_selection.gd")
 const Frame := preload("res://addons/slab/slab_selection_frame.gd")
+const SlabPick := preload("res://addons/slab/slab_pick.gd")
 var failures := 0
 
 func _initialize() -> void:
@@ -100,6 +101,13 @@ func _run() -> void:
 			return
 	# Frame the selected solid through the same native shortcut used in the editor.
 	# This keeps the injected gesture within a visible, usable viewport.
+	if bool(config.get("front_view", false)):
+		var view := InputEventKey.new()
+		view.keycode = KEY_KP_1
+		view.physical_keycode = KEY_KP_1
+		view.pressed = true
+		surface.gui_input.emit(view)
+		await create_timer(0.2).timeout
 	var focus := InputEventKey.new()
 	focus.keycode = KEY_F
 	focus.physical_keycode = KEY_F
@@ -136,10 +144,12 @@ func _run() -> void:
 		if score > best_score:
 			best_score = score
 			axis_index = index
+	if config.has("axis_index"):
+		axis_index = int(config.axis_index)
 	var drag_axis := axes[axis_index]
 	var projected: Vector2 = camera.unproject_position(world.origin + drag_axis) * screen_ratio - origin
 	var direction := projected.normalized()
-	var handle_distance := 1.475 if tool == "R" else 1.575
+	var handle_distance: float = float(config.get("handle_distance", 1.475 if tool == "R" else 1.575))
 	var start: Vector2 = camera.unproject_position(world.origin + drag_axis * gizmo_scale * handle_distance) * screen_ratio
 	var end: Vector2 = start + direction * 35.0
 	if tool == "E":
@@ -163,6 +173,13 @@ func _run() -> void:
 	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
 	var history := manager.get_history_undo_redo(manager.get_object_history_id(solid))
 	var version := history.get_version()
+	if bool(config.get("paint_empty_gesture", false)):
+		var configured_mode: int = selection.mode
+		var configured_ids: PackedInt64Array = selection.ids.duplicate()
+		await _check_paint_empty_gesture(plugin, scene, solid, selection, camera, surface, start, end,
+			history, before, node_before, version, configured_mode, configured_ids)
+		quit(1 if failures else 0)
+		return
 	_button(surface, start, true)
 	await process_frame
 	var previous: Vector2 = start
@@ -219,6 +236,56 @@ func _run() -> void:
 	print("NATIVE_RESULT ", JSON.stringify({"tool": tool, "failures": failures, "before_sha256": _hash(before), "after_sha256": _hash(after), "restored_sha256": _hash(solid.get("data")), "action_name": action_name, "motion_button_mask": MOUSE_BUTTON_MASK_LEFT, "motion_count": 20}))
 	quit(1 if failures else 0)
 
+
+func _check_paint_empty_gesture(plugin: EditorPlugin, scene: Node, solid: Node3D, selection: RefCounted,
+		camera: Camera3D, surface: Control, start: Vector2, end: Vector2, history: UndoRedo,
+		before: PackedByteArray, node_before: Transform3D, version: int,
+		configured_mode: int, configured_ids: PackedInt64Array) -> void:
+	selection.mode = Selection.Mode.OBJECT
+	selection.set_ids(PackedInt64Array())
+	var paint_button := _button_named(plugin.get("_panel"), "Surface Paint")
+	paint_button.pressed.emit()
+	for i in 3: await process_frame
+	_check(plugin.get("_paint").active, "surface_paint_entered_without_face_ids")
+	_check(SlabPick.pick_world_hit(scene, camera, start).is_empty(), "native_gizmo_axis_start_is_outside_geometry")
+	await _native_drag(surface, start, end)
+	_check(solid.get("data") == before, "paint_empty_drag_keeps_exact_mesh_data")
+	_check(solid.transform == node_before, "paint_empty_drag_keeps_node_transform")
+	_check(history.get_version() == version, "paint_empty_drag_creates_no_history")
+	_check(selection.ids.is_empty(), "paint_empty_drag_selects_nothing")
+	paint_button.pressed.emit()
+	for i in 3: await process_frame
+	selection.mode = configured_mode
+	selection.set_ids(configured_ids)
+	for i in 10: await process_frame
+	await _native_drag(surface, start, end)
+	_check(solid.get("data") != before, "same_native_axis_drag_works_after_paint_exit")
+	_check(history.get_version() != version, "post_paint_native_drag_creates_history")
+	if history.get_version() != version:
+		history.undo()
+		_check(solid.get("data") == before, "post_paint_native_drag_undo_restores_mesh")
+	print("NATIVE_RESULT ", JSON.stringify({"tool": "paint_empty_gesture", "failures": failures}))
+
+
+func _native_drag(surface: Control, start: Vector2, end: Vector2) -> void:
+	_button(surface, start, true)
+	await process_frame
+	var previous := start
+	for step in range(1, 21):
+		var position := start.lerp(end, step / 20.0)
+		var motion := InputEventMouseMotion.new()
+		motion.position = position
+		motion.global_position = surface.global_position + position
+		motion.relative = position - previous
+		motion.screen_relative = motion.relative
+		motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+		surface.gui_input.emit(motion)
+		previous = position
+		await process_frame
+	_button(surface, end, false)
+	for i in 3: await process_frame
+
+
 func _capture(editor: Object, config: Dictionary, stage: String) -> void:
 	if DisplayServer.get_name() == "headless" or not config.has("capture_prefix"):
 		return
@@ -261,6 +328,15 @@ func _surface(node: Node) -> Control:
 		if child is Control:
 			for connection in child.get_signal_connection_list("gui_input"):
 				if str(connection.callable).contains("::_sinput"): return child
+	return null
+
+func _button_named(node: Node, label: String) -> Button:
+	if node is Button and String(node.get_meta("slab_label", node.text)) == label:
+		return node
+	for child in node.get_children():
+		var found := _button_named(child, label)
+		if found != null:
+			return found
 	return null
 
 func _button(surface: Control, position: Vector2, pressed: bool) -> void:

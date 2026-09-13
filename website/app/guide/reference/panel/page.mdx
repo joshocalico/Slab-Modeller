@@ -132,6 +132,8 @@ See [Change topology](/guide/how-to/change-topology) for the selection rules and
 
 In **Material / UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening Surface Paint with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside Surface Paint.
 
+When Brush is empty, clicking a face selects it and adopts its material and UV values without changing the solid. A default-material face remains selected while you choose a material. Once Brush is set, face clicks assign it. Left clicks and drags in empty space, without modifier keys, leave the target and scene unchanged.
+
 In **Pixel**, **Texture** names the selected faces' common material image. Mixed-material selections have no canvas image. A 3D stroke paints the clicked face's own image; it does not assign the Material / UV brush.
 
 Both paint tools place their controls beside the canvas and share the same minimum workspace height. Switching between **Material / UV** and **Pixel** preserves the dock height. Pixel uses a narrower control column, giving its canvas more width. Scroll the control column to reach lower settings when the dock is compact.
