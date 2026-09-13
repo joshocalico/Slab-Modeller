@@ -70,6 +70,9 @@ var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
 var _selection_controls: Control
 var _operation_row: Control
+var _loop_action_group: HBoxContainer
+var _loop_apply: Button
+var _loop_cancel: Button
 var _named_solids: Array[Node] = []
 
 
@@ -77,6 +80,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_selection = selection
 	_actions = actions
 	_actions.loop_values_updated.connect(_sync_loop_values)
+	_actions.loop_state_changed.connect(_sync_loop_controls)
 	_actions.plane_state_changed.connect(_refresh_settings)
 	_actions.array_state_changed.connect(_refresh_settings)
 	_actions.snap_align_state_changed.connect(_refresh_settings)
@@ -336,6 +340,9 @@ func _refresh_buttons() -> void:
 
 
 func _refresh_settings() -> void:
+	_loop_action_group = null
+	_loop_apply = null
+	_loop_cancel = null
 	_settings.visible = _show_settings()
 	for spin in _spins_under(_settings_fields):
 		spin.apply()
@@ -458,6 +465,19 @@ func _refresh_settings() -> void:
 			_actions.loop_position = v / 100.0
 			_actions.loop_settings_changed.emit()
 		, "Centre of the loop group as a percentage along the starting edge.", &"loop_position"))
+		_loop_action_group = HBoxContainer.new()
+		_loop_action_group.name = "LoopActions"
+		_loop_action_group.add_theme_constant_override("separation", int(_scaled(GRID_SEPARATION)))
+		_loop_apply = _named_action("Apply", "Apply", "Apply the loop preview as one undoable edit.", _apply_loop_preview)
+		_loop_apply.name = "LoopApply"
+		_loop_action_group.add_child(_loop_apply)
+		_loop_cancel = _named_action("Cancel", "Clear", "Discard the loop preview and keep the original solid.", func() -> void:
+			_actions.loop_cancel_requested.emit()
+		)
+		_loop_cancel.name = "LoopCancel"
+		_loop_action_group.add_child(_loop_cancel)
+		_settings_fields.add_child(_loop_action_group)
+		_sync_loop_controls()
 	_refresh_material_chips()
 
 
@@ -1602,3 +1622,19 @@ func _sync_loop_values() -> void:
 			spin.set_value_no_signal(_actions.loop_count)
 		elif spin.get_parent().name == "loop_position":
 			spin.set_value_no_signal(_actions.loop_position * 100.0)
+
+
+func _sync_loop_controls() -> void:
+	if _loop_action_group == null or _loop_apply == null or _loop_cancel == null:
+		return
+	_loop_action_group.visible = _actions.loop_active
+	_loop_apply.disabled = not _actions.loop_can_apply
+
+
+func _apply_loop_preview() -> void:
+	for key in [&"loop_count", &"loop_position"]:
+		var field: Node = find_child(String(key), true, false)
+		if field != null:
+			for spin in _spins_under(field):
+				spin.apply()
+	_actions.loop_apply_requested.emit()

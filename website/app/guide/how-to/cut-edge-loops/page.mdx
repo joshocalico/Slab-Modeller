@@ -8,7 +8,7 @@ Use loop cuts to add a wall band, a ledge, or more edges before shaping a solid.
 
 1. Select a `SlabSolid` and switch to Edge mode.
 2. Press <kbd>L</kbd>, or click **Loop Cut**.
-3. Hover an edge. If you already selected an edge, its preview appears immediately.
+3. Hover an edge. If you already selected an edge, its preview appears immediately and stays on that edge while you use the panel.
 4. Scroll up to add cuts or down to remove them. **Cuts** on the panel sets the same count, from 1 to 32.
 
 The cyan lines show the cuts. The mesh has not changed yet. Cuts follow opposite edges through quads. A non-quad face stops the strip; the tool does not guess a route through it.
@@ -23,6 +23,8 @@ The direction follows the starting edge's endpoints. Check the preview before co
 
 ## Apply or cancel
 
-Press Enter or click again to apply. The cut group is one undo action. Escape or right-click cancels the preview without changing the solid.
+Click **Apply** on the panel to commit the current valid preview. You can also press Enter, or click again after locking the starting edge. The cut group is one undo action.
+
+Click **Cancel**, press Escape, or right-click to remove the preview without changing the solid. **Apply** is disabled when there is no valid cut preview. If no starting edge is chosen, hover an edge to preview a cut.
 
 Cuts that would collapse onto an existing vertex or onto one another are refused. Use fewer cuts or a wider spacing. The preview uses the same lattice positions as the committed mesh.

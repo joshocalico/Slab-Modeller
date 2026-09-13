@@ -86,6 +86,33 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	panel.free()
 
 
+func case_loop_cut_controls_preserve_edge_settings() -> void:
+	var panel := _build_panel(1.0, SlabSelection.Mode.EDGE)
+	root.add_child(panel)
+	var actions: RefCounted = panel.get("_actions")
+	var apply: Button = panel.find_child("LoopApply", true, false)
+	var cancel: Button = panel.find_child("LoopCancel", true, false)
+	var action_group: HBoxContainer = panel.find_child("LoopActions", true, false)
+	expect(apply != null and cancel != null and action_group != null and not action_group.visible,
+		"Loop Cut controls stay hidden outside a preview")
+	expect(apply.get_parent() == action_group and cancel.get_parent() == action_group,
+		"Loop Cut Apply and Cancel wrap together as one settings item")
+	actions.loop_active = true
+	actions.loop_can_apply = false
+	actions.loop_state_changed.emit()
+	expect(action_group.visible and apply.disabled and not cancel.disabled,
+		"a candidate-less Loop Cut disables Apply and keeps Cancel available")
+	expect(panel.find_child("loop_count", true, false).visible and panel.find_child("loop_position", true, false).visible,
+		"Loop Cut keeps Cuts and Centre visible")
+	expect(panel.find_child("ModelBody", true, false).visible and _button_for(panel, "Bevel") != null,
+		"Loop Cut keeps ordinary Edge commands visible")
+	actions.loop_can_apply = true
+	actions.loop_state_changed.emit()
+	expect(not apply.disabled and apply.focus_mode == Control.FOCUS_ALL and cancel.focus_mode == Control.FOCUS_ALL,
+		"a valid Loop Cut enables keyboard-focusable Apply and Cancel")
+	panel.free()
+
+
 func case_uv_settings_are_bounded_and_reports_survive_refresh() -> void:
 	var selection := SlabSelection.new()
 	selection.mode = SlabSelection.Mode.FACE

@@ -126,3 +126,14 @@ Closing Paint left only “Surface Paint closed.” in the status line, hiding t
 In a restarted native editor, selected the roof face, entered Paint, and closed it. The header retained “1 face · MaintenanceBayRoof” beside the mode controls. Started Extrude, entered -1, and saw the crossing-face refusal with Apply disabled while the header retained the target. Cancelled and saved with no scene diff.
 
 Chrome coverage checks reports, selection changes, renames, clearing selection, and long names in a constrained dock. Panel smoke and the full slab-verify passed. The rendered panel editor replay also passed. Regenerated and inspected the Face, Object, Extrude preview, and Boolean panel captures through that editor workflow.
+
+
+## Loop Cut panel workflow
+
+Selected a roof edge and started Loop Cut with L. The three-cut preview worked, but the panel lacked Apply and Cancel. Moving away from the edge could discard the candidate while the previous cut guidance remained. Enter then appeared to do nothing.
+
+Loop Cut now publishes its active and valid-preview state to the panel. Apply and Cancel accompany Cuts and Centre. An explicitly selected starting edge stays fixed while using the panel. Starting without an edge keeps the hover workflow. Missing candidates clear the preview and replace stale cut guidance.
+
+Native replay cancelled a preview through the panel and saved with no scene diff. Started again, typed 3 into Cuts without pressing Enter, and clicked Apply. The saved roof had 18 faces and unchanged volume 3.8764694519341. One native Undo followed by Save restored the complete scene byte-for-byte. The focused regression checks pending field values, pinned selection, missing candidates, cancellation, preview agreement, and Undo.
+
+The final native layout keeps Apply and Cancel together below the numeric fields at the current dock width. With no edge chosen, Apply is disabled and the status asks for a hover target. Selecting an edge and restarting enables Apply. Cancel returns to the idle panel without a scene diff. The full slab-verify, documentation checks, and website build passed.

@@ -3,6 +3,8 @@ extends SceneTree
 const Selection := preload("res://addons/slab/slab_selection.gd")
 const Actions := preload("res://addons/slab/slab_actions.gd")
 const LoopCut := preload("res://addons/slab/slab_loop_cut.gd")
+const SlabPanel := preload("res://addons/slab/slab_panel.gd")
+const Metrics := preload("res://addons/slab/slab_metrics.gd")
 const Host := preload("res://tests/slab_test_host.gd")
 const Undo := preload("res://tests/slab_test_undo.gd")
 var failures := 0
@@ -37,14 +39,34 @@ func _run() -> void:
 	var host = Host.over(root).stub_undo(undo)
 	var actions := Actions.new(selection, undo)
 	var tool := LoopCut.new(selection, actions, host)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, Metrics.at_scale(1.0))
+	root.add_child(panel)
 	var before: PackedByteArray = solid.get("data")
 	actions.loop_count = 3
 	actions.run("insert_loop")
 	check(tool.active and not tool.lines.is_empty(), "toolbar begins a visible multi-cut preview")
+	check(actions.loop_active and actions.loop_can_apply, "selected-edge preview enables panel Apply")
+	var away := InputEventMouseMotion.new()
+	away.position = Vector2(-1000, -1000)
+	tool.handle(camera, away)
+	check(tool.edge == edge and not tool.lines.is_empty(), "selected edge stays fixed while moving to panel controls")
 	check(solid.get("data") == before, "preview does not modify serialized geometry")
-	tool.handle(camera, key(KEY_ESCAPE))
-	check(not tool.active and selection.preview_lines.is_empty(), "Escape removes preview")
+	(panel.find_child("LoopCancel", true, false) as Button).pressed.emit()
+	check(not tool.active and selection.preview_lines.is_empty(), "panel Cancel removes preview")
+	check(not actions.loop_active and not actions.loop_can_apply, "panel Cancel clears published loop state")
 	check(solid.get("data") == before and undo.actions.is_empty(), "cancel changes neither geometry nor undo history")
+	var reports: Array[String] = []
+	actions.reported.connect(func(message: String) -> void: reports.append(message))
+	selection.clear_ids()
+	tool.begin()
+	check(actions.loop_active and not actions.loop_can_apply and selection.preview_lines.is_empty(),
+		"a candidate-less session publishes disabled Apply and clears stale preview lines")
+	check(not reports.is_empty() and reports[-1].contains("hover an edge"),
+		"a candidate-less session replaces stale cut guidance")
+	tool.handle(camera, key(KEY_ESCAPE))
+	check(not tool.active, "Escape cancels a candidate-less session")
+	selection.set_ids(PackedInt64Array([edge]))
 	actions.loop_count = 1
 	tool.begin()
 	tool.handle(camera, key(KEY_2, 50))
@@ -68,6 +90,14 @@ func _run() -> void:
 	check(solid.get("data") == before, "undo restores original bytes")
 	undo.redo()
 	check(solid.get("data") == after, "redo restores committed bytes")
+	undo.undo()
+	selection.set_ids(PackedInt64Array([edge]))
+	tool.begin()
+	var cuts := panel.find_child("loop_count", true, false).find_children("*", "SpinBox", true, false)[0] as SpinBox
+	cuts.get_line_edit().text = "3"
+	(panel.find_child("LoopApply", true, false) as Button).pressed.emit()
+	check(actions.loop_count == 3 and not tool.active and solid.get("data") != before,
+		"panel Apply commits a pending Cuts value before confirming")
 	undo.undo()
 	selection.set_ids(PackedInt64Array([edge]))
 	tool.begin()

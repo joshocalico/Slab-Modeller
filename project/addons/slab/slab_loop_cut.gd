@@ -7,6 +7,7 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 
 var active := false
 var sliding := false
+var candidate_locked := false
 var solid: Node3D
 var edge: int = 0
 var lines := PackedVector3Array()
@@ -23,16 +24,22 @@ func _init(selection: RefCounted, actions: RefCounted, host: RefCounted) -> void
 	_host = host
 	_actions.loop_requested.connect(begin)
 	_actions.loop_settings_changed.connect(refresh)
+	_actions.loop_apply_requested.connect(confirm)
+	_actions.loop_cancel_requested.connect(cancel_from_ui)
 	_selection.changed.connect(_selection_changed)
 
 func begin() -> void:
 	cancel()
 	active = true
+	_publish_state()
 	if _selection.solid != null and not _selection.ids.is_empty():
 		solid = _selection.solid
 		edge = _selection.ids[0]
 		_before = solid.get("data")
+		candidate_locked = true
 		refresh()
+		if _error != OK or lines.is_empty():
+			candidate_locked = false
 	else:
 		_report("Loop Cut: hover an edge. Click to slide; click again or Enter to apply. Esc cancels.")
 
@@ -52,6 +59,11 @@ func refresh() -> void:
 		return
 	lines.clear()
 	if not is_instance_valid(solid) or edge == 0:
+		_selection.preview_lines = PackedVector3Array()
+		_selection.preview_solid = null
+		_selection.hover_changed.emit()
+		_publish_state()
+		_report("Loop Cut: hover an edge to preview a cut. Esc cancels.")
 		return
 	if solid.get("data") != _before:
 		cancel()
@@ -64,6 +76,7 @@ func refresh() -> void:
 	_selection.preview_solid = solid
 	_selection.preview_lines = lines
 	_selection.hover_changed.emit()
+	_publish_state()
 	if _error != OK:
 		_report("Loop Cut: %s" % SlabActions.describe_error(_error, "insert_loop"))
 	else:
@@ -100,11 +113,14 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 			if sliding:
 				confirm()
 			elif is_instance_valid(solid) and not lines.is_empty():
+				candidate_locked = true
 				sliding = true
 				refresh()
 		return 1
 	if event is InputEventMouseMotion:
-		if sliding:
+		if candidate_locked:
+			if not sliding:
+				return 1
 			var ends: PackedVector3Array = solid.edge_endpoints(edge)
 			if ends.size() == 2 and _typed.is_empty():
 				var a := camera.unproject_position(solid.to_global(ends[0]))
@@ -159,6 +175,7 @@ func confirm() -> void:
 func cancel() -> void:
 	active = false
 	sliding = false
+	candidate_locked = false
 	edge = 0
 	solid = null
 	_typed = ""
@@ -166,6 +183,21 @@ func cancel() -> void:
 	_selection.preview_lines = PackedVector3Array()
 	_selection.preview_solid = null
 	_selection.hover_changed.emit()
+	_publish_state()
+
+func cancel_from_ui() -> void:
+	if not active:
+		return
+	cancel()
+	_report("Loop Cut cancelled.")
+
+func _publish_state() -> void:
+	var can_apply: bool = active and is_instance_valid(solid) and edge != 0 and not lines.is_empty() and _error == OK and solid.get("data") == _before
+	if _actions.loop_active == active and _actions.loop_can_apply == can_apply:
+		return
+	_actions.loop_active = active
+	_actions.loop_can_apply = can_apply
+	_actions.loop_state_changed.emit()
 
 func _report(message: String) -> void:
 	_actions.reported.emit(message)

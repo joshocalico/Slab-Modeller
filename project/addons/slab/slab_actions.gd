@@ -19,6 +19,9 @@ var operation_amount := 0.5
 signal loop_requested
 signal loop_settings_changed
 signal loop_values_updated
+signal loop_state_changed
+signal loop_apply_requested
+signal loop_cancel_requested
 signal plane_requested
 signal plane_settings_changed
 signal plane_state_changed
@@ -76,6 +79,8 @@ const ERR_MULTIPLE_BOUNDARY_LOOPS := 17
 
 var loop_count: int = 1
 var loop_position: float = 0.5
+var loop_active: bool = false
+var loop_can_apply: bool = false
 var plane_normal := Vector3.RIGHT
 var plane_offset: float = 1.0
 var plane_keep_positive: bool = false
@@ -535,7 +540,7 @@ func _material_op() -> Dictionary:
 
 func _loop_op() -> Dictionary:
 	loop_requested.emit()
-	return { "status": "Loop Cut: hover an edge, click to slide, then click or Enter to apply. Wheel adds cuts; type a percentage. Esc cancels." }
+	return { "status": "" }
 
 
 func _boolean_op(mode: int) -> Dictionary:
