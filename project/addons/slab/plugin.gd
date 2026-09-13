@@ -107,7 +107,7 @@ func _exit_tree() -> void:
 
 
 func _handles(object: Object) -> bool:
-	return SlabSelection.owning_solid(object) != null
+	return SlabSelection.editor_owning_solid(object) != null
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:

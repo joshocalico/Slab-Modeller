@@ -114,6 +114,25 @@ static func owning_solid(node: Object) -> Node3D:
 	return null
 
 
+# Native editor selection may point at Slab's hidden render/collision nodes,
+# but an authored child remains an independent scene object.
+static func editor_owning_solid(node: Object) -> Node3D:
+	if node == null or not is_instance_valid(node) or not node is Node:
+		return null
+	if is_solid(node):
+		return node as Node3D
+	var current := node as Node
+	var crossed_internal := false
+	while current.get_parent() != null:
+		var parent := current.get_parent()
+		if not parent.get_children().has(current):
+			crossed_internal = true
+		if is_solid(parent):
+			return (parent as Node3D) if crossed_internal else null
+		current = parent
+	return null
+
+
 func drop_invalid() -> void:
 	var kept: Array[Node3D] = []
 	for node in objects:
@@ -139,6 +158,15 @@ func set_objects(nodes: Array) -> void:
 	ids = PackedInt64Array()
 	active_id = 0
 	changed.emit()
+
+
+func set_editor_objects(nodes: Array) -> void:
+	var kept: Array[Node3D] = []
+	for node in nodes:
+		var solid := editor_owning_solid(node)
+		if solid != null and not kept.has(solid):
+			kept.append(solid)
+	set_objects(kept)
 
 
 func set_ids(value: PackedInt64Array) -> void:

@@ -202,7 +202,7 @@ func adopt_host_selection() -> void:
 	_cancel_operation()
 	if _grab.dragging():
 		_cancel()
-	_selection.set_objects(_host.selected_nodes())
+	_selection.set_editor_objects(_host.selected_nodes())
 
 
 func _on_mode_requested() -> void:
