@@ -6,9 +6,11 @@
 
 Created MaintenanceBay with Create Box, dimensions 4 × 3 × 4. Used the Inspector to place it at (26, 0.17, 19). Selected its top face, applied Inset 0.45, then Extrude -2.4. Saved the scene. The persisted room has 14 faces and volume 24.938059.
 
-Created MaintenanceBayDoorCutter, dimensions 1 × 2 × 1, and positioned it at (27.5, 0.77, 18.8). It intersects the negative-Z wall and starts at the room floor. The saved scene retains this cutter; the doorway has not yet been applied through the editor.
+Created MaintenanceBayDoorCutter, dimensions 1 × 2 × 1, and positioned it at (27.5, 0.77, 18.8). It intersected the negative-Z wall and started at the room floor. Filtered the Scene tree to the MaintenanceBay nodes, selected MaintenanceBay in Object mode, then extended the selection to MaintenanceBayDoorCutter with Shift+Down. The panel identified MaintenanceBay as **Target** and MaintenanceBayDoorCutter as **Second solid**.
 
-A separate, unsaved runtime copy of the saved scene accepted Subtract with error 0, yielding 24 room faces and volume 24.037669. This confirms the placement is geometrically valid. It does not substitute for completing the native boolean interaction or a gameplay traversal.
+Clicked **Subtract** in the native panel. The status reported 24 faces. The cutter remained visible over the opening, so deleted it with Cmd+Backspace and Return. An outside orbit then showed the doorway through the wall. Saved the completed doorway. This replay covers native authoring and exterior visual inspection; it does not yet cover gameplay traversal or an approach route.
+
+The earlier runtime probe produced the same 24-face room with volume 24.037669.
 
 ## Panel change and verification
 
@@ -23,8 +25,7 @@ Chrome smoke passed 41 cases, including visibility and restoration checks. The f
 - The generic transform gizmo overlaps the operation handle. Clearing Slab's subgizmo selection merely moves the native gizmo back to the object pivot. That attempted fix failed a native replay and was reverted. No supported visibility hook was found in the exposed editor API.
 - Fixed in the rendered-preview pass below: the proposed surface now replaces the source display during a valid operation.
 - Fixed in the follow-up pass: Slab's status and boolean operand labels now follow selected-node renames immediately. Native rename to MaintenanceBayRenameCheck updated the status without reselection; Undo restored MaintenanceBay in both the tree and Slab. The test rename was undone and the scene saved without a scene diff. Smoke coverage also checks that renaming an unselected solid preserves current feedback.
-- The doorway's native multi-selection step remains unfinished. Keyboard range-selection attempts did not produce two boolean operands through the current computer-use session. Do not classify this as a Slab bug without separating editor and input-tool behaviour.
-- This bay has no final materials, roof, gameplay interaction, or tested approach route yet. It remains an authoring checkpoint.
+- The native doorway authoring replay is complete. The bay still has no final materials, roof, gameplay interaction, or tested approach route. It remains an authoring checkpoint.
 
 The room tutorial now covers installed-addon prerequisites and exact cutter placement using the Inspector, instead of relying on an unspecified wall and drag direction.
 
