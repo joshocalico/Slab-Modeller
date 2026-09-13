@@ -78,4 +78,4 @@ Fit UV should use the selected mapping's actual bounds and retain a margin aroun
 
 A line fits its nonzero dimension. A point-only mapping uses a one-tile view rather than dividing by zero. These cases must not change mesh data or create history. Pixel image zoom remains a separate interaction.
 
-Scale and rotation modifier drags still derive sensitivity from UV-space distance. After fitting very small or large islands, those gestures need a separate consistency pass; framing alone does not establish a complete editing workflow.
+Scale and rotation modifier drags use editor-scaled screen distance from the initial press. A horizontal drag of 180 logical pixels turns UVs 180 degrees; for scaling, that distance adds 100 percent on the corresponding axis. Moving retains UV-space displacement so the mapping follows the pointer. This separates view magnification from modifier sensitivity without changing the existing gesture assignments. Check held modifiers, cancellation, exact history, and the same drag at different zooms before accepting the interaction.

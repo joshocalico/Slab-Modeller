@@ -492,18 +492,19 @@ func begin_uv_drag() -> void:
 	_uv_before_data = _uv_solid.get("data")
 
 
-func drag_uv(delta_uv: Vector2, mode: int = UV_MOVE) -> void:
+# Delta is UV displacement for Move, normalized screen displacement for Scale/Rotate.
+func drag_uv(delta: Vector2, mode: int = UV_MOVE) -> void:
 	if not uv_drag_active or not is_instance_valid(_uv_solid):
 		return
 	if mode == UV_SCALE:
 		_actions.uv_scale = Vector2(
-			maxf(0.05, _uv_scale_start.x * (1.0 + delta_uv.x)),
-			maxf(0.05, _uv_scale_start.y * (1.0 + delta_uv.y))
+			maxf(0.05, _uv_scale_start.x * (1.0 + delta.x)),
+			maxf(0.05, _uv_scale_start.y * (1.0 + delta.y))
 		)
 	elif mode == UV_ROTATE:
-		_actions.uv_rotation_degrees = _uv_rotation_start + delta_uv.x * 180.0
+		_actions.uv_rotation_degrees = _uv_rotation_start + delta.x * 180.0
 	else:
-		_actions.uv_offset = _uv_offset_start + delta_uv
+		_actions.uv_offset = _uv_offset_start + delta
 	_uv_solid.call("set_face_uv", _uv_ids, _actions.uv_scale, _actions.uv_offset, deg_to_rad(_actions.uv_rotation_degrees))
 	changed.emit()
 

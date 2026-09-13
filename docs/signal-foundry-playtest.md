@@ -72,6 +72,12 @@ Fit UV now uses actual selected UV extents, with shared finite limits across Fit
 
 Reviewed `/tmp/slab-paint-small-unwrap-after.png`, `/tmp/slab-paint-tiny-fit-after.png`, and `/tmp/slab-paint-tiny-zoom-after.png` with the Brick brush texture. The ordinary small unwrap has a readable outline over the magnified texture; the extreme tiny mapping remains visible and grows about the off-centre pointer. `/tmp/slab-uv-extremes-final.log` reports zero rendered failures. Saved level geometry and materials remain unchanged. Scale and rotation drag sensitivity still needs work across zoom levels.
 
+## UV modifier sensitivity follow-up
+
+Scale and rotation now measure editor-scaled screen distance from the initial press. The regression first reproduced four failures: differing results across zoom levels and incorrect expected amounts for both modifiers. After the fix, a 25-logical-pixel horizontal drag rotates 25 degrees at either tested zoom. A diagonal Shift-drag of `(25, 15)` logical pixels multiplies U/V by `(1 + 25/180, 1 + 15/180)`. Twelve wheel steps separate the views.
+
+The rendered checks send held modifiers, mouse motion and release, verify exact Escape cancellation and native Undo/Redo, and retain stable framing. Ordinary Move still follows the UV point under the pointer. `/tmp/slab-uv-modifier-after.log` reports zero rendered failures; the focused headless paint suite also passes. No saved level data changed.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.

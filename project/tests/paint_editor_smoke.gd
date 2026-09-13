@@ -222,6 +222,7 @@ func _run() -> void:
 	await _history_shortcut(panel, false)
 	_check(solid.get("data") == after, "same-density Unwrap Undo restores exact placement data")
 	await _extreme_uv_framing(editor, panel, canvas, paint, solid, selection)
+	await _modifier_uv_framing(panel, canvas, paint, solid, selection)
 	await _click(_mode(panel, 3))
 	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
 	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
@@ -329,16 +330,29 @@ func _history_shortcut(panel: Control, redo: bool) -> void:
 	await create_timer(0.2).timeout
 
 
-func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
+func _uv_gesture(canvas: Control, cancel_drag: bool, mode: int = 0) -> void:
 	var view_before := _uv_frame(canvas)
 	var start: Vector2 = canvas.global_position + canvas.image_rect().get_center()
-	var end := start + Vector2(25, 15)
+	var end: Vector2 = start + Vector2(25, 15) * canvas.get("_metrics").scale()
+	var paint: RefCounted = canvas.get("_paint")
+	var offset_before: Vector2 = paint.get("_actions").uv_offset
+	var pointer_delta: Vector2 = canvas.call("_canvas_to_uv", end - canvas.global_position) - canvas.call("_canvas_to_uv", start - canvas.global_position)
+	var modifier := InputEventKey.new()
+	modifier.keycode = KEY_SHIFT if mode == paint.UV_SCALE else (KEY_META if OS.get_name() == "macOS" else KEY_CTRL)
+	modifier.physical_keycode = modifier.keycode
+	modifier.pressed = true
+	_modifier_flags(modifier, mode)
+	if mode != paint.UV_MOVE:
+		canvas.grab_focus()
+		canvas.get_viewport().push_input(modifier)
+		await process_frame
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.button_mask = MOUSE_BUTTON_MASK_LEFT
 	press.pressed = true
 	press.position = start
 	press.global_position = start
+	_modifier_flags(press, mode)
 	canvas.get_viewport().push_input(press)
 	await process_frame
 	var motion := InputEventMouseMotion.new()
@@ -346,10 +360,14 @@ func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
 	motion.position = end
 	motion.global_position = end
 	motion.relative = end - start
+	_modifier_flags(motion, mode)
 	canvas.get_viewport().push_input(motion)
 	await process_frame
 	_check(canvas.get("_paint").uv_drag_active, "canvas_mouse_drag_started")
-	_check(_uv_frame(canvas) == view_before, "held UV move keeps a stable canvas frame")
+	_check(_uv_frame(canvas) == view_before, "held UV drag keeps a stable canvas frame")
+	if mode == paint.UV_MOVE:
+		_check((paint.get("_actions").uv_offset - offset_before).is_equal_approx(pointer_delta),
+			"unmodified move follows the pointer in UV coordinates")
 	if cancel_drag:
 		var escape := InputEventKey.new()
 		escape.keycode = KEY_ESCAPE
@@ -361,6 +379,10 @@ func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
 	press.position = end
 	press.global_position = end
 	canvas.get_viewport().push_input(press)
+	if mode != paint.UV_MOVE:
+		modifier.pressed = false
+		_modifier_flags(modifier, 0)
+		canvas.get_viewport().push_input(modifier)
 	await create_timer(0.2).timeout
 
 
@@ -457,3 +479,49 @@ func _canvas_uv_bounds(canvas: Control, loops: Array) -> Rect2:
 			lo = lo.min(mapped)
 			hi = hi.max(mapped)
 	return Rect2(lo, hi - lo)
+
+
+func _modifier_flags(event: InputEventWithModifiers, mode: int) -> void:
+	event.shift_pressed = mode == 1
+	event.meta_pressed = mode == 2 and OS.get_name() == "macOS"
+	event.ctrl_pressed = mode == 2 and OS.get_name() != "macOS"
+
+
+func _modifier_uv_framing(panel: Control, canvas: Control, paint: RefCounted,
+		solid: Node3D, selection: RefCounted) -> void:
+	var original: PackedByteArray = solid.get("data")
+	var original_attrs: Dictionary = solid.call("face_uv", selection.ids[0])
+	for mode in [paint.UV_SCALE, paint.UV_ROTATE]:
+		await _click(_button_named(panel, "Fit UV"))
+		var results: Array[Dictionary] = []
+		for zoom_index in range(2):
+			if zoom_index == 1:
+				for notch in range(12):
+					await _uv_wheel(canvas, canvas.size * 0.5, MOUSE_BUTTON_WHEEL_UP)
+			var framing := _uv_frame(canvas)
+			await _uv_gesture(canvas, true, mode)
+			_check(solid.get("data") == original and not paint.uv_drag_active,
+				"modifier %s Escape restores exact data at zoom %s" % [mode, zoom_index])
+			await _uv_gesture(canvas, false, mode)
+			var committed: PackedByteArray = solid.get("data")
+			_check(committed != original and not paint.uv_drag_active,
+				"modifier %s release commits at zoom %s" % [mode, zoom_index])
+			results.append(solid.call("face_uv", selection.ids[0]))
+			await _history_shortcut(panel, false)
+			_check(solid.get("data") == original, "modifier drag Undo restores exact data")
+			await _history_shortcut(panel, true)
+			_check(solid.get("data") == committed, "modifier drag Redo restores exact data")
+			await _history_shortcut(panel, false)
+			_check(_uv_frame(canvas) == framing, "modifier drag, Escape and history preserve canvas framing")
+		if mode == paint.UV_SCALE:
+			_check((results[0].scale as Vector2).is_equal_approx(results[1].scale),
+				"same Shift drag scales equally at different canvas zooms")
+			var expected: Vector2 = original_attrs.scale * (Vector2.ONE + Vector2(25, 15) / 180.0)
+			_check((results[0].scale as Vector2).is_equal_approx(expected), "Shift scaling uses 180 logical pixels per doubling")
+		else:
+			_check(is_equal_approx(results[0].rotation, results[1].rotation),
+				"same rotation modifier drag rotates equally at different canvas zooms")
+			_check(is_equal_approx(results[0].rotation, original_attrs.rotation + deg_to_rad(25.0)),
+				"rotation modifier uses one degree per logical horizontal pixel")
+	await _click(_button_named(panel, "Fit UV"))
+	_check(solid.get("data") == original, "modifier regression restores original scene data")

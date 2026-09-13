@@ -5,7 +5,7 @@ const SlabPaintUv := preload("res://addons/slab/slab_paint_uv.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 
 signal painted_pixel(pixel: Vector2)
-signal uv_dragged(delta_uv: Vector2, mode: int)
+signal uv_dragged(delta: Vector2, mode: int)
 signal stroke_started
 signal stroke_ended
 signal stroke_cancelled
@@ -15,6 +15,7 @@ const ZOOM_MAX := 8.0
 const MAX_VISIBLE_TILES := 256
 const UV_SCALE_MIN := 1.0e-9
 const UV_SCALE_MAX := 1.0e12
+const UV_MODIFIER_DRAG_PIXELS := 180.0
 
 var _paint: RefCounted
 var _metrics: RefCounted
@@ -22,6 +23,7 @@ var _brush := Vector2(-1, -1)
 var _dragging := false
 var _panning := false
 var _uv_from := Vector2.ZERO
+var _uv_drag_from := Vector2.ZERO
 var _zoom: float = 1.0
 var _pan := Vector2.ZERO
 var _pan_from := Vector2.ZERO
@@ -161,8 +163,13 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 		elif _dragging and not _paint.is_pixel():
 			if hits_image(event.position):
+				var mode: int = _paint.uv_mode_for(event)
+				# Move follows UV coordinates. Modifier sensitivity uses logical screen
+				# distance so fitting or zooming the canvas cannot change it.
 				var delta: Vector2 = _canvas_to_uv(event.position) - _uv_from
-				uv_dragged.emit(delta, _paint.uv_mode_for(event))
+				if mode != _paint.UV_MOVE:
+					delta = (event.position - _uv_drag_from) / _metrics.px(UV_MODIFIER_DRAG_PIXELS)
+				uv_dragged.emit(delta, mode)
 			accept_event()
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
@@ -179,6 +186,7 @@ func _gui_input(event: InputEvent) -> void:
 			painted_pixel.emit(_canvas_to_pixel(event.position))
 		else:
 			_uv_from = _canvas_to_uv(event.position)
+			_uv_drag_from = event.position
 			_paint.begin_uv_drag()
 		accept_event()
 	else:
