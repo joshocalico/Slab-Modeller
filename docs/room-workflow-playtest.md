@@ -12,6 +12,12 @@ Clicked **Subtract** in the native panel. The status reported 24 faces. The cutt
 
 The earlier runtime probe produced the same 24-face room with volume 24.037669.
 
+Created MaintenanceBaySteps through the native Stair selector and placement preview. Entered Width 1.4, Height 0.6, Depth 1.2, and 3 steps. Stair ascent runs along local +X, so rotated the node -90 degrees around Y and placed it at (28.6, 0.17, 18.1). This puts the top tread into the doorway. The saved solid reloads with 10 faces and volume 0.669670746. These are authored steps, not a verified gameplay route yet.
+
+The Stair button initially failed to switch away from Box in the running session. A GUI-event regression exposed a notification ordering defect: create_settings_changed fired before the new shape and controls were installed. The corrected order passes that regression. A fresh native editor then selected Stair, displayed its fields, and placed the requested solid. The earlier unresponsive session has not been conclusively attributed to that ordering defect alone.
+
+Two additional papercuts remain: the placed stair received an internal-looking @SlabSolid name before manual renaming, and the generic Width/Depth labels conceal that Width means stair run while Depth means width across the steps. Reading kernel code should not be necessary to orient a staircase.
+
 ## Panel change and verification
 
 During Extrude, Inset, and Bevel previews, hide the unrelated command body and pivot/axis settings. Keep the selection mode strip, numeric operation controls, Apply, Cancel, and feedback visible. Restore the modelling controls when the operation ends.
