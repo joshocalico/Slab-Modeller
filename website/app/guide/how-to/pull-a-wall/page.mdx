@@ -30,6 +30,8 @@ The face translates with the gizmo. It is not locked to the face normal.
 
 Positive values move outward. Negative values move inward. Click **Cancel**, press Escape, or right-click to discard the preview. Apply creates one undo action.
 
+Extrude remembers its last distance for the editor session, including a value from a cancelled preview. Undo restores geometry and does not change that preference. Inset and Bevel remember their own distances separately.
+
 ## Extrude by dragging
 
 Hold Shift, click a face, and drag past the threshold. Slab extrudes once at the start of the drag, then moves the new cap with the cursor. The original ring stays as the base.

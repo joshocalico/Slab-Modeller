@@ -290,7 +290,7 @@ func _check_signed_extrude_after_inset() -> void:
 	session.bind_actions(actions)
 	var said: Array[String] = []
 	actions.reported.connect(func(text: String) -> void: said.append(text))
-	actions.amount = -1.0
+	actions.extrude_amount = -1.0
 	actions.run("extrude_faces")
 	actions.operation_apply_requested.emit()
 	_expect(said.is_empty() or not said[0].contains("failed"), "a signed inward extrude after inset commits, got %s" % [said])
@@ -302,7 +302,7 @@ func _check_signed_extrude_after_inset() -> void:
 	selection.set_objects([stabbed])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([cap]))
-	actions.amount = -4.0
+	actions.extrude_amount = -4.0
 	said.clear()
 	actions.run("extrude_faces")
 	actions.operation_apply_requested.emit()
@@ -338,6 +338,24 @@ func _check_boolean_uses_node_transforms() -> void:
 		"Subtract reports that it cut, got %s" % [said])
 	_expect(hall.call("face_count") == 40,
 		"the doorway adds faces with node transforms, got %d from %d" % [hall.call("face_count"), faces_before])
+	_expect(cutter.is_inside_tree(), "Subtract retains the cutter solid")
+
+	var left: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(left)
+	left.name = "Left"
+	left.call("make_box", Vector3(2, 2, 2))
+	var right: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(right)
+	right.name = "Right"
+	right.call("make_box", Vector3(2, 2, 2))
+	right.position.x = 1.0
+	var left_before: PackedByteArray = left.get("data")
+	var right_before: PackedByteArray = right.get("data")
+	selection.set_objects([left, right])
+	actions.swap_boolean_operands()
+	actions.run("boolean_subtract")
+	_expect(left.get("data") == left_before and right.get("data") != right_before,
+		"swapped Subtract edits the displayed target and retains the displayed cutter")
 
 	var host: Node3D = ClassDB.instantiate("SlabSolid")
 	root.add_child(host)

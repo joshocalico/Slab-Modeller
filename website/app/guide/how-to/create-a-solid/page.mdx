@@ -13,7 +13,7 @@ Use this when the scene has no `SlabSolid` yet, or when you want a second volume
 3. Leave **Width**, **Height**, and **Depth** at 2 m, or set the dimensions you need.
 4. Click **Create**.
 
-A `SlabSolid` appears at the origin. The selected shape and values remain ready for another **Create**. Changing them does not resize an existing solid.
+A `SlabSolid` appears with its local origin at the box's minimum corner. The box extends from there along positive X, Y, and Z. The selected shape and values remain ready for another **Create**. Changing them does not resize an existing solid.
 
 <Figure
   src="/img/panel-object.png"
@@ -35,7 +35,7 @@ Choose a shape to show its fields. Set the fields, then click **Create**. The sh
 | --- | --- |
 | **Plane** | A Width × Depth slab. Thickness is one grid step. |
 | **Stair** | A straight run of Steps steps. Default 8. |
-| **Cylinder** | A cylinder with Sides sides. Width is the diameter. Default 16 sides. |
+| **Cylinder** | A cylinder with Sides sides. Width is the diameter. Its local origin is the base centre, and it extends along positive Y. Default 16 sides. |
 | **Arch** | A band swept through Arc. Default 180°, 8 segments, 0.25 m thick. A 90° arch is narrower than Width. A 360° arch is a closed ring. |
 | **Poly Shape** | A Width × Depth square extruded to Height. |
 | **Curve Sweep** | A Width × Height profile swept along a path. |

@@ -17,4 +17,6 @@ The cyan preview shows the exact validated result while the original solid remai
 
 Press Enter or click **Apply** to commit the preview as one undo action. Click **Cancel**, press Escape, or right-click to leave the solid unchanged. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.
 
+Bevel remembers its last width for the editor session, including a width from a cancelled preview. Undo restores geometry and does not change that preference. Extrude and Inset keep separate remembered distances.
+
 Very small amounts with many segments can collapse several samples onto the same lattice point. Slab refuses that result; increase the amount or reduce the segment count.

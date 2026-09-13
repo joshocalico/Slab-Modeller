@@ -15,7 +15,7 @@ Use this when you need a hole that stays a closed solid, such as a room inside a
 <Figure
   src="/img/solid-pair.png"
   alt="A blue host box beside a smaller orange cutter box."
-  caption="Two solids. Subtract uses the first selected as the host and the second as the cutter."
+  caption="Two solids. The panel names the result solid Target and the cutter Second solid."
 />
 
 The shot shows the two volumes side by side so you can tell them apart. For a cavity, move the orange box inside the blue one before you subtract.
@@ -23,14 +23,21 @@ The shot shows the two volumes side by side so you can tell them apart. For a ca
 ## Subtract
 
 1. Click the host.
-2. Shift-click the cutter so both are in the editor selection. The host must stay first.
-3. Click **Subtract** in **Object**.
+2. Shift-click the cutter so both are in the editor selection.
+3. Check that the panel names the host **Target** and the cutter **Second solid**. Click **Swap operands** if their roles are reversed.
+4. Click **Subtract** in **Object**.
 
-The cutter is removed from the host. The result should still be watertight. You can hide or delete the cutter node afterward.
+The cutter volume is removed from the Target. The result should still be watertight. **Second solid** remains in the scene, so you can move it and subtract again, or hide or delete it afterward.
+
+<Figure
+  src="/img/panel-boolean.png"
+  alt="The Slab panel with two selected solids named Target and Second solid, and a Swap operands button."
+  caption="Check the Boolean roles before applying. Second solid is the cutter for Subtract."
+/>
 
 If Slab refuses the op, the cutter may be disjoint from the host. Move it so the volumes overlap and try again.
 
-Union adds the second solid into the first. Intersect keeps only the overlap. Both need two solids in the same order, host first. A worked Union is in [Build a house](/guide/tutorials/build-a-house).
+Union adds **Second solid** into **Target**. Intersect keeps only their overlap in **Target**. Both retain **Second solid**. A worked Union is in [Build a house](/guide/tutorials/build-a-house).
 
 ## Doors
 

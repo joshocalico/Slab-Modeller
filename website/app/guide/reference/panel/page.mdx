@@ -28,6 +28,7 @@ The settings change with the current mode and active command. In Object mode, ch
 | Steps, Sides, Segments, Thickness, Arc | Object, after choosing Stair, Cylinder, or Arch | Only the parameters that shape reads. |
 | Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
 | Cuts, Centre % | Edge | Count and position for Loop Cut. |
+| Target, Second solid, Swap operands | Object, with exactly 2 solids selected | Shows which solid receives a Boolean result and lets you exchange the operand order. The second solid is the Subtract cutter. |
 | UV scale, offset, rotation | Face, with **Materials & UV** expanded and faces selected | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
 | Pixels / metre, Texture px | Face, with **Materials & UV** expanded and faces selected | Physical density and normalization for Unwrap. |
 | Material palette | Face, with **Materials & UV** expanded and faces selected | The active material slot and the control that appends a material. **Set Material** assigns the active slot to selected faces. |
@@ -63,10 +64,10 @@ Object mode. No selection required. Choose a shape, set its fields, then click *
 
 | Shape | Result |
 | --- | --- |
-| Box | A box of Width × Height × Depth at the origin. |
+| Box | A box of Width × Height × Depth. Its local origin is the minimum corner, and it extends along positive X, Y, and Z. |
 | Plane | A Width × Depth slab one grid step thick. |
 | Stair | A straight run of Steps steps. |
-| Cylinder | A cylinder with Sides sides. Width is the diameter. |
+| Cylinder | A cylinder with Sides sides. Width is the diameter. Its local origin is the base centre, and it extends along positive Y. |
 | Arch | A thick band swept through Arc. Width is the outer diameter. Depth is the extrusion. |
 | Poly Shape | A Width × Depth square extruded to Height. |
 | Curve Sweep | A Width × Height profile swept along a path whose length follows Depth. |
@@ -75,13 +76,13 @@ See [Create a solid](/guide/how-to/create-a-solid).
 
 ## Object
 
-Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first selected solid is the host. The second is the other operand.
+Needs a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. **Target** receives the result. **Second solid** is the other operand and is the cutter for Subtract. Click **Swap operands** to exchange those roles before running the Boolean. The second solid remains in the scene after the operation.
 
 | Command | Result |
 | --- | --- |
-| Union | Adds the second solid into the first. |
-| Subtract | Cuts the second solid out of the first. |
-| Intersect | Keeps only the overlap. |
+| Union | Adds **Second solid** into **Target**. |
+| Subtract | Cuts **Second solid** out of **Target**. |
+| Intersect | Keeps only the overlap in **Target**. |
 | Mirror X, Mirror Y, Mirror Z | Mirrors across that local axis. |
 | Center Pivot | Moves the origin to the middle of the solid. |
 | Snap To Grid | Rounds every vertex onto the grid step. |
@@ -179,6 +180,6 @@ In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the gr
 
 **Extrude** opens **Extrude distance**, **Apply**, and **Cancel**. **Inset** opens **Inset distance**, **Apply**, and **Cancel**. **Bevel** opens **Bevel width**, **Segments**, **Apply**, and **Cancel**. **Segments** ranges from 1 to 16.
 
-The coloured viewport handle changes the operation's numeric value. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** leaves the solid unchanged. A refused preview disables **Apply**.
+The coloured viewport handle changes the operation's numeric value. Extrude, Inset, and Bevel each remember their own last-used distance for the editor session. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** leaves the solid unchanged but retains that operation's setting for the next preview. Undo restores geometry; it does not change these session preferences. A refused preview disables **Apply**.
 
 **Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.

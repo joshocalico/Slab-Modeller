@@ -85,6 +85,7 @@ func case_uv_settings_are_bounded_and_reports_survive_refresh() -> void:
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
 	var toggle := panel.find_child("SectionUV", true, false) as Button
 	toggle.button_pressed = true
 	toggle.toggled.emit(true)
@@ -732,6 +733,37 @@ func case_object_settings_are_for_the_next_shape() -> void:
 	panel.free()
 
 
+func case_boolean_operands_are_named_and_swappable() -> void:
+	var selection := SlabSelection.new()
+	var target: Node3D = ClassDB.instantiate("SlabSolid")
+	target.name = "PowerHouse"
+	var cutter: Node3D = ClassDB.instantiate("SlabSolid")
+	cutter.name = "PowerHouseDoorCutter"
+	selection.set_objects([target, cutter])
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	panel.size = Vector2(300, 320)
+	await process_frame
+	await process_frame
+	var operands: Control = panel.find_child("BooleanOperands", true, false)
+	expect(operands != null, "two selected solids expose Boolean operands")
+	var labels: Array[Node] = operands.find_children("*", "Label", true, false)
+	expect(panel.find_child("SettingsTitle", true, false).text == "Boolean operands", "Boolean roles have their own settings heading")
+	expect(labels.size() == 2 and labels[0].text == "Target: PowerHouse"
+		and labels[1].text == "Second solid: PowerHouseDoorCutter", "Boolean operand roles show exact node names")
+	expect(operands.size.x >= 240.0 and labels[1].autowrap_mode != TextServer.AUTOWRAP_OFF,
+		"long Boolean names get a full-width wrapping block")
+	var swap: Button = panel.find_child("SwapBooleanOperands", true, false)
+	expect(swap != null and not swap.clip_text, "Swap operands fits the compact settings column")
+	swap.pressed.emit()
+	expect(selection.objects == [cutter, target], "Swap reverses the Boolean operand order")
+	panel.free()
+	target.free()
+	cutter.free()
+
+
 func case_face_distance_accepts_a_negative_extrude() -> void:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
@@ -873,7 +905,7 @@ func case_mouse_click_extrude_and_refused_merge_run() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	expect(solid.call("inset_faces", PackedInt64Array([top]), 0.45) == 0, "inset before the click")
-	actions.amount = -1.0
+	actions.extrude_amount = -1.0
 	await process_frame
 	await process_frame
 	var extrude: Button = _button_for(panel, "Extrude")

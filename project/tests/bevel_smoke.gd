@@ -35,7 +35,7 @@ func _run() -> void:
 	var actions := Actions.new(selection, undo)
 	session.bind_actions(actions)
 	var before: PackedByteArray = solid.get("data")
-	actions.amount = 0.3
+	actions.bevel_amount = 0.3
 	actions.bevel_segments = 4
 	actions.run("bevel_edges")
 	check(actions.operation_active and not (selection.operation_preview.get("preview_lines", PackedVector3Array()) as PackedVector3Array).is_empty(), "ordinary edge starts a rounded bevel preview")
@@ -69,7 +69,7 @@ func _run() -> void:
 	actions.operation_cancel_requested.emit()
 
 	selection.set_ids(PackedInt64Array([edge + 99]))
-	actions.amount = 0.25
+	actions.bevel_amount = 0.25
 	actions.bevel_segments = 4
 	actions.run("bevel_edges")
 	check((selection.operation_preview.get("preview_lines", PackedVector3Array()) as PackedVector3Array).is_empty(), "stale edge has no misleading preview")
@@ -77,7 +77,7 @@ func _run() -> void:
 	check(solid.get("data") == before and undo.actions.size() == 1, "failed preview cannot mutate geometry or add undo")
 
 	selection.set_ids(PackedInt64Array([solid.call("get_edges")[0]]))
-	actions.amount = 0.25
+	actions.bevel_amount = 0.25
 	actions.bevel_segments = 3
 	actions.run("bevel_edges")
 	solid.call("make_box", Vector3(3, 3, 3))

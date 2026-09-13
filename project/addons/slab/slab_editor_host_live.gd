@@ -33,6 +33,14 @@ func focus_solid(solid: Node3D, additive: bool) -> void:
 	EditorInterface.edit_node(solid)
 
 
+func replace_selection(nodes: Array) -> void:
+	var editor_selection := EditorInterface.get_selection()
+	editor_selection.clear()
+	for node in nodes:
+		if node != null and is_instance_valid(node):
+			editor_selection.add_node(node)
+
+
 func ui_scale() -> float:
 	return EditorInterface.get_editor_scale()
 

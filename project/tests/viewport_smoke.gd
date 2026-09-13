@@ -72,6 +72,58 @@ func case_operation_handle_exact_apply_and_cancel() -> void:
 	expect(not _session.state().ids.is_empty(), "handle Apply retains cap selection")
 
 
+func case_operation_distances_are_remembered_per_tool() -> void:
+	var box: Node3D = _world.box()
+	var undo := SlabTestUndo.new()
+	_host.stub_undo(undo)
+	_select(box, SlabSelection.Mode.FACE)
+	_session.state().set_ids(PackedInt64Array([_world.top_face(box)]))
+	var actions := preload("res://addons/slab/slab_actions.gd").new(_session.state())
+	_session.bind_actions(actions)
+	var before: PackedByteArray = box.get("data")
+
+	actions.operation_requested.emit(0)
+	actions.operation_amount_changed.emit(-0.4)
+	actions.operation_cancel_requested.emit()
+	expect(box.get("data") == before and is_equal_approx(actions.extrude_amount, -0.4),
+		"cancel preserves geometry while remembering Extrude distance")
+	actions.operation_requested.emit(1)
+	expect(is_equal_approx(actions.operation_amount, 0.5), "Inset opens at its independent default")
+	actions.operation_amount_changed.emit(0.2)
+	actions.operation_cancel_requested.emit()
+	actions.operation_requested.emit(0)
+	expect(is_equal_approx(actions.operation_amount, -0.4), "Extrude reopens at its own last distance")
+	actions.operation_cancel_requested.emit()
+	actions.operation_requested.emit(1)
+	expect(is_equal_approx(actions.operation_amount, 0.2), "Inset reopens at its own last distance")
+	actions.operation_apply_requested.emit()
+	expect(box.get("data") != before, "remembered Inset distance applies normally")
+	undo.undo()
+	expect(box.get("data") == before and is_equal_approx(actions.inset_amount, 0.2),
+		"undo restores geometry without rewinding session distance")
+
+	_select(box, SlabSelection.Mode.EDGE)
+	_session.state().set_ids(PackedInt64Array([box.call("get_edges")[0]]))
+	actions.operation_requested.emit(2)
+	expect(is_equal_approx(actions.operation_amount, 0.5), "Bevel keeps an independent default width")
+	actions.operation_amount_changed.emit(0.1)
+	actions.operation_cancel_requested.emit()
+	expect(is_equal_approx(actions.bevel_amount, 0.1) and is_equal_approx(actions.amount, 0.5),
+		"Bevel remembers its width without changing Weld distance")
+
+
+func case_boolean_swap_updates_order_in_slab_and_host_selection() -> void:
+	var target: Node3D = _world.box()
+	var cutter: Node3D = _world.other()
+	_host.stub_host_selection([target, cutter])
+	_session.adopt_host_selection()
+	var actions := preload("res://addons/slab/slab_actions.gd").new(_session.state())
+	_session.bind_actions(actions)
+	actions.swap_boolean_operands()
+	expect(_session.state().objects == [cutter, target], "Swap makes the second selected solid the Boolean target")
+	expect(_host.selected_nodes() == [cutter, target], "Swap keeps native host selection in the same operand order")
+
+
 func case_empty_selection_first_click_selects_the_solid() -> void:
 	var box: Node3D = _world.box()
 	expect(_host.selected_nodes().is_empty(), "the editor selection starts empty")

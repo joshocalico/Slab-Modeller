@@ -34,6 +34,11 @@ func focus_solid(solid: Node3D, additive: bool) -> void:
 		_host_selection.append(solid)
 
 
+func replace_selection(nodes: Array) -> void:
+	_host_selection = nodes.duplicate()
+	_commands.append("replace_selection:%s" % [nodes.map(func(node: Node) -> String: return node.name)])
+
+
 func ui_scale() -> float:
 	return _scale
 

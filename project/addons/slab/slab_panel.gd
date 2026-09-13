@@ -162,8 +162,10 @@ func _operation_controls() -> Control:
 		segment_label.visible = active and kind == 2
 		segments.visible = active and kind == 2
 		segments.set_value_no_signal(_actions.bevel_segments)
+		amount.set_block_signals(true)
 		amount.min_value = -64.0 if kind == 0 else 0.001
 		amount.set_value_no_signal(_actions.operation_amount)
+		amount.set_block_signals(false)
 		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
 		if _settings != null:
 			_settings.visible = _show_settings()
@@ -292,7 +294,7 @@ func _refresh_settings() -> void:
 		child.queue_free()
 	var mode: int = _selection.mode
 	if mode == SlabSelection.Mode.OBJECT:
-		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else "New %s" % _create_label()))
+		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else ("Boolean operands" if _selection.objects.size() == 2 else "New %s" % _create_label())))
 		_settings_title.visible = true
 		_uv_wrap = null
 		if _actions.snap_align_active:
@@ -338,6 +340,15 @@ func _refresh_settings() -> void:
 				_actions.plane_cancel_requested.emit()
 			))
 		else:
+			if _selection.objects.size() == 2:
+				_add_boolean_operands()
+				var create_heading := Label.new()
+				create_heading.text = "New %s" % _create_label()
+				create_heading.custom_minimum_size.x = _scaled(240.0)
+				create_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				create_heading.add_theme_font_size_override("font_size", _font(15))
+				create_heading.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
+				_settings_fields.add_child(create_heading)
 			for field in _actions.shapes.fields_for(_create_focus):
 				_settings_fields.add_child(_shape_spin(field))
 			var create := _named_action("Create", "Add", "Create the selected shape with these settings. Click again to create another.", _create_shape)
@@ -396,6 +407,26 @@ func _refresh_settings() -> void:
 			_actions.loop_settings_changed.emit()
 		, "Centre of the loop group as a percentage along the starting edge.", &"loop_position"))
 	_refresh_material_chips()
+
+
+func _add_boolean_operands() -> void:
+	var operands := VBoxContainer.new()
+	operands.name = "BooleanOperands"
+	operands.custom_minimum_size.x = _scaled(240.0)
+	operands.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	operands.add_theme_constant_override("separation", int(_scaled(3.0)))
+	for role in [["Target", _selection.objects[0]], ["Second solid", _selection.objects[1]]]:
+		var label := Label.new()
+		label.text = "%s: %s" % [role[0], role[1].name]
+		label.tooltip_text = label.text + (" (this solid receives the result)" if role[0] == "Target" else " (this is the cutter for Subtract)")
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.add_theme_font_size_override("font_size", _font(13))
+		operands.add_child(label)
+	var swap := _named_action("Swap operands", "Reload", "Exchange which selected solid receives the Boolean result. The second solid is the cutter for Subtract.", _actions.swap_boolean_operands)
+	swap.name = "SwapBooleanOperands"
+	operands.add_child(swap)
+	_settings_fields.add_child(operands)
 
 
 func _add_array_settings() -> void:
@@ -612,6 +643,8 @@ func _on_reported(text: String) -> void:
 
 func _on_selection_changed() -> void:
 	_last_report = ""
+	if _selection.mode == SlabSelection.Mode.OBJECT:
+		_refresh_settings()
 	refresh()
 
 
@@ -1178,7 +1211,7 @@ func _named_action(text: String, icon: String, tip: String, on_press: Callable) 
 	button.pressed.connect(func() -> void:
 		# Modal actions rebuild this settings row. Release keyboard focus first so
 		# editor shortcuts such as Undo work immediately after Apply.
-		button.release_focus()
+		if button.has_focus(): button.release_focus()
 		on_press.call()
 	)
 	return button

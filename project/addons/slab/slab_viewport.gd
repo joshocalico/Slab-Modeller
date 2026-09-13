@@ -90,6 +90,7 @@ func _init(host: RefCounted) -> void:
 
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
+	_actions.object_order_changed.connect(_host.replace_selection)
 	_actions.operation_requested.connect(_begin_operation)
 	_actions.operation_amount_changed.connect(_change_operation_amount)
 	_actions.operation_segments_changed.connect(_change_operation_segments)
@@ -757,7 +758,7 @@ func _begin_operation(kind: int) -> void:
 	_exit_paint()
 	if _plane != null and _plane.active: _plane.cancel()
 	if _loop != null and _loop.active: _loop.cancel()
-	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.amount, _actions.bevel_segments):
+	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
 		_publish_operation()
 	else:
 		_actions.reported.emit("This selection cannot run the tool. Select one face or a connected region with a shared direction; Bevel needs valid edges.")
@@ -772,6 +773,7 @@ func _publish_operation() -> void:
 	_selection.operation_preview = shape
 	_actions.operation_active = true
 	_actions.operation_amount = _operation.amount
+	_actions.remember_operation_amount(_operation.kind, _operation.amount)
 	_actions.operation_state_changed.emit()
 	_selection.hover_changed.emit()
 	_actions.reported.emit(shape["label"] + (". Drag the handle or enter an amount; Apply confirms, Escape cancels." if _operation.error == OK else ". " + _actions.describe_error(_operation.error, "extrude_faces" if _operation.kind == 0 else "")))
@@ -849,7 +851,6 @@ func _confirm_operation() -> void:
 		undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
 		undo.commit_action(false)
 	_selection.set_ids(after_ids)
-	_actions.amount = result["amount"]
 	_actions.reported.emit(operation_name + " applied. Undo restores the previous solid.")
 
 

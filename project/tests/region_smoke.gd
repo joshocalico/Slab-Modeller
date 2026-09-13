@@ -39,7 +39,7 @@ func _run() -> void:
 	actions.run("select_coplanar")
 	check(selection.ids.size() == 4, "Select Coplanar expands one subdivided top face to its connected four-face plane")
 	var before_inset: PackedByteArray = solid.get("data")
-	actions.amount = 0.45
+	actions.inset_amount = 0.45
 	actions.run("inset_faces")
 	actions.operation_apply_requested.emit()
 	var after_inset: PackedByteArray = solid.get("data")
@@ -47,7 +47,7 @@ func _run() -> void:
 	check(selection.ids.size() == 4 and _all_faces_alive(solid, selection.ids), "Inset refreshes all four cap handles")
 	var inset_ids := PackedInt64Array(selection.ids)
 
-	actions.amount = -2.4
+	actions.extrude_amount = -2.4
 	actions.run("extrude_faces")
 	actions.operation_apply_requested.emit()
 	var after_extrude: PackedByteArray = solid.get("data")
@@ -65,7 +65,7 @@ func _run() -> void:
 	var before_refusal: PackedByteArray = solid.get("data")
 	var reports: Array[String] = []
 	actions.reported.connect(func(text: String) -> void: reports.append(text))
-	actions.amount = 0.5
+	actions.extrude_amount = 0.5
 	actions.run("extrude_faces")
 	actions.operation_apply_requested.emit()
 	check(solid.get("data") == before_refusal, "disconnected region leaves geometry unchanged")

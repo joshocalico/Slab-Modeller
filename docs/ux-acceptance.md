@@ -31,6 +31,8 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 
 ## Remaining acceptance work
 
+The latest editor authoring pass verified separate Inset, Extrude, and Bevel session values and explicit Boolean target/second-solid controls with Swap. Rendered tests cover native selection order, actual swapped subtraction, tool-value transitions, and existing room/Undo workflows. Live use also exposed triangular rendering artifacts in the new PowerHouse after an arched doorway subtraction. That saved scene needs diagnosis before the annex is considered usable. See [Creation and boolean authoring playtest](creation-and-boolean-playtest.md).
+
 | Area | Evidence still required |
 | --- | --- |
 | First use | Complete every core tutorial from a clean project; basic copied-addon creation/save/reopen is verified. Check save, reopen, collision, and player interaction. |

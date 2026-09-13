@@ -17,7 +17,7 @@ const PARAMS: Dictionary = {
 
 const CATALOG: Dictionary = {
 	&"make_box": {
-		"label": "Box", "icon": "BoxMesh", "tooltip": "Creates a box solid at the scene origin.",
+		"label": "Box", "icon": "BoxMesh", "tooltip": "Creates a box with its minimum corner at the parent origin, extending along positive X, Y, and Z.",
 		"params": [&"size_x", &"size_y", &"size_z"], "derives": "",
 	},
 	&"make_plane": {
@@ -29,7 +29,7 @@ const CATALOG: Dictionary = {
 		"params": [&"size_x", &"size_y", &"size_z", &"stair_steps"], "derives": "",
 	},
 	&"make_cylinder": {
-		"label": "Cylinder", "icon": "CylinderMesh", "tooltip": "Creates a cylinder.",
+		"label": "Cylinder", "icon": "CylinderMesh", "tooltip": "Creates a cylinder with its base centre at the parent origin, extending along positive Y.",
 		"params": [&"size_x", &"size_y", &"cylinder_sides"], "derives": "Width is the diameter.",
 	},
 	&"make_arch": {

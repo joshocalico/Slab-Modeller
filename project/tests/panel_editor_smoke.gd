@@ -9,14 +9,30 @@ func _run() -> void:
 		_fail("Requires --editor")
 		return
 	var editor := Engine.get_singleton("EditorInterface")
+	var deadline := Time.get_ticks_msec() + 30000
 	while editor.get_resource_filesystem().is_scanning() or _plugin(root) == null:
+		if Time.get_ticks_msec() > deadline:
+			_fail("Editor initialization timed out")
+			return
 		await process_frame
+	# Session restore can reopen the previous scene after the first filesystem scan.
+	# Let that settle before opening the fixture, then require the fixture to stay current.
+	await create_timer(1.5).timeout
 	editor.open_scene_from_path("res://demo/modeller_lab.tscn")
 	editor.set_main_screen_editor("3D")
-	while editor.get_edited_scene_root() == null or editor.get_edited_scene_root().scene_file_path != "res://demo/modeller_lab.tscn":
+	var stable_frames := 0
+	deadline = Time.get_ticks_msec() + 15000
+	while stable_frames < 20:
 		await process_frame
-	await create_timer(1.0).timeout
-	var solid: Node3D = editor.get_edited_scene_root().get_node("Box2")
+		var edited: Node = editor.get_edited_scene_root()
+		stable_frames = stable_frames + 1 if edited != null and edited.scene_file_path == "res://demo/modeller_lab.tscn" else 0
+		if Time.get_ticks_msec() > deadline:
+			_fail("Panel fixture did not remain current after session restore")
+			return
+	var solid: Node3D = editor.get_edited_scene_root().get_node_or_null("Box2")
+	if solid == null:
+		_fail("Panel fixture is missing Box2")
+		return
 	editor.get_selection().clear()
 	editor.get_selection().add_node(solid)
 	editor.edit_node(solid)
@@ -84,11 +100,12 @@ func _run() -> void:
 	await create_timer(0.2).timeout
 	_check(not disclosure.button_pressed and not settings.visible, "keyboard_collapses_materials")
 	await _click(disclosure)
+	var amount: SpinBox = panel.find_child("HandleAmount", true, false)
 	await _click(_button_named(panel.find_child("Commands", true, false), "Extrude"))
 	_check(actions.operation_active and solid.get("data") == before, "extrude_button_opens_preview")
+	_check(is_equal_approx(amount.value, 0.5), "extrude_starts_with_its_own_default_distance")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-preview"}, "after")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-doc-panel-preview", "capture_rect": panel.get_global_rect()}, "after")
-	var amount: SpinBox = panel.find_child("HandleAmount", true, false)
 	amount.value = -4.0
 	await create_timer(0.2).timeout
 	_check(_button_named(preview, "Apply").disabled, "refused_preview_disables_apply")
@@ -96,12 +113,18 @@ func _run() -> void:
 	_check(solid.get("data") == before, "refused_preview_preserves_mesh")
 	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
 	_check(actions.operation_active and not settings.visible, "preview_has_one_settings_area")
+	_check(is_equal_approx(amount.value, 0.5), "inset_does_not_inherit_extrude_distance")
 	_check(solid.get("data") == before, "preview_preserves_mesh")
+	amount.value = 0.45
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-inset"}, "after")
 	await _click(_button_named(preview, "Cancel"))
 	_check(not actions.operation_active and settings.visible, "cancel_restores_regular_settings")
 	_check(solid.get("data") == before, "cancel_preserves_mesh")
+	await _click(_button_named(panel.find_child("Commands", true, false), "Extrude"))
+	_check(is_equal_approx(amount.value, -4.0), "cancelled_extrude_remembers_its_distance")
+	await _click(_button_named(preview, "Cancel"))
 	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
+	_check(is_equal_approx(amount.value, 0.45), "cancelled_inset_remembers_its_distance")
 	await _click(_button_named(preview, "Apply"))
 	_check(not actions.operation_active and solid.get("data") != before, "apply_commits_preview")
 	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
@@ -111,6 +134,7 @@ func _run() -> void:
 	selection.set_ids(PackedInt64Array([solid.call("get_edges")[0]]))
 	await create_timer(0.2).timeout
 	await _click(_button_named(panel.find_child("Commands", true, false), "Bevel"))
+	_check(is_equal_approx(amount.value, 0.5), "bevel_keeps_an_independent_default_width")
 	amount.value = 0.1
 	var segments: SpinBox = panel.find_child("bevel_segments", true, false)
 	segments.value = 4
@@ -120,10 +144,46 @@ func _run() -> void:
 	_check(solid.call("face_count") == 10, "bevel_applies_four_segments")
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
 	_check(solid.get("data") == before, "bevel_undo_restores_original_mesh")
+	await _boolean_swap(editor, panel, selection, manager)
 	await _room_tutorial(editor, panel, selection, manager)
 	await _create_repeated(editor, panel, manager)
 	print("PANEL_EDITOR_RESULT failures=", failures)
 	quit(1 if failures else 0)
+
+
+func _boolean_swap(editor: Object, panel: Control, selection: RefCounted, manager: EditorUndoRedoManager) -> void:
+	await _click(_mode(panel, 0))
+	var scene: Node = editor.get_edited_scene_root()
+	var first: Node3D = ClassDB.instantiate("SlabSolid")
+	first.name = "PowerHouse"
+	first.call("make_box", Vector3(2, 2, 2))
+	scene.add_child(first)
+	var second: Node3D = ClassDB.instantiate("SlabSolid")
+	second.name = "PowerHouseDoorCutter"
+	second.call("make_box", Vector3(2, 2, 2))
+	second.position.x = 1.0
+	scene.add_child(second)
+	var first_before: PackedByteArray = first.get("data")
+	var second_before: PackedByteArray = second.get("data")
+	var native_selection: Object = editor.get_selection()
+	native_selection.clear()
+	native_selection.add_node(first)
+	native_selection.add_node(second)
+	for i in 10: await process_frame
+	_check(selection.objects == [first, second], "native_two_solid_order_reaches_boolean_panel")
+	_check(panel.find_child("SettingsTitle", true, false).text == "Boolean operands", "native_two_solid_selection_refreshes_boolean_block")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-boolean", "capture_rect": panel.get_global_rect()}, "after")
+	await _click(panel.find_child("SwapBooleanOperands", true, false))
+	var native_nodes: Array = native_selection.get_selected_nodes()
+	_check(native_nodes == [second, first] and selection.objects == [second, first], "swap_preserves_two_native_solids_in_displayed_order")
+	await _click(_button_named(panel.find_child("Commands", true, false), "Subtract"))
+	_check(second.get("data") != second_before and first.get("data") == first_before,
+		"rendered_swapped_subtract_edits_target_and_retains_cutter")
+	manager.get_history_undo_redo(manager.get_object_history_id(second)).undo()
+	native_selection.clear()
+	first.free()
+	second.free()
+	await process_frame
 
 func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manager: EditorUndoRedoManager) -> void:
 	await _click(_mode(panel, 0))

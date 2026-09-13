@@ -16,6 +16,10 @@ func focus_solid(_solid: Node3D, _additive: bool) -> void:
 	pass
 
 
+func replace_selection(_nodes: Array) -> void:
+	pass
+
+
 func ui_scale() -> float:
 	return 1.0
 

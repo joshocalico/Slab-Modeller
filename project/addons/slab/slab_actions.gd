@@ -4,6 +4,7 @@ extends RefCounted
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
+const SlabOperationHandles := preload("res://addons/slab/slab_operation_handles.gd")
 
 signal reported(text: String)
 signal status_reset_requested
@@ -33,6 +34,7 @@ signal align_face_requested
 signal snap_align_settings_changed
 signal snap_align_state_changed
 signal snap_align_cancel_requested
+signal object_order_changed(nodes: Array)
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -90,6 +92,9 @@ var align_oppose_normals := true
 var bevel_segments: int = 1
 
 var amount: float = 0.5
+var extrude_amount: float = 0.5
+var inset_amount: float = 0.5
+var bevel_amount: float = 0.5
 var uv_scale := Vector2.ONE
 var uv_offset := Vector2.ZERO
 var uv_rotation_degrees: float = 0.0
@@ -102,6 +107,31 @@ var shapes: RefCounted
 var _selection: RefCounted
 var _undo: Object
 var _rows: Array[Dictionary] = []
+
+
+func operation_amount_for(kind: int) -> float:
+	match kind:
+		SlabOperationHandles.Kind.EXTRUDE: return extrude_amount
+		SlabOperationHandles.Kind.INSET: return inset_amount
+		SlabOperationHandles.Kind.BEVEL: return bevel_amount
+	return extrude_amount
+
+
+func remember_operation_amount(kind: int, value: float) -> void:
+	match kind:
+		SlabOperationHandles.Kind.EXTRUDE: extrude_amount = value
+		SlabOperationHandles.Kind.INSET: inset_amount = value
+		SlabOperationHandles.Kind.BEVEL: bevel_amount = value
+
+
+func swap_boolean_operands() -> void:
+	if _selection.mode != SlabSelection.Mode.OBJECT or _selection.objects.size() != 2:
+		_report("Swap operands needs exactly two solids in Object mode.")
+		return
+	var swapped: Array[Node3D] = [_selection.objects[1], _selection.objects[0]]
+	_selection.set_objects(swapped)
+	object_order_changed.emit(swapped)
+	_report("Boolean target: %s · Operand: %s." % [swapped[0].name, swapped[1].name])
 
 
 func _init(selection: RefCounted = null, undo: Object = null) -> void:
