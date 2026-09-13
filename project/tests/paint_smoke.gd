@@ -433,6 +433,15 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	_expect(solid.call("face_count") == faces, "E does not extrude in Surface Paint")
 	key.keycode = KEY_F
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active, "F remains available to frame the painted object")
+	key.keycode = KEY_Z
+	key.meta_pressed = true
+	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS, "Cmd-Z reaches editor Undo while painting")
+	key.meta_pressed = false
+	key.ctrl_pressed = true
+	key.shift_pressed = true
+	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS, "Ctrl-Shift-Z reaches editor Redo while painting")
+	key.ctrl_pressed = false
+	key.shift_pressed = false
 	var hit: Dictionary = SlabPick.pick_face_hit(solid, cam, screen)
 	_expect(not hit.is_empty() and int(hit["id"]) == top, "3D hit lands on the selected face")
 	if not hit.is_empty():
@@ -771,10 +780,35 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
 		"palette and canvas do not overlap, %s vs %s" % [palette.get_global_rect(), canvas.get_global_rect()])
 	var face_label: Label = panel.find_child("PaintTarget", true, false).get_child(2) as Label
-	_expect(face_label != null and face_label.text == "1 face selected",
+	_expect(face_label != null and face_label.text == "%s · 1 face selected" % solid.name,
 		"the target row describes the selected face count, got %s" % (face_label.text if face_label else "missing"))
 	_expect(face_label != null and face_label.get_global_rect().size.x >= 48.0,
 		"Face is readable, size=%s" % (face_label.get_global_rect().size if face_label else Vector2.ZERO))
+	var original_name := solid.name
+	solid.name = "PowerHouseExteriorCourtyardNorthRetainingWall"
+	panel.call("_refresh_paint_chrome")
+	await process_frame
+	_expect(face_label.text.begins_with(solid.name + " · 1 face selected")
+		and face_label.tooltip_text == face_label.text,
+		"a clipped long target keeps its complete name and count in the tooltip")
+	_expect(target.get_global_rect().grow(0.5).encloses(face_label.get_global_rect()),
+		"the long target summary stays inside the compact row")
+	solid.name = original_name
+	panel.call("_refresh_paint_chrome")
+	selection.set_ids(PackedInt64Array())
+	_expect(SlabPanel.paint_target_text(selection) == "%s · Select a face to paint." % solid.name,
+		"zero-face context names the current solid")
+	var other: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(other)
+	other.call("make_box", Vector3.ONE)
+	selection.set_objects([solid, other])
+	_expect(SlabPanel.paint_target_text(selection) == "2 solids selected · Select one solid to paint.",
+		"multi-target context explains how to recover")
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	panel.call("_refresh_paint_chrome")
+	other.free()
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
 	_expect(picker_wrap is MarginContainer, "the resource picker sits in a layout container")
 	_expect(picker_wrap != null and picker_wrap.custom_minimum_size.y >= SlabPanel.PAINT_PICKER_HEIGHT,

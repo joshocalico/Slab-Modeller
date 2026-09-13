@@ -39,7 +39,7 @@ func _enter_tree() -> void:
 	_actions = SlabActions.new(_selection, get_undo_redo())
 	_session.bind_actions(_actions)
 	_paint = SlabPaint.new()
-	_paint.bind(_selection, _actions, get_undo_redo())
+	_paint.bind(_selection, _actions, get_undo_redo(), _host)
 	_session.bind_paint(_paint)
 	if _paint.has_signal("changed"):
 		_paint.changed.connect(_refresh_gizmos)
@@ -70,6 +70,8 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if _session:
+		_session.cancel_create_preview()
 	if _host:
 		_host.disconnect_host_selection(_on_editor_selection_changed)
 	if main_screen_changed.is_connected(_on_main_screen_changed):

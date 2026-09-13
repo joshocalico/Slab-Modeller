@@ -35,6 +35,8 @@ signal snap_align_settings_changed
 signal snap_align_state_changed
 signal snap_align_cancel_requested
 signal object_order_changed(nodes: Array)
+signal create_placement_requested(row: Dictionary, plan: Dictionary)
+signal create_settings_changed
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -217,6 +219,17 @@ func run(id: String) -> void:
 	_apply(row, row["handler"].call())
 
 
+func request_create_placement(id: StringName) -> void:
+	var row := find(String(id))
+	if row.is_empty() or section_of(row) != SECTION_CREATE:
+		return
+	var plan: Dictionary = row["handler"].call()
+	if plan.has("status"):
+		_report(plan["status"])
+		return
+	create_placement_requested.emit(row, plan)
+
+
 func run_shortcut(keycode: int) -> bool:
 	for row in _rows:
 		if row["shortcut"] != keycode or disabled_reason(row) != "":
@@ -308,6 +321,28 @@ func _create_solid(row: Dictionary, target: Node3D, method: String, args: Array)
 	if _undo == null:
 		target.free()
 		_report("Undo is not available.")
+		return
+	_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, root)
+	_undo.add_do_method(parent, "add_child", target, true)
+	_undo.add_do_method(target, "set_owner", root)
+	_undo.add_do_reference(target)
+	_undo.add_undo_method(parent, "remove_child", target)
+	_undo.commit_action()
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(target)
+	_report("%s created." % row["label"])
+
+
+func commit_placed_create(row: Dictionary, target: Node3D, parent: Node, transform: Transform3D) -> void:
+	if target == null or not is_instance_valid(target) or parent == null or not is_instance_valid(parent):
+		if target != null: target.free()
+		_report("Create failed because the scene changed during placement.")
+		return
+	target.transform = transform
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null or _undo == null:
+		target.free()
+		_report("Create failed because the scene or Undo history is unavailable.")
 		return
 	_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, root)
 	_undo.add_do_method(parent, "add_child", target, true)

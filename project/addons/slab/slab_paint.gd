@@ -57,6 +57,8 @@ var _slot: int = -1
 var _stroke_before := PackedByteArray()
 var _stroke_material: StandardMaterial3D
 var _stroke_texture: ImageTexture
+var _stroke_solid: Node3D
+var _host: RefCounted
 var _last_pixel := Vector2(-1, -1)
 var _uv_offset_start := Vector2.ZERO
 var _uv_scale_start := Vector2.ONE
@@ -69,13 +71,14 @@ var _brush_node: MeshInstance3D
 var _dirty_ids: Dictionary = {}
 
 
-func bind(selection: RefCounted, actions: RefCounted, undo: Object) -> void:
+func bind(selection: RefCounted, actions: RefCounted, undo: Object, host: RefCounted = null) -> void:
 	if _undo != null and _undo.has_signal("version_changed"):
 		if _undo.version_changed.is_connected(_on_undo_version):
 			_undo.version_changed.disconnect(_on_undo_version)
 	_selection = selection
 	_actions = actions
 	_undo = undo
+	_host = host
 	if _selection != null and _selection.has_signal("changed"):
 		if not _selection.changed.is_connected(_on_selection_changed):
 			_selection.changed.connect(_on_selection_changed)
@@ -214,7 +217,7 @@ func make_unique() -> int:
 	_actions.material_slot = new_slot
 	solid.call("set_face_material", _selection.ids, new_slot)
 	if _undo != null:
-		_undo.create_action("Slab Make Unique Material")
+		_create_undo_action("Slab Make Unique Material", solid)
 		_undo.add_do_property(solid, "materials", mats)
 		_undo.add_undo_property(solid, "materials", before_mats)
 		_undo.add_do_property(solid, "data", solid.get("data"))
@@ -244,6 +247,7 @@ func sample_face(solid: Node3D, face: int) -> void:
 	_actions.uv_scale = attrs.get("scale", Vector2.ONE)
 	_actions.uv_offset = attrs.get("offset", Vector2.ZERO)
 	_actions.uv_rotation_degrees = rad_to_deg(float(attrs.get("rotation", 0.0)))
+	_focus_target(solid)
 	_selection.set_objects([solid])
 	_selection.set_ids(PackedInt64Array([face]))
 	_bind_from_selection()
@@ -309,7 +313,7 @@ func end_uv_drag() -> void:
 	if after == _uv_before_data:
 		return
 	if _undo != null:
-		_undo.create_action("Slab UV Place")
+		_create_undo_action("Slab UV Place", solid)
 		_undo.add_do_property(solid, "data", after)
 		_undo.add_undo_property(solid, "data", _uv_before_data)
 		_undo.add_do_property(_actions, "uv_offset", _actions.uv_offset)
@@ -343,6 +347,7 @@ func begin_stroke() -> bool:
 	_stroke_before = _image.save_png_to_buffer()
 	_stroke_material = _material
 	_stroke_texture = _texture
+	_stroke_solid = _solid
 	_last_pixel = Vector2(-1, -1)
 	return true
 
@@ -379,7 +384,7 @@ func end_stroke() -> void:
 			var after_tex := ImageTexture.create_from_image(after_img)
 			_texture = after_tex
 			_stroke_material.albedo_texture = after_tex
-			_undo.create_action("Slab Paint Stroke")
+			_create_undo_action("Slab Paint Stroke", _stroke_solid)
 			_undo.add_do_property(_stroke_material, "albedo_texture", after_tex)
 			_undo.add_undo_property(_stroke_material, "albedo_texture", before_tex)
 			_undo.commit_action(false)
@@ -478,6 +483,7 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 			if event.alt_pressed:
 				sample_face(solid, face)
 			else:
+				_focus_target(solid)
 				_selection.set_objects([solid])
 				_selection.set_ids(PackedInt64Array([face]))
 				assign_active_to_selection()
@@ -485,6 +491,7 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 		var target: Dictionary = _face_paint_target(solid, face)
 		if target.is_empty():
 			return VERDICT_STOP
+		_focus_target(solid)
 		_selection.set_objects([solid])
 		_selection.set_ids(PackedInt64Array([face]))
 		_actions.material_slot = int(target["slot"])
@@ -516,6 +523,18 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
 		return VERDICT_STOP
 	return VERDICT_PASS
+
+
+func _focus_target(solid: Node3D) -> void:
+	if _host != null and solid != null:
+		_host.focus_solid(solid, false)
+
+
+func _create_undo_action(label: String, solid: Node3D) -> void:
+	if _undo is EditorUndoRedoManager:
+		_undo.create_action(label, UndoRedo.MERGE_DISABLE, solid)
+	else:
+		_undo.create_action(label, UndoRedo.MERGE_DISABLE)
 
 
 func _face_paint_target(solid: Node3D, face: int) -> Dictionary:
@@ -683,7 +702,7 @@ func pick_material(mat: StandardMaterial3D) -> void:
 		solid.call("set_face_material", _selection.ids, slot)
 	var after_data: PackedByteArray = solid.get("data")
 	if _undo != null and (mats != before_mats or after_data != before_data or slot != prev_slot):
-		_undo.create_action("Slab Pick Material", UndoRedo.MERGE_DISABLE, solid)
+		_create_undo_action("Slab Pick Material", solid)
 		_undo.add_do_property(solid, "materials", mats)
 		_undo.add_undo_property(solid, "materials", before_mats)
 		_undo.add_do_property(solid, "data", after_data)

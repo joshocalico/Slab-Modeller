@@ -20,8 +20,9 @@ If you do not have Slab open yet, do [Install Slab](/guide/install) first. Arch 
 2. Choose **Box** in **Create**.
 3. Set **Width** to 4, **Height** to 2.2, and **Depth** to 4.
 4. Click **Create**.
+5. Move the gold preview over the world ground plane, then click to place it.
 
-A `SlabSolid` appears at the origin.
+A `SlabSolid` appears where you placed it.
 
 ## Make the arch
 
@@ -29,14 +30,15 @@ A `SlabSolid` appears at the origin.
 2. Set **Width** to 4 and **Depth** to 4. Width is the outer span.
 3. Set **Segments** to 12, **Thickness** to 0.4, and **Arc** to 180.
 4. Click **Create**.
+5. Move the gold preview onto the box's horizontal top surface, then click to place it.
 
-A second `SlabSolid` appears at the origin, inside the box. Height follows Width and Arc. A 180° arch on a 4 m span is 2 m tall.
+A second `SlabSolid` sits on the box. Height follows Width and Arc. A 180° arch on a 4 m span is 2 m tall.
 
 ## Seat the arch
 
 1. Click the arch solid.
 2. Press <kbd>W</kbd>.
-3. Drag the Move gizmo up until the feet sit in the top of the box. Stop around Y = 2.05.
+3. Drag the Move gizmo down slightly so the feet overlap the top of the box. Stop around Y = 2.05.
 
 The feet must overlap the box a little. Union of two solids that only touch, or that sit apart, does not merge the volumes.
 
@@ -63,7 +65,7 @@ If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so 
 
 ## Cut a door
 
-1. Choose **Box** in **Create**. Set **Width** to 0.9, **Height** to 1.6, and **Depth** to 1.2. Click **Create**.
+1. Choose **Box** in **Create**. Set **Width** to 0.9, **Height** to 1.6, and **Depth** to 1.2. Click **Create**, then place the preview near the wall.
 2. Move that cutter so it pokes through one wall. It should stick out on both sides of the wall.
 3. Click the house, then Shift-click the cutter. Confirm the panel names the house **Target** and the cutter **Second solid**; use **Swap operands** if needed.
 4. In **Object**, click **Subtract**.

@@ -202,9 +202,9 @@ func _square_outline() -> PackedVector3Array:
 	var half_z: float = depth() * 0.5
 	return PackedVector3Array([
 		Vector3(-half_x, 0.0, -half_z),
-		Vector3(half_x, 0.0, -half_z),
-		Vector3(half_x, 0.0, half_z),
 		Vector3(-half_x, 0.0, half_z),
+		Vector3(half_x, 0.0, half_z),
+		Vector3(half_x, 0.0, -half_z),
 	])
 
 

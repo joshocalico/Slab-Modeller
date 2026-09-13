@@ -12,6 +12,8 @@ This pass was authored in the Godot editor using Slab creation, Plane Cut, face 
 
 The existing limestone doorway wall and timber floor remain. A follow-up editor pass assigned Limestone to the room's base material slot, finishing the remaining walls. All six ceiling faces now use Timber, assigned through Surface Paint's native Quick Load. Native Undo restored the empty ceiling material and clean scene state; Redo restored Timber, then the scene was saved. The front perspective view showed the limestone interior through the doorway and the timber floor. The running-game check below predates these material-only changes.
 
+A second normal-controls game pass loaded the saved materials, walked around the turbine, jumped both courtyard hazards, and entered the room. F3 showed `(38.95, 0.47, 23.00)`, floor contact with `PowerHouse/__body`, and autorun off. The interior showed limestone on the back and side walls, timber on the floor, and a continuous timber ceiling when looking up. This confirms the material assignments survived saving and appeared in the running scene.
+
 ## Running-game check
 
 Starting from START, the author used normal movement controls to reach the courtyard, jumped both hazard strips, and entered the enclosed room. F3 reported feet `(38.67, 0.47, 23.58)`, floor contact with `PowerHouse/__body`, and autorun off. The exit correctly reported three remaining cells. The courtyard view showed the curved timber gable within its teal roof rim. Looking up inside showed the continuous ceiling and lit walls. This checks the new room route and enclosure, not the complete three-cell game loop.

@@ -37,6 +37,7 @@ func _run() -> void:
 			spin.value = entry[1]
 		await process_frame
 		await _click(panel.find_child("CreateShape", true, false))
+		await _confirm_create(editor, Vector3.ZERO)
 		_check(scene.get_child_count() == 1 and scene.get_child(0).is_class("SlabSolid"), "create_works_in_clean_project")
 		_check(editor.save_scene() == OK, "authored_scene_saves")
 	await _capture(editor, {"capture_prefix": OS.get_environment("SLAB_INSTALL_CAPTURE")}, "after")

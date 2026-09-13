@@ -19,9 +19,9 @@ func _run() -> void:
 	await _click(_mode(panel, 0))
 	await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
 	await _click(panel.find_child("CreateShape", true, false))
+	await _confirm_create(editor, Vector3(20, 0, 0))
 	var solid: Node3D = editor.get_selection().get_selected_nodes()[0]
 	# Separate the fixture from existing lab geometry before visual inspection.
-	solid.position = Vector3(20, 0, 0)
 	var viewport: SubViewport = editor.get_editor_viewport_3d(0)
 	var surface: Control = _surface(viewport.get_parent().get_parent())
 	surface.grab_focus()

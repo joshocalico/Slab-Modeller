@@ -202,10 +202,12 @@ static func _face_candidates(solid: Node3D, camera: Camera3D, screen: Vector2,
 	return out
 
 
-static func pick_world_hit(root: Node, camera: Camera3D, screen: Vector2) -> Dictionary:
+static func pick_world_hit(root: Node, camera: Camera3D, screen: Vector2, excluded: Node3D = null) -> Dictionary:
 	var best: Dictionary = {}
 	var best_depth: float = INF
 	for solid in all_solids(root):
+		if solid == excluded:
+			continue
 		var hit: Dictionary = pick_face_hit(solid, camera, screen)
 		if hit.is_empty():
 			continue

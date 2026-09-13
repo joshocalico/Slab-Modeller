@@ -69,5 +69,50 @@ func _run() -> void:
 	_check(solid.get("data") == after_data and redone_mats.size() == 2 and redone_mats[1] == imported,
 		"redo_restores_exact_face_data_and_shared_resource_identity")
 	_check(actions.material_slot == 1, "redo_restores_imported_active_slot")
+
+	# Native selection begins on another solid, then an actual 3D paint click
+	# must move both selection and Undo ownership to the hit solid.
+	var other: Node3D = editor.get_edited_scene_root().get_node("Box")
+	var native_selection: Object = editor.get_selection()
+	native_selection.clear()
+	native_selection.add_node(other)
+	editor.edit_node(other)
+	await process_frame
+	paint.enter()
+	actions.material_slot = 1
+	var viewport: SubViewport = editor.get_editor_viewport_3d(0)
+	var camera: Camera3D = viewport.get_camera_3d()
+	var hit_face: int = 0
+	var hit_world := Vector3.ZERO
+	for candidate in faces:
+		var world: Vector3 = solid.to_global(solid.call("face_centroid", candidate))
+		var normal: Vector3 = (solid.global_transform.basis.inverse().transposed() * solid.call("face_normal", candidate)).normalized()
+		if normal.dot(camera.global_position - world) > 0.1 and not camera.is_position_behind(world):
+			hit_face = candidate
+			hit_world = world
+			break
+	_check(hit_face != 0, "cross_solid_fixture_has_a_visible_face")
+	solid.call("set_face_material", PackedInt64Array([hit_face]), 0)
+	var cross_before_data: PackedByteArray = solid.get("data")
+	var cross_before_mats: Array = (solid.get("materials") as Array).duplicate()
+	var surface: Control = _surface(viewport.get_parent().get_parent())
+	surface.grab_focus()
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = camera.unproject_position(hit_world)
+	click.global_position = click.position
+	plugin.call("_forward_3d_gui_input", camera, click)
+	click = click.duplicate()
+	click.pressed = false
+	plugin.call("_forward_3d_gui_input", camera, click)
+	await create_timer(0.3).timeout
+	_check(solid.get("data") != cross_before_data, "cross_solid_viewport_paint_changes_the_hit_solid")
+	_check(native_selection.get_selected_nodes() == [solid], "cross_solid_paint_focuses_its_native_undo_owner")
+	var cross_history := manager.get_history_undo_redo(manager.get_object_history_id(solid))
+	cross_history.undo()
+	await create_timer(0.5).timeout
+	_check(solid.get("data") == cross_before_data and solid.get("materials") == cross_before_mats,
+		"cross_solid_paint_is_undoable_in_the_new_native_target_history")
 	print("PAINT_MATERIAL_PICK_EDITOR failures=", failures)
 	quit(1 if failures else 0)

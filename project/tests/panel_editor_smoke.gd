@@ -194,6 +194,7 @@ func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manag
 		field.value = entry[1]
 	await process_frame
 	await _click(panel.find_child("CreateShape", true, false))
+	await _confirm_create(editor, Vector3.ZERO)
 	var room: Node3D = editor.get_selection().get_selected_nodes()[0]
 	_check(room.call("get_local_aabb").size.is_equal_approx(Vector3(4, 3, 4)), "tutorial_creates_4_by_3_by_4_box")
 	await _click(_mode(panel, 3))
@@ -233,10 +234,12 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 	height.get_line_edit().grab_focus()
 	height.get_line_edit().text = "5.25"
 	await _click(panel.find_child("CreateShape", true, false))
+	await _confirm_create(editor, Vector3(8, 0, 0))
 	var first: Node3D = editor.get_selection().get_selected_nodes()[0]
 	var bounds: AABB = first.call("get_local_aabb")
 	_check(scene.get_child_count() == count + 1 and is_equal_approx(bounds.size.y, 5.25), "create_commits_focused_typed_dimensions")
 	await _click(panel.find_child("CreateShape", true, false))
+	await _confirm_create(editor, Vector3(12, 0, 0))
 	var second: Node3D = editor.get_selection().get_selected_nodes()[0]
 	_check(second != first and scene.get_child_count() == count + 2 and second.call("get_local_aabb") == bounds, "repeat_create_retains_shape_and_dimensions")
 	var settings_scroll: Control = panel.find_child("SettingsScroll", true, false)
@@ -249,6 +252,17 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 	_check(scene.get_child_count() == count + 1, "one_undo_removes_one_created_shape")
 	history.undo()
 	_check(scene.get_child_count() == count, "second_undo_restores_scene_before_creation")
+
+
+func _confirm_create(editor: Object, at: Vector3) -> void:
+	var session: RefCounted = _plugin(root).get("_session")
+	var placement: RefCounted = session.get("_create")
+	placement.call("_place_at", at, false)
+	var event := InputEventKey.new()
+	event.keycode = KEY_ENTER
+	event.pressed = true
+	session.handle(editor.get_editor_viewport_3d(0).get_camera_3d(), event)
+	await create_timer(0.3).timeout
 
 
 func _click(button: Button) -> void:

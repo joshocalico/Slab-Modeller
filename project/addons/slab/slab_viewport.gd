@@ -13,6 +13,7 @@ const SlabArray := preload("res://addons/slab/slab_array.gd")
 const SlabSnapAlign := preload("res://addons/slab/slab_snap_align.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
+const SlabCreatePlacement := preload("res://addons/slab/slab_create_placement.gd")
 
 enum Verdict { PASS, STOP, CUSTOM }
 
@@ -63,6 +64,7 @@ var _loop: RefCounted
 var _array: RefCounted
 var _snap_align: RefCounted
 var _paint: RefCounted
+var _create: RefCounted
 var _gizmo_nodes: Array[Node3D] = []
 var _grab: Grab = Grab.idle()
 var _pick_candidates: Array[Dictionary] = []
@@ -90,6 +92,10 @@ func _init(host: RefCounted) -> void:
 
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
+	_create = SlabCreatePlacement.new(_host, _actions)
+	_create.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_actions.create_placement_requested.connect(_begin_create)
+	_actions.create_settings_changed.connect(_create_settings_changed)
 	_actions.object_order_changed.connect(_host.replace_selection)
 	_actions.operation_requested.connect(_begin_operation)
 	_actions.operation_amount_changed.connect(_change_operation_amount)
@@ -98,6 +104,7 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions.operation_cancel_requested.connect(_cancel_operation)
 	_selection.changed.connect(_cancel_operation)
 	_actions.plane_requested.connect(func() -> void:
+		_cancel_create()
 		if _loop != null and _loop.active:
 			_loop.cancel()
 		_cancel_array()
@@ -106,6 +113,7 @@ func bind_actions(actions: RefCounted) -> void:
 		_exit_paint()
 	)
 	_actions.loop_requested.connect(func() -> void:
+		_cancel_create()
 		if _plane != null and _plane.active:
 			_plane.cancel()
 		_cancel_array()
@@ -138,6 +146,7 @@ func bind_paint(paint: RefCounted) -> void:
 	if _paint != null and _paint.has_signal("changed"):
 		_paint.changed.connect(func() -> void:
 			if _paint.active:
+				_cancel_create()
 				_cancel_array()
 				_cancel_snap_align()
 				_cancel_operation()
@@ -155,6 +164,8 @@ static func after_gui_input(verdict: int) -> int:
 func handle(camera: Camera3D, event: InputEvent) -> int:
 	if _selection == null:
 		return Verdict.PASS
+	if _create != null and _create.active():
+		return Verdict.STOP if _create.handle(camera, event) else Verdict.PASS
 	if _operation.active:
 		return _handle_operation(camera, event)
 	if _snap_align != null and _snap_align.active:
@@ -175,6 +186,8 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 		if verdict == Verdict.STOP:
 			return verdict
 		if event is InputEventKey:
+			if event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+				return Verdict.PASS
 			if event.keycode == KEY_F:
 				return Verdict.PASS
 			return Verdict.STOP
@@ -193,6 +206,7 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 
 
 func adopt_host_selection() -> void:
+	_cancel_create()
 	if _plane != null and _plane.active:
 		_plane.cancel()
 	if _loop != null and _loop.active:
@@ -206,6 +220,7 @@ func adopt_host_selection() -> void:
 
 
 func _on_mode_requested() -> void:
+	_cancel_create()
 	if _plane != null and _plane.active:
 		_plane.cancel()
 	if _loop != null and _loop.active:
@@ -215,6 +230,27 @@ func _on_mode_requested() -> void:
 	_cancel_operation()
 	if _grab.active():
 		_cancel()
+
+
+func _begin_create(row: Dictionary, plan: Dictionary) -> void:
+	if _plane != null and _plane.active: _plane.cancel()
+	if _loop != null and _loop.active: _loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation()
+	_exit_paint()
+	_create.begin(row, plan)
+
+
+func _cancel_create() -> void:
+	if _create != null and _create.active():
+		_create.cancel(false)
+
+
+func _create_settings_changed() -> void:
+	if _create != null and _create.active():
+		_create.cancel(false)
+		_actions.reported.emit("Placement cancelled because the shape settings changed. Click Create again.")
 
 
 func gizmo_targets() -> Array[Node3D]:
@@ -242,11 +278,16 @@ func native_gizmo_pending() -> bool:
 	return _pending_native_press
 
 
+func cancel_create_preview() -> void:
+	_cancel_create()
+
+
 func metrics() -> RefCounted:
 	return _metrics
 
 
 func _begin_array() -> void:
+	_cancel_create()
 	if _plane != null and _plane.active:
 		_plane.cancel()
 	if _loop != null and _loop.active:
@@ -326,6 +367,7 @@ func _exit_paint() -> void:
 
 
 func _begin_vertex_snap() -> void:
+	_cancel_create()
 	_cancel_operation()
 	_cancel_other_modals_for_snap()
 	_actions.snap_align_active = _snap_align.begin_vertex_snap()
@@ -334,6 +376,7 @@ func _begin_vertex_snap() -> void:
 
 
 func _begin_face_align() -> void:
+	_cancel_create()
 	_cancel_operation()
 	_cancel_other_modals_for_snap()
 	_snap_align.oppose_face_normals = _actions.align_oppose_normals
@@ -749,6 +792,7 @@ static func screen_of(event: InputEventMouseButton) -> Vector2:
 
 
 func _begin_operation(kind: int) -> void:
+	_cancel_create()
 	_cancel_operation()
 	if _selection.solid == null or _selection.ids.is_empty() or _selection.mode != (SlabSelection.Mode.EDGE if kind == 2 else SlabSelection.Mode.FACE):
 		_actions.reported.emit("Select edges for Bevel, or faces for Extrude and Inset.")

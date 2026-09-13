@@ -248,6 +248,7 @@ func refresh() -> void:
 func focus_create(id: StringName) -> void:
 	if not _actions.shapes.CATALOG.has(id):
 		return
+	_actions.create_settings_changed.emit()
 	if _create_focus == id:
 		_sync_create_pressed()
 		return
@@ -356,7 +357,7 @@ func _refresh_settings() -> void:
 				_settings_fields.add_child(create_heading)
 			for field in _actions.shapes.fields_for(_create_focus):
 				_settings_fields.add_child(_shape_spin(field))
-			var create := _named_action("Create", "Add", "Create the selected shape with these settings. Click again to create another.", _create_shape)
+			var create := _named_action("Create", "Add", "Preview the selected shape in the viewport, then click or press Enter to place it.", _create_shape)
 			create.name = "CreateShape"
 			_settings_fields.add_child(create)
 	elif mode == SlabSelection.Mode.FACE:
@@ -628,6 +629,7 @@ func _shape_spin(field: Dictionary) -> Control:
 	var key: StringName = field["key"]
 	return _spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
 		_actions.shapes.set_value(key, v)
+		_actions.create_settings_changed.emit()
 		_refresh_buttons()
 	, field["tooltip"], key)
 
@@ -850,7 +852,7 @@ func _action_button(row: Dictionary) -> Button:
 func _create_shape() -> void:
 	for spin in _spins_under(_settings_fields):
 		spin.apply()
-	_actions.run(String(_create_focus))
+	_actions.request_create_placement(_create_focus)
 
 
 func _paint_block() -> Control:
@@ -942,6 +944,8 @@ func _paint_target_row() -> Control:
 	row.add_child(_paint_tool_uv)
 	row.add_child(_paint_tool_pixel)
 	_paint_face = _paint_caption("Face", "none")
+	_paint_face.clip_text = true
+	_paint_face.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_paint_mat = _paint_caption("Material", "none")
 	_paint_dirty = _paint_caption("Save", "")
 	_paint_dirty.name = "PaintDirty"
@@ -1223,8 +1227,8 @@ func _on_paint_changed() -> void:
 func _refresh_paint_chrome() -> void:
 	if _paint_face == null:
 		return
-	var count: int = _selection.ids.size() if _selection != null else 0
-	_paint_face.text = "1 face selected" if count == 1 else "%d faces selected" % count
+	_paint_face.text = paint_target_text(_selection)
+	_paint_face.tooltip_text = _paint_face.text
 	var mat_text := "none"
 	if _paint != null and _paint.slot() >= 0:
 		var mat: Variant = _paint.material()
@@ -1260,6 +1264,18 @@ func _refresh_paint_chrome() -> void:
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copies this solid's material so painting does not rewrite shared tiles." if allowed else "Select a face, then Make Unique so the copy attaches to that face."
 	_refresh_paint_palette()
+
+
+static func paint_target_text(selection: Variant) -> String:
+	if selection == null or selection.objects.is_empty():
+		return "No solid selected · Select a Slab solid, then a face."
+	if selection.objects.size() > 1:
+		return "%d solids selected · Select one solid to paint." % selection.objects.size()
+	var target: Node3D = selection.objects[0]
+	var count: int = selection.ids.size()
+	if count == 0:
+		return "%s · Select a face to paint." % target.name
+	return "%s · %d %s selected" % [target.name, count, "face" if count == 1 else "faces"]
 
 
 func _refresh_paint_palette() -> void:
