@@ -969,6 +969,7 @@ func _paint_target_row() -> Control:
 	_paint_face = _paint_caption("Face", "none")
 	_paint_face.clip_text = true
 	_paint_face.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_paint_face.size_flags_stretch_ratio = 2.0
 	_paint_mat = _paint_caption("Material", "none")
 	_paint_dirty = _paint_caption("Save", "")
 	_paint_dirty.name = "PaintDirty"
@@ -1004,9 +1005,9 @@ func _paint_action_row() -> Control:
 		if _paint:
 			_paint.save_png(_paint.default_save_path())
 	))
-	tools.add_child(_named_action("Sample", "ListSelect", "Copy material and UV from the selected face. Alt-click a viewport face to sample it directly.", func() -> void:
-		if _paint and _selection.solid != null and not _selection.ids.is_empty():
-			_paint.sample_face(_selection.solid, _selection.ids[0])
+	tools.add_child(_named_action("Sample", "ListSelect", "Use the selected faces' common material as the brush. Alt-click a viewport face to sample it directly.", func() -> void:
+		if _paint:
+			_paint.sample_selection()
 	))
 	tools.add_child(_paint_picker_slot())
 	scroll.add_child(tools)
@@ -1251,15 +1252,26 @@ func _refresh_paint_chrome() -> void:
 	if _paint_face == null:
 		return
 	_paint_face.text = paint_target_text(_selection)
+	if _paint != null and _selection != null and _selection.objects.size() == 1 and not _selection.ids.is_empty():
+		var count: int = _selection.ids.size()
+		_paint_face.text = "%s · %d %s · %s" % [_selection.solid.name, count,
+			"face" if count == 1 else "faces", _paint.selected_material_summary()]
 	_paint_face.tooltip_text = _paint_face.text
 	var mat_text := "none"
-	if _paint != null and _paint.slot() >= 0:
-		var mat: Variant = _paint.material()
+	if _paint != null:
+		var mat: Variant = _paint.material() if _paint.is_pixel() else _paint.brush_material()
 		mat_text = _paint.material_label(mat, _paint.slot())
+		if mat == null:
+			mat_text = "none"
 		if mat is StandardMaterial3D and _paint.is_owned(mat):
 			mat_text += " (unique)"
-	_paint_mat.text = "Material: %s" % mat_text
+	_paint_mat.text = "%s: %s" % ["Texture" if _paint != null and _paint.is_pixel() else "Brush", mat_text]
+	_paint_mat.clip_text = true
+	_paint_mat.tooltip_text = _paint_mat.text
 	_paint_dirty.text = _paint.save_status() if _paint != null else ""
+	_paint_dirty.visible = not _paint_dirty.text.is_empty()
+	_paint_dirty.clip_text = true
+	_paint_dirty.tooltip_text = _paint_dirty.text
 	if _paint_tool_uv != null and _paint != null:
 		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
 		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
@@ -1287,7 +1299,7 @@ func _refresh_paint_chrome() -> void:
 	if _unique_button != null:
 		var allowed: bool = _paint != null and _paint.can_make_unique()
 		_unique_button.disabled = not allowed
-		_unique_button.tooltip_text = "Copies this solid's material so painting does not rewrite shared tiles." if allowed else "Select a face, then Make Unique so the copy attaches to that face."
+		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
 	_refresh_paint_palette()
 
 
@@ -1321,7 +1333,7 @@ func _refresh_paint_palette() -> void:
 		var chip := Button.new()
 		chip.name = "paint_material_%d" % i
 		chip.toggle_mode = true
-		chip.button_pressed = _actions != null and i == _actions.material_slot
+		chip.button_pressed = _paint != null and mats[i] != null and mats[i] == _paint.brush_material()
 		var label: String = _paint.material_label(mats[i], i) if _paint != null else "Slot %d" % i
 		var text_w: float = _paint_chip_text_width(label)
 		chip.custom_minimum_size = Vector2(
@@ -1341,13 +1353,14 @@ func _refresh_paint_palette() -> void:
 		chip.add_theme_stylebox_override("hover", chip_style)
 		chip.add_theme_stylebox_override("pressed", chip_style)
 		chip.text = label
-		chip.tooltip_text = label
+		chip.tooltip_text = "Choose %s as the brush. Assign or click a viewport face to apply it." % label
+		if mats[i] == null:
+			chip.tooltip_text = "This slot has no material. Choose a material resource before assigning it."
 		if _paint != null:
 			chip.icon = _paint.thumbnail(mats[i], thumb_px)
 		chip.pressed.connect(func() -> void:
-			_actions.material_slot = i
 			if _paint:
-				_paint.rebind()
+				_paint.select_material_slot(i)
 		)
 		_paint_chips.add_child(chip)
 

@@ -16,7 +16,7 @@ If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-
 4. Shift-click the other wall faces that need plaster.
 5. Click **Surface Paint** in the Slab header.
 
-The target line names the room and reports the selected face count. Stay on **Material / UV**.
+The target line names the room, reports the selected face count, and shows the selection's material. Faces with no assigned material start with no brush material. Stay on **Material / UV**.
 
 ## Create the plaster material
 
@@ -71,7 +71,9 @@ Compared with the default repeat of `1`, the floor pattern now repeats twice as 
 
 ## Inspect an existing textured face
 
-When you return to Surface Paint later, the active material can belong to a different face. Select the face in modelling first, open Surface Paint, then click **Sample**. Sample loads that face's material and UV values without assigning the previously active material. You can also Alt-click a front-facing face in the 3D view.
+When you select one or more faces with a common material before opening Surface Paint, Slab adopts that material as the **Brush** without changing the faces. A mixed or default-material selection opens with no assignable brush.
+
+While Surface Paint stays open, changing the selection keeps the current Brush. Click **Sample** to adopt the selected faces' common material without assigning anything. Select faces that use one material before sampling. You can also Alt-click a front-facing face in the 3D view to sample that face and its UV values directly.
 
 ## Check the room
 

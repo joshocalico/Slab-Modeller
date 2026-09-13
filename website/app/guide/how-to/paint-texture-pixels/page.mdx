@@ -9,10 +9,12 @@ Use this when you want to draw into a face material's albedo texture.
 1. Select a `SlabSolid` and press <kbd>4</kbd> for Face mode.
 2. Select the face.
 3. Click **Surface Paint** in the Slab header.
-4. Pick a material chip, or choose a `StandardMaterial3D` with the material picker.
+4. Check that **Brush** names the material you want to copy. If needed, choose a material chip or use the material picker.
 5. Click **Make Unique**.
 
-Make Unique copies the active material into a new slot and assigns that slot to the selected face. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
+Opening Surface Paint with faces that share one material adopts it as the Brush without changing the selection. A material chip changes the Brush only; click **Assign** to apply it. The material picker is different: choosing a `StandardMaterial3D` immediately assigns it to the selected faces.
+
+Make Unique copies the Brush into a new slot and assigns that slot to the selected face. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
 
 For a material with no texture, **Make Unique** creates the paint image at **Texture px**, the same resolution used by **Unwrap**. Set that value before making the copy. When a material already has artwork, Slab preserves its dimensions and updates **Texture px** to show the image width.
 
@@ -22,7 +24,9 @@ Stay on **Material / UV**. The canvas shows the selected faces' complete UV outl
 
 For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**, and **Rotation**, then click **Apply UV**. **UV 90°** turns the placement by 90 degrees. **Reset UV** returns repeats to one and offsets and rotation to zero.
 
-Choose a material chip and click **Assign** to apply it to the selected faces. **Sample** copies material and UV values from the selected face; Alt-click a face in the 3D view to sample it directly.
+Choose a material chip and click **Assign** to apply it to the selected faces. **Sample** adopts the selected faces' common material as the Brush; it does not assign the previous Brush. Select faces using one material before sampling. Alt-click a face in the 3D view to sample that face and its UV values directly.
+
+The Brush stays active when you change the selection inside Surface Paint. A plain viewport click applies it to the hit face. The same Brush material is applied when you click a face on another solid.
 
 Press Escape or right-click during a canvas drag to restore the previous UV placement. Changing selection or switching tools also cancels the drag. Releasing the mouse commits one undoable change.
 
@@ -34,7 +38,7 @@ Press Escape or right-click during a canvas drag to restore the previous UV plac
 4. Click **Save Paint**.
 5. Save the scene.
 
-Pixel mode shows one copy of the actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
+Pixel mode labels the bound image as **Texture** and shows one copy of that actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
 
 Save Paint writes `res://slab_paint/<solid>_m<slot>.png` and records that path on the material. It does not save the scene. The status stays **Texture saved. Scene still needs saving.** until you save the scene.
 

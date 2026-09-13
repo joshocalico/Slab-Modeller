@@ -385,6 +385,7 @@ func _check_unique_paint_undo_save() -> void:
 	undo.undo()
 	_expect(paint.dirty, "undo after save marks that material unsaved")
 	undo.redo()
+	_expect(not paint.dirty, "redo matching saved pixels is clean even with generated mipmaps")
 	paint.begin_stroke()
 	paint.dab_uv(Vector2(0.1, 0.1))
 	paint.cancel_stroke()
@@ -787,7 +788,8 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
 		"palette and canvas do not overlap, %s vs %s" % [palette.get_global_rect(), canvas.get_global_rect()])
 	var face_label: Label = panel.find_child("PaintTarget", true, false).get_child(2) as Label
-	_expect(face_label != null and face_label.text == "%s · 1 face selected" % solid.name,
+	_expect(face_label != null and face_label.text.begins_with("%s · 1 face · " % solid.name)
+		and face_label.text.ends_with(paint.selected_material_summary()),
 		"the target row describes the selected face count, got %s" % (face_label.text if face_label else "missing"))
 	_expect(face_label != null and face_label.get_global_rect().size.x >= 48.0,
 		"Face is readable, size=%s" % (face_label.get_global_rect().size if face_label else Vector2.ZERO))
@@ -795,7 +797,7 @@ func _check_canvas_letterbox_and_press() -> void:
 	solid.name = "PowerHouseExteriorCourtyardNorthRetainingWall"
 	panel.call("_refresh_paint_chrome")
 	await process_frame
-	_expect(face_label.text.begins_with(solid.name + " · 1 face selected")
+	_expect(face_label.text.begins_with(solid.name + " · 1 face · ")
 		and face_label.tooltip_text == face_label.text,
 		"a clipped long target keeps its complete name and count in the tooltip")
 	_expect(target.get_global_rect().grow(0.5).encloses(face_label.get_global_rect()),

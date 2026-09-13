@@ -38,6 +38,11 @@ var tool: int = Tool.MATERIAL_UV:
 		cancel_stroke()
 		cancel_uv_drag()
 		tool = value
+		if active:
+			if tool == Tool.MATERIAL_UV:
+				_bind_brush_to_selection()
+			else:
+				_bind_pixel_selection()
 		changed.emit()
 
 var brush_color := Color(0.86, 0.18, 0.16)
@@ -52,6 +57,7 @@ var _actions: RefCounted
 var _image: Image
 var _texture: ImageTexture
 var _material: StandardMaterial3D
+var _brush_material: StandardMaterial3D
 var _solid: Node3D
 var _slot: int = -1
 var _stroke_before := PackedByteArray()
@@ -94,7 +100,7 @@ func enter() -> void:
 	active = true
 	if _selection != null:
 		_selection.mode = 3
-	_bind_from_selection()
+	_adopt_selection_material()
 	_report("Surface Paint. Material/UV places textures; Pixel paints albedo.")
 
 
@@ -124,6 +130,47 @@ func material() -> StandardMaterial3D:
 	return _material
 
 
+func brush_material() -> StandardMaterial3D:
+	return _brush_material
+
+
+func selected_material_summary() -> String:
+	var common: Dictionary = _common_selected_material()
+	if common.is_empty():
+		return "none" if _selection == null or _selection.ids.is_empty() else "Mixed"
+	var mat: Variant = common.get("material")
+	return material_label(mat, int(common.get("slot", 0))) if mat is StandardMaterial3D else "Default"
+
+
+func select_material_slot(slot: int) -> bool:
+	if _selection == null or _selection.solid == null:
+		return false
+	var mats: Array = _selection.solid.get("materials")
+	if slot < 0 or slot >= mats.size() or not (mats[slot] is StandardMaterial3D):
+		_brush_material = null
+		_bind_empty_selection_target()
+		return false
+	_brush_material = mats[slot]
+	_actions.material_slot = slot
+	if tool == Tool.PIXEL:
+		_bind_pixel_selection()
+	else:
+		_bind_from_selection()
+	return true
+
+
+func sample_selection() -> bool:
+	var common := _common_selected_material()
+	if common.is_empty() or not (common.get("material") is StandardMaterial3D):
+		_report("Select faces that use one material before Sample.")
+		return false
+	_brush_material = common["material"]
+	_actions.material_slot = int(common["slot"])
+	_bind_from_selection()
+	_report("Sampled %s." % material_label(_brush_material, int(common["slot"])))
+	return true
+
+
 func slot() -> int:
 	return _slot
 
@@ -133,7 +180,16 @@ func is_pixel() -> bool:
 
 
 func can_make_unique() -> bool:
-	return _selection != null and _selection.solid != null and not _selection.ids.is_empty()
+	if _selection == null or _selection.objects.size() != 1 or _selection.ids.is_empty():
+		return false
+	if tool == Tool.MATERIAL_UV and _brush_material != null:
+		return true
+	var common := _common_selected_material()
+	if common.is_empty():
+		return false
+	if tool == Tool.MATERIAL_UV:
+		return _brush_material != null or common.get("material") == null
+	return _material != null or common.get("material") == null
 
 
 func is_owned(mat: StandardMaterial3D) -> bool:
@@ -210,12 +266,15 @@ func make_unique() -> int:
 	if _selection.ids.is_empty():
 		_report("Select a face, then Make Unique so the copy attaches to that face.")
 		return -1
+	if not can_make_unique():
+		_report("Select faces that use one material before Make Unique.")
+		return -1
 	_actions.clamp_material_slot()
-	var src_slot: int = _actions.material_slot
+	var prev_slot: int = _actions.material_slot
 	var before_mats: Array = (solid.get("materials") as Array).duplicate()
 	var before_data: PackedByteArray = solid.get("data")
 	var mats: Array = before_mats.duplicate()
-	var src: Variant = mats[src_slot] if src_slot >= 0 and src_slot < mats.size() else null
+	var src: Variant = _brush_material if tool == Tool.MATERIAL_UV else _material
 	var copy := _duplicate_material(src)
 	var img: Image = _image_from_material(copy if copy != null else src, _new_texture_size())
 	var tex := ImageTexture.create_from_image(img)
@@ -226,6 +285,7 @@ func make_unique() -> int:
 	mats.append(copy)
 	var new_slot: int = mats.size() - 1
 	solid.set("materials", mats)
+	_brush_material = copy
 	_actions.material_slot = new_slot
 	solid.call("set_face_material", _selection.ids, new_slot)
 	if _undo != null:
@@ -235,7 +295,7 @@ func make_unique() -> int:
 		_undo.add_do_property(solid, "data", solid.get("data"))
 		_undo.add_undo_property(solid, "data", before_data)
 		_undo.add_do_property(_actions, "material_slot", new_slot)
-		_undo.add_undo_property(_actions, "material_slot", src_slot)
+		_undo.add_undo_property(_actions, "material_slot", prev_slot)
 		_undo.commit_action(false)
 	_bind_editable(solid, new_slot, copy, img, tex)
 	_mark_dirty(copy, true)
@@ -245,7 +305,12 @@ func make_unique() -> int:
 
 
 func assign_active_to_selection() -> void:
-	if _actions != null:
+	if tool == Tool.MATERIAL_UV:
+		if _brush_material == null:
+			_report("Choose or sample a material before painting.")
+			return
+		pick_material(_brush_material)
+	elif _actions != null:
 		_actions.run("set_face_material")
 
 
@@ -259,11 +324,18 @@ func sample_face(solid: Node3D, face: int) -> void:
 	_actions.uv_scale = attrs.get("scale", Vector2.ONE)
 	_actions.uv_offset = attrs.get("offset", Vector2.ZERO)
 	_actions.uv_rotation_degrees = rad_to_deg(float(attrs.get("rotation", 0.0)))
+	var mats: Array = solid.get("materials")
+	var sampled_slot := int(attrs.get("slot", 0))
+	_brush_material = mats[sampled_slot] if sampled_slot >= 0 and sampled_slot < mats.size() and mats[sampled_slot] is StandardMaterial3D else null
 	_focus_target(solid)
 	_selection.set_objects([solid])
 	_selection.set_ids(PackedInt64Array([face]))
-	_bind_from_selection()
-	_report("Sampled material %d." % _actions.material_slot)
+	if _brush_material != null:
+		_bind_from_selection()
+		_report("Sampled %s." % material_label(_brush_material, sampled_slot))
+	else:
+		_bind_empty_selection_target()
+		_report("The default material cannot be used as a brush. Choose a material first.")
 
 
 func rotate_uv_90() -> void:
@@ -503,10 +575,14 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 			if event.alt_pressed:
 				sample_face(solid, face)
 			else:
+				var brush := _brush_material
+				if brush == null:
+					_report("Choose or sample a material before painting.")
+					return VERDICT_STOP
 				_focus_target(solid)
 				_selection.set_objects([solid])
 				_selection.set_ids(PackedInt64Array([face]))
-				assign_active_to_selection()
+				pick_material(brush)
 			return VERDICT_STOP
 		var target: Dictionary = _face_paint_target(solid, face)
 		if target.is_empty():
@@ -594,7 +670,57 @@ func _dab_at(pixel: Vector2) -> void:
 func rebind() -> void:
 	cancel_stroke()
 	cancel_uv_drag()
+	if _selection != null and _selection.solid != null:
+		_actions.clamp_material_slot()
+		var mats: Array = _selection.solid.get("materials")
+		var slot: int = _actions.material_slot
+		_brush_material = mats[slot] if slot >= 0 and slot < mats.size() and mats[slot] is StandardMaterial3D else null
+	if tool == Tool.MATERIAL_UV and _brush_material == null:
+		_bind_empty_selection_target()
+	else:
+		_bind_from_selection()
+
+
+func _bind_brush_to_selection() -> void:
+	if _brush_material == null or _selection == null or _selection.solid == null:
+		_bind_empty_selection_target()
+		return
+	var mats: Array = _selection.solid.get("materials")
+	for i in mats.size():
+		if mats[i] == _brush_material:
+			_actions.material_slot = i
+			_bind_from_selection()
+			return
+	_solid = _selection.solid
+	_slot = -1
+	_material = _brush_material
+	_image = _image_from_material(_brush_material)
+	_texture = _brush_material.albedo_texture as ImageTexture
+	if _texture == null:
+		_texture = ImageTexture.create_from_image(_image)
+	dirty = _is_dirty(_material)
+	changed.emit()
+
+
+func _bind_pixel_selection() -> void:
+	var common := _common_selected_material()
+	if common.is_empty() or not (common.get("material") is StandardMaterial3D):
+		_bind_empty_selection_target()
+		return
+	_actions.material_slot = int(common["slot"])
 	_bind_from_selection()
+
+
+func _bind_empty_selection_target() -> void:
+	_sync_uv_from_selection()
+	_solid = _selection.solid if _selection != null else null
+	_slot = -1
+	_material = null
+	_image = null
+	_texture = null
+	dirty = false
+	_hide_brush()
+	changed.emit()
 
 
 func _bind_from_selection() -> void:
@@ -703,6 +829,7 @@ func material_label(mat: Variant, slot: int) -> String:
 func pick_material(mat: StandardMaterial3D) -> void:
 	if _selection == null or _selection.solid == null or mat == null:
 		return
+	_brush_material = mat
 	var solid: Node3D = _selection.solid
 	var before_mats: Array = (solid.get("materials") as Array).duplicate()
 	var before_data: PackedByteArray = solid.get("data")
@@ -848,6 +975,35 @@ func _filled(size: int, color: Color) -> Image:
 	return img
 
 
+func _common_selected_material() -> Dictionary:
+	if _selection == null or _selection.objects.size() != 1 or _selection.solid == null or _selection.ids.is_empty():
+		return {}
+	var mats: Array = _selection.solid.get("materials")
+	var first_slot := -1
+	var first_material: Variant = null
+	for face in _selection.ids:
+		var attrs: Dictionary = _selection.solid.call("face_uv", face)
+		if attrs.is_empty(): return {}
+		var slot := int(attrs.get("slot", 0))
+		var mat: Variant = mats[slot] if slot >= 0 and slot < mats.size() else null
+		if first_slot < 0:
+			first_slot = slot
+			first_material = mat
+		elif mat != first_material:
+			return {}
+	return {"slot": first_slot, "material": first_material}
+
+
+func _adopt_selection_material() -> void:
+	var common := _common_selected_material()
+	_brush_material = common.get("material") as StandardMaterial3D if common.get("material") is StandardMaterial3D else null
+	if _brush_material != null:
+		_actions.material_slot = int(common["slot"])
+		_bind_from_selection()
+	else:
+		_bind_empty_selection_target()
+
+
 func _on_selection_changed() -> void:
 	if not active:
 		return
@@ -856,7 +1012,10 @@ func _on_selection_changed() -> void:
 		return
 	cancel_stroke()
 	cancel_uv_drag()
-	_bind_from_selection()
+	if tool == Tool.PIXEL:
+		_bind_pixel_selection()
+	else:
+		_bind_brush_to_selection()
 
 
 func _on_mode_requested() -> void:
@@ -867,7 +1026,10 @@ func _on_mode_requested() -> void:
 func _on_undo_version() -> void:
 	if not active or _selection == null or _selection.solid == null:
 		return
-	_bind_from_selection()
+	if tool == Tool.PIXEL:
+		_bind_pixel_selection()
+	else:
+		_bind_brush_to_selection()
 	_sync_dirty_from_saved()
 
 
@@ -891,7 +1053,11 @@ func _sync_dirty_from_saved() -> void:
 		dirty = true
 		return
 	loaded = SlabPaintRaster.clone_rgba(loaded)
-	var diverged: bool = loaded.get_width() != _image.get_width() or loaded.get_height() != _image.get_height() or loaded.get_data() != _image.get_data()
+	var diverged := loaded.get_size() != _image.get_size()
+	if not diverged:
+		# PNG stores the base image. Derived mip levels are not unsaved artwork.
+		var base_bytes := _image.get_width() * _image.get_height() * 4
+		diverged = loaded.get_data().slice(0, base_bytes) != _image.get_data().slice(0, base_bytes)
 	_mark_dirty(_material, diverged)
 	dirty = diverged
 
