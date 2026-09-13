@@ -33,6 +33,8 @@ The next visual and interaction priorities are recorded in [Modeller design dire
 
 - UV canvas framing follows changes to the selected faces' mapping bases, including Unwrap Undo/Redo and another unwrap at a different density. Placement scale, offset, and rotation preserve the view during edits and history. The rendered regression reproduced the old offscreen Undo, then passed with the fix; saved mesh data and UV loops restore exactly. The full verifier passed after this change with 143 kernel tests and 4,288 checks, plus every Godot gate. The docs link check and website build also passed.
 
+- Fit UV uses actual mapping bounds instead of a quarter-tile minimum. Rendered tests fit tiny and very large transient mappings to 82% of the limiting canvas dimension, then send real wheel input to verify monotonic zoom and pointer anchoring. A collapsed point mapping remains finite. Reviewed captures use the loaded Brick texture, including an ordinary low-density unwrap. These checks cover navigation, not zoom-independent modifier-drag sensitivity. The full verifier, docs links, and website build passed after this change.
+
 ## Remaining acceptance work
 
 The PowerHouse now has an editor-authored ceiling, a shallow segmented vault, fitted half-cylinder end panels made with Plane Cut, timber cladding, and a shadow-casting Godot light. A normal-input running-game pass reached the enclosed room and verified ceiling coverage and grounded contact. Selecting that authored light exposed and resolved stale Slab selection ownership; the restarted editor and a regression gate now verify that authored children clear the modelling target. See [PowerHouse roof playtest](powerhouse-roof-playtest.md). The interior finish and broader level design remain incomplete.

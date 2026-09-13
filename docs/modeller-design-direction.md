@@ -71,3 +71,11 @@ The 14 September native landing pass still shows Godot's transform arrows and ro
 The installed Godot 4.7.2 extension API has no public native-transform visibility switch. Hiding a plugin gizmo affects its own drawing; clearing Slab subgizmo selection falls back to the selected object's transform gizmo. Removing native selection through EditorSelection could hide it while Slab retains a paint target, but would remove the Scene tree highlight and native Focus Selection target. It also requires explicit ownership across deferred selection signals, scene changes, target deletion, and external selection. Do not treat a temporary signal guard as sufficient restoration logic.
 
 Preserve native selection behavior for now. A future detached paint-target prototype must prove framing, Inspector context, tree selection, switching solids, scene changes, and restoration before adoption. The ordinary Godot View Transform Gizmo toggle remains a manual option. This limitation is still open.
+
+## Fit UV at different mapping scales
+
+Fit UV should use the selected mapping's actual bounds and retain a margin around the outline. A quarter-tile minimum made low-density islands too small to edit. Wheel zoom must start from the fitted scale, with the point beneath the pointer held in place. Use the same finite scale limits for framing, wheel changes, and inverse pointer mapping.
+
+A line fits its nonzero dimension. A point-only mapping uses a one-tile view rather than dividing by zero. These cases must not change mesh data or create history. Pixel image zoom remains a separate interaction.
+
+Scale and rotation modifier drags still derive sensitivity from UV-space distance. After fitting very small or large islands, those gestures need a separate consistency pass; framing alone does not establish a complete editing workflow.

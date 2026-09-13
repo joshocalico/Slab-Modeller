@@ -221,6 +221,7 @@ func _run() -> void:
 	_check_uv_framed(canvas, paint.selected_uv_loops(), "Same-density Unwrap after placement")
 	await _history_shortcut(panel, false)
 	_check(solid.get("data") == after, "same-density Unwrap Undo restores exact placement data")
+	await _extreme_uv_framing(editor, panel, canvas, paint, solid, selection)
 	await _click(_mode(panel, 3))
 	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
 	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
@@ -379,3 +380,80 @@ func _check_uv_framed(canvas: Control, loops: Array, label: String) -> void:
 
 func _uv_frame(canvas: Control) -> Array:
 	return [canvas.get("_uv_center"), canvas.get("_uv_pixels_per_unit"), canvas.get("_uv_pan")]
+
+
+func _extreme_uv_framing(editor: Object, panel: Control, canvas: Control, paint: RefCounted,
+		solid: Node3D, selection: RefCounted) -> void:
+	var saved_data: PackedByteArray = solid.get("data")
+	var saved_brush: StandardMaterial3D = paint.brush_material()
+	paint.choose_brush_material(load("res://demo/signal_foundry/materials/brick.tres"))
+	_check(solid.call("set_face_uv", selection.ids, Vector2.ONE, Vector2.ZERO, 0.0) == 0,
+		"ordinary unwrapped framing fixture clears placement")
+	paint.refresh_uv_mapping()
+	await _click(_button_named(panel, "Fit UV"))
+	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-small-unwrap", "capture_rect": panel.get_global_rect()}, "after")
+	for fixture in [{"name": "tiny", "scale": Vector2.ONE * 0.00001},
+			{"name": "large", "scale": Vector2.ONE * 100000000.0},
+			{"name": "point", "scale": Vector2.ZERO}]:
+		var label: String = fixture.name
+		_check(solid.call("set_face_uv", selection.ids, fixture.scale, Vector2.ZERO, 0.0) == 0,
+			"%s UV framing fixture commits" % label)
+		paint.refresh_uv_mapping()
+		await _click(_button_named(panel, "Fit UV"))
+		var loops: Array = paint.selected_uv_loops()
+		_check_uv_framed(canvas, loops, "%s Fit UV" % label)
+		var bounds := _canvas_uv_bounds(canvas, loops)
+		var fill := maxf(bounds.size.x / canvas.size.x, bounds.size.y / canvas.size.y)
+		_check(is_finite(canvas.get("_uv_pixels_per_unit")), "%s Fit UV has a finite scale" % label)
+		if label != "point":
+			_check(fill >= 0.75 and fill <= 0.9, "%s Fit UV occupies useful canvas area: %s" % [label, fill])
+			if label == "tiny":
+				_check(canvas.get("_uv_pixels_per_unit") > 4096.0, "tiny Fit UV exceeds the old zoom ceiling")
+				await _capture(editor, {"capture_prefix": "/tmp/slab-paint-tiny-fit", "capture_rect": panel.get_global_rect()}, "after")
+			else:
+				_check(canvas.get("_uv_pixels_per_unit") < 0.01, "large Fit UV falls below the old zoom floor")
+			var anchor := canvas.size * Vector2(0.61, 0.58)
+			var uv_anchor: Vector2 = canvas.call("_canvas_to_uv", anchor)
+			var fitted_scale: float = canvas.get("_uv_pixels_per_unit")
+			await _uv_wheel(canvas, anchor, MOUSE_BUTTON_WHEEL_UP)
+			_check(canvas.get("_uv_pixels_per_unit") > fitted_scale, "%s wheel-up zooms inward after Fit UV" % label)
+			_check((canvas.call("_uv_to_canvas", uv_anchor) as Vector2).distance_to(anchor) < 0.5,
+				"%s wheel-up keeps its UV point under the pointer" % label)
+			if label == "tiny":
+				await _capture(editor, {"capture_prefix": "/tmp/slab-paint-tiny-zoom", "capture_rect": panel.get_global_rect()}, "after")
+			var zoomed_scale: float = canvas.get("_uv_pixels_per_unit")
+			await _uv_wheel(canvas, anchor, MOUSE_BUTTON_WHEEL_DOWN)
+			_check(canvas.get("_uv_pixels_per_unit") < zoomed_scale
+				and is_equal_approx(canvas.get("_uv_pixels_per_unit"), fitted_scale),
+				"%s wheel-down restores fitted scale without a jump" % label)
+			_check((canvas.call("_uv_to_canvas", uv_anchor) as Vector2).distance_to(anchor) < 0.5,
+				"%s wheel-down keeps its UV point under the pointer" % label)
+	solid.set("data", saved_data)
+	paint.choose_brush_material(saved_brush)
+	paint.refresh_uv_mapping()
+	await _click(_button_named(panel, "Fit UV"))
+	_check(solid.get("data") == saved_data, "UV framing fixtures restore exact original scene data")
+
+
+func _uv_wheel(canvas: Control, position: Vector2, button: MouseButton) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = button
+	event.pressed = true
+	event.position = canvas.global_position + position
+	event.global_position = event.position
+	canvas.get_viewport().push_input(event)
+	event = event.duplicate()
+	event.pressed = false
+	canvas.get_viewport().push_input(event)
+	await create_timer(0.2).timeout
+
+
+func _canvas_uv_bounds(canvas: Control, loops: Array) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for loop: PackedVector2Array in loops:
+		for uv: Vector2 in loop:
+			var mapped: Vector2 = canvas.call("_uv_to_canvas", uv)
+			lo = lo.min(mapped)
+			hi = hi.max(mapped)
+	return Rect2(lo, hi - lo)

@@ -66,6 +66,12 @@ The canvas now detects restored mapping bases as well as face selection changes.
 
 The reviewed regression capture also exposes a separate limit: very small UV islands occupy little canvas space even after Fit UV because framing uses a minimum 0.25-unit span. This recovery fix makes restored layouts visible; closer framing and smooth wheel zoom for tiny islands remain to be assessed.
 
+## Small-island framing follow-up
+
+Fit UV now uses actual selected UV extents, with shared finite limits across Fit, wheel zoom, and pointer conversion. The rendered before/after regression reproduced the small-island framing failure and passed after the fix. Both small and large transient mappings occupy 82% of the limiting canvas dimension; wheel input zooms in and back out without jumping and preserves the UV point under the pointer. A point-only mapping remains finite. The temporary geometry data is restored exactly.
+
+Reviewed `/tmp/slab-paint-small-unwrap-after.png`, `/tmp/slab-paint-tiny-fit-after.png`, and `/tmp/slab-paint-tiny-zoom-after.png` with the Brick brush texture. The ordinary small unwrap has a readable outline over the magnified texture; the extreme tiny mapping remains visible and grows about the off-centre pointer. `/tmp/slab-uv-extremes-final.log` reports zero rendered failures. Saved level geometry and materials remain unchanged. Scale and rotation drag sensitivity still needs work across zoom levels.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.

@@ -13,6 +13,8 @@ signal stroke_cancelled
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 8.0
 const MAX_VISIBLE_TILES := 256
+const UV_SCALE_MIN := 1.0e-9
+const UV_SCALE_MAX := 1.0e12
 
 var _paint: RefCounted
 var _metrics: RefCounted
@@ -72,9 +74,15 @@ func frame_uv() -> void:
 	if loops.is_empty() or size.x < 2.0 or size.y < 2.0:
 		return
 	var bounds := _uv_loops_bounds(loops)
-	var span := Vector2(maxf(bounds.size.x, 0.25), maxf(bounds.size.y, 0.25))
+	# Fit actual extents, including islands much smaller than a texture tile.
+	# A collapsed line uses its remaining dimension; a point gets a one-tile view.
+	var fit_x := size.x / bounds.size.x if bounds.size.x > 0.0 else INF
+	var fit_y := size.y / bounds.size.y if bounds.size.y > 0.0 else INF
+	var fit := minf(fit_x, fit_y)
+	if not is_finite(fit):
+		fit = minf(size.x, size.y)
 	_uv_center = bounds.get_center()
-	_uv_pixels_per_unit = maxf(0.01, minf(size.x / span.x, size.y / span.y) * 0.82)
+	_uv_pixels_per_unit = clampf(fit * 0.82, UV_SCALE_MIN, UV_SCALE_MAX)
 	_uv_pan = Vector2.ZERO
 	queue_redraw()
 
@@ -238,8 +246,8 @@ func _draw_uv_workspace() -> void:
 			Vector2(x1 - x0, y1 - y0) * texture_size), true)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var count := 0
-	for y in range(y0, y1):
-		for x in range(x0, x1):
+	for y in range(y0, mini(y1, y0 + MAX_VISIBLE_TILES)):
+		for x in range(x0, mini(x1, x0 + MAX_VISIBLE_TILES)):
 			if count >= MAX_VISIBLE_TILES:
 				break
 			var tile := Rect2(_uv_to_canvas(Vector2(x, y)), Vector2(_uv_pixels_per_unit, _uv_pixels_per_unit))
@@ -284,7 +292,7 @@ func _uv_to_canvas(uv: Vector2) -> Vector2:
 
 func _canvas_to_uv(pos: Vector2) -> Vector2:
 	if _paint != null and not _paint.is_pixel():
-		return (pos - size * 0.5 - _uv_pan) / maxf(_uv_pixels_per_unit, 0.001) + _uv_center
+		return (pos - size * 0.5 - _uv_pan) / maxf(_uv_pixels_per_unit, UV_SCALE_MIN) + _uv_center
 	var fitted := image_rect()
 	if fitted.size.x < 0.001 or fitted.size.y < 0.001:
 		return Vector2.ZERO
@@ -305,7 +313,7 @@ func _canvas_to_pixel(pos: Vector2) -> Vector2:
 func _zoom_at(pos: Vector2, factor: float) -> void:
 	if _paint != null and not _paint.is_pixel():
 		var anchor := _canvas_to_uv(pos)
-		_uv_pixels_per_unit = clampf(_uv_pixels_per_unit * factor, 0.01, 4096.0)
+		_uv_pixels_per_unit = clampf(_uv_pixels_per_unit * factor, UV_SCALE_MIN, UV_SCALE_MAX)
 		_uv_pan = pos - size * 0.5 - (anchor - _uv_center) * _uv_pixels_per_unit
 		queue_redraw()
 		return
