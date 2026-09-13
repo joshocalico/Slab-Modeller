@@ -4,6 +4,18 @@
 
 namespace slab {
 
+godot::Vector3 oriented_area_normal(const std::vector<IVec3> &p_loop) {
+	__int128 nx = 0, ny = 0, nz = 0;
+	for (size_t i = 0; i < p_loop.size(); i++) {
+		const IVec3 &a = p_loop[i], &b = p_loop[(i + 1) % p_loop.size()];
+		nx += (__int128)a.y * b.z - (__int128)a.z * b.y;
+		ny += (__int128)a.z * b.x - (__int128)a.x * b.z;
+		nz += (__int128)a.x * b.y - (__int128)a.y * b.x;
+	}
+	const godot::Vector3 n{ float(double(nx)), float(double(ny)), float(double(nz)) };
+	return n.length_squared() > 0.0f ? n.normalized() : godot::Vector3();
+}
+
 bool Mesh::_vertex_live(uint32_t p_slot) const {
 	if (p_slot >= vertices.size() || vertices[p_slot].gen == 0) {
 		return false;
@@ -134,14 +146,10 @@ godot::Vector3 Mesh::face_normal(FaceId p_id) const {
 	if (corners.size() < 3) {
 		return godot::Vector3();
 	}
-	const godot::Vector3 a = position(corners[0]);
-	const godot::Vector3 ab = position(corners[1]) - a;
-	const godot::Vector3 ac = position(corners[2]) - a;
-	const godot::Vector3 n = ab.cross(ac);
-	if (n.length_squared() == 0.0f) {
-		return godot::Vector3();
-	}
-	return n.normalized();
+	std::vector<IVec3> loop;
+	loop.reserve(corners.size());
+	for (const VertexId id : corners) loop.push_back(position_i(id));
+	return oriented_area_normal(loop);
 }
 
 IVec3 Mesh::position_i(VertexId p_id) const {

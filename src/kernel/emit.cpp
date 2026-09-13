@@ -73,17 +73,7 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		if (corners.size() < 3) {
 			continue;
 		}
-		godot::Vector3 n = p_mesh.face_normal(id);
-		if (n.length_squared() == 0.0f) {
-			const godot::Vector3 a = p_mesh.position(corners[0]);
-			for (size_t i = 1; i + 1 < corners.size(); i++) {
-				const godot::Vector3 cand = (p_mesh.position(corners[i]) - a).cross(p_mesh.position(corners[i + 1]) - a);
-				if (cand.length_squared() > 0.0f) {
-					n = cand.normalized();
-					break;
-				}
-			}
-		}
+		const godot::Vector3 n = p_mesh.face_normal(id);
 		const FaceAttrs attrs = p_mesh.attrs(id);
 		UvAxis axis = attrs.uv_axis;
 		if (axis == UvAxis::AUTO) {

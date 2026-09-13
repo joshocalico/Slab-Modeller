@@ -13,6 +13,8 @@
 
 namespace slab {
 
+godot::Vector3 oriented_area_normal(const std::vector<IVec3> &p_loop);
+
 enum class UvAxis : uint8_t {
 	AUTO = 0,
 	X = 1,

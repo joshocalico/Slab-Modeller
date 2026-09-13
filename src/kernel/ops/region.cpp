@@ -71,7 +71,19 @@ MeshFault inspect(const Mesh &p_mesh, const std::vector<FaceId> &p_faces, Region
 bool coplanar(const Mesh &p_mesh, const Region &p_region) {
 	const SourceFace &first = p_region.faces[0];
 	const godot::Vector3 normal = p_mesh.face_normal(first.id);
-	const IVec3 a = p_mesh.position_i(first.corners[0]), b = p_mesh.position_i(first.corners[1]), c = p_mesh.position_i(first.corners[2]);
+	const IVec3 a = p_mesh.position_i(first.corners[0]);
+	IVec3 b, c;
+	bool plane_found = false;
+	for (size_t i = 1; i + 1 < first.corners.size() && !plane_found; i++) {
+		b = p_mesh.position_i(first.corners[i]);
+		c = p_mesh.position_i(first.corners[i + 1]);
+		const int64_t ux = int64_t(b.x) - a.x, uy = int64_t(b.y) - a.y, uz = int64_t(b.z) - a.z;
+		const int64_t vx = int64_t(c.x) - a.x, vy = int64_t(c.y) - a.y, vz = int64_t(c.z) - a.z;
+		plane_found = (__int128)uy * vz - (__int128)uz * vy != 0 ||
+				(__int128)uz * vx - (__int128)ux * vz != 0 ||
+				(__int128)ux * vy - (__int128)uy * vx != 0;
+	}
+	if (!plane_found) return false;
 	for (const SourceFace &face : p_region.faces) {
 		if (normal.dot(p_mesh.face_normal(face.id)) < 0.99999f) return false;
 		for (const VertexId vertex : face.corners) if (orient3d(a, b, c, p_mesh.position_i(vertex)) != 0) return false;

@@ -1,5 +1,6 @@
 #include "mesh_edit.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 #include <unordered_map>
@@ -32,6 +33,72 @@ static bool _planar(const std::vector<IVec3> &p_pts) {
 	for (int k = c + 1; k < n; k++) {
 		if (orient3d(p_pts[0], p_pts[1], p_pts[c], p_pts[k]) != 0) {
 			return false;
+		}
+	}
+	return true;
+}
+
+static void _project(const IVec3 &p, int p_axis, int32_t &r_x, int32_t &r_y) {
+	if (p_axis == 0) { r_x = p.y; r_y = p.z; }
+	else if (p_axis == 1) { r_x = p.x; r_y = p.z; }
+	else { r_x = p.x; r_y = p.y; }
+}
+
+static int _orient_2d(const IVec3 &a, const IVec3 &b, const IVec3 &c, int p_axis) {
+	int32_t ax, ay, bx, by, cx, cy;
+	_project(a, p_axis, ax, ay); _project(b, p_axis, bx, by); _project(c, p_axis, cx, cy);
+	return orient2d(ax, ay, bx, by, cx, cy);
+}
+
+static bool _on_segment(const IVec3 &p, const IVec3 &a, const IVec3 &b, int p_axis) {
+	if (_orient_2d(a, b, p, p_axis) != 0) return false;
+	int32_t px, py, ax, ay, bx, by;
+	_project(p, p_axis, px, py); _project(a, p_axis, ax, ay); _project(b, p_axis, bx, by);
+	return px >= std::min(ax, bx) && px <= std::max(ax, bx) && py >= std::min(ay, by) && py <= std::max(ay, by);
+}
+
+static bool _simple_planar_loop(const std::vector<IVec3> &p_loop) {
+	if (p_loop.size() < 3 || !_planar(p_loop)) return false;
+	int axis = 2;
+	__int128 area_x = 0, area_y = 0, area_z = 0;
+	for (size_t i = 0; i < p_loop.size(); i++) {
+		const IVec3 &a = p_loop[i], &b = p_loop[(i + 1) % p_loop.size()];
+		area_x += (__int128)a.y * b.z - (__int128)a.z * b.y;
+		area_y += (__int128)a.z * b.x - (__int128)a.x * b.z;
+		area_z += (__int128)a.x * b.y - (__int128)a.y * b.x;
+	}
+	if (area_x == 0 && area_y == 0 && area_z == 0) return false;
+	for (size_t i = 0; i + 2 < p_loop.size(); i++) {
+		const int64_t ux = int64_t(p_loop[i + 1].x) - p_loop[i].x;
+		const int64_t uy = int64_t(p_loop[i + 1].y) - p_loop[i].y;
+		const int64_t uz = int64_t(p_loop[i + 1].z) - p_loop[i].z;
+		const int64_t vx = int64_t(p_loop[i + 2].x) - p_loop[i].x;
+		const int64_t vy = int64_t(p_loop[i + 2].y) - p_loop[i].y;
+		const int64_t vz = int64_t(p_loop[i + 2].z) - p_loop[i].z;
+		const __int128 nx = (__int128)uy * vz - (__int128)uz * vy;
+		const __int128 ny = (__int128)uz * vx - (__int128)ux * vz;
+		const __int128 nz = (__int128)ux * vy - (__int128)uy * vx;
+		if (nx || ny || nz) {
+			const __int128 ax = nx < 0 ? -nx : nx, ay = ny < 0 ? -ny : ny, az = nz < 0 ? -nz : nz;
+			axis = ax >= ay && ax >= az ? 0 : (ay >= az ? 1 : 2);
+			break;
+		}
+	}
+	const int n = int(p_loop.size());
+	for (int i = 0; i < n; i++) {
+		const int in = (i + 1) % n;
+		if (p_loop[i] == p_loop[in]) return false;
+		if (_on_segment(p_loop[(i + 2) % n], p_loop[i], p_loop[in], axis)) return false;
+		for (int j = i + 1; j < n; j++) {
+			const int jn = (j + 1) % n;
+			if (j == i || j == in || jn == i) continue;
+			const int o1 = _orient_2d(p_loop[i], p_loop[in], p_loop[j], axis);
+			const int o2 = _orient_2d(p_loop[i], p_loop[in], p_loop[jn], axis);
+			const int o3 = _orient_2d(p_loop[j], p_loop[jn], p_loop[i], axis);
+			const int o4 = _orient_2d(p_loop[j], p_loop[jn], p_loop[in], axis);
+			if ((o1 != o2 && o1 != 0 && o2 != 0 && o3 != o4 && o3 != 0 && o4 != 0) ||
+					_on_segment(p_loop[j], p_loop[i], p_loop[in], axis) || _on_segment(p_loop[jn], p_loop[i], p_loop[in], axis) ||
+					_on_segment(p_loop[i], p_loop[j], p_loop[jn], axis) || _on_segment(p_loop[in], p_loop[j], p_loop[jn], axis)) return false;
 		}
 	}
 	return true;
@@ -531,6 +598,22 @@ MeshFault MeshEdit::dissolve_edge(EdgeId p_edge) {
 	const HalfEdgeIdx prev_b = lb[(ib + nb - 1) % nb];
 	const HalfEdgeIdx next_a = work.half_edges[a.i].next;
 	const HalfEdgeIdx next_b = work.half_edges[b.i].next;
+	std::vector<IVec3> boundary;
+	HalfEdgeIdx cursor = next_b;
+	while (cursor.i != b.i) {
+		boundary.push_back(work.vertices[work.half_edges[cursor.i].origin.i].pos);
+		cursor = work.half_edges[cursor.i].next;
+	}
+	cursor = next_a;
+	while (cursor.i != a.i) {
+		boundary.push_back(work.vertices[work.half_edges[cursor.i].origin.i].pos);
+		cursor = work.half_edges[cursor.i].next;
+	}
+	if (!_simple_planar_loop(boundary)) {
+		fault.code = MeshError::DEGENERATE_FACE;
+		fault.slot = p_edge.slot;
+		return fault;
+	}
 
 	work.half_edges[prev_a.i].next = next_b;
 	work.half_edges[prev_b.i].next = next_a;

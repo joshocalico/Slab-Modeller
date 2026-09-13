@@ -54,6 +54,21 @@ Mesh shifted(const Mesh &p_src, const godot::Vector3 &p_delta) {
 	return mesh;
 }
 
+Mesh rotated_x_90_and_shifted(const Mesh &p_src, const godot::Vector3 &p_delta) {
+	MeshEdit moved(p_src);
+	std::vector<VertexId> verts;
+	p_src.all_vertices(verts);
+	IVec3 delta;
+	quantize(p_delta, delta);
+	for (const VertexId id : verts) {
+		const IVec3 p = p_src.position_i(id);
+		moved.move_vertex(id, IVec3{ p.x + delta.x, -p.z + delta.y, p.y + delta.z });
+	}
+	Mesh out;
+	expect(std::move(moved).commit(out).ok(), "rotated cylinder commits");
+	return out;
+}
+
 void fan_loop(int32_t p_corners, std::vector<int32_t> &r_indices) {
 	r_indices.clear();
 	for (int32_t i = 1; i + 1 < p_corners; i++) {
@@ -152,6 +167,30 @@ Mesh turbine_hall_with_door() {
 	return room;
 }
 
+Mesh power_house_with_union_door() {
+	Mesh room = make_box(godot::Vector3(10, 5, 8));
+	const FaceId top = top_face(room);
+	MeshEdit hollow(room);
+	expect(ops::inset(hollow, { top }, 0.45f).ok(), "PowerHouse inset");
+	expect(ops::extrude(hollow, { top }, -4.7f).ok(), "PowerHouse inward extrude");
+	expect(std::move(hollow).commit(room).ok(), "PowerHouse room commits");
+
+	Mesh box = shifted(make_box(godot::Vector3(3, 1.5f, 1.2f)), godot::Vector3(3.5f, 0.23f, -0.2f));
+	MeshEdit cylinder_edit = MeshEdit::empty();
+	expect(ops::cylinder(cylinder_edit, 1.5f, 1.2f, 16).ok(), "PowerHouse arch cylinder");
+	Mesh cylinder;
+	expect(std::move(cylinder_edit).commit(cylinder).ok(), "PowerHouse arch cylinder commits");
+	cylinder = rotated_x_90_and_shifted(cylinder, godot::Vector3(5, 1.73f, -0.2f));
+	MeshEdit joined(box);
+	expect(ops::boolean(joined, cylinder, 0).ok(), "PowerHouse cutter union");
+	Mesh cutter;
+	expect(std::move(joined).commit(cutter).ok(), "PowerHouse union cutter commits");
+	MeshEdit cut(room);
+	expect(ops::boolean(cut, cutter, 1).ok(), "PowerHouse doorway subtract");
+	expect(std::move(cut).commit(room).ok(), "PowerHouse doorway commits");
+	return room;
+}
+
 } // namespace
 
 SLAB_TEST(ear_clip_leaves_the_bay_of_a_concave_u_uncovered) {
@@ -209,7 +248,7 @@ SLAB_TEST(emit_of_a_concave_face_keeps_per_corner_attributes) {
 SLAB_TEST(emit_of_the_hall_doorway_does_not_span_the_opening) {
 	const Mesh hall = turbine_hall_with_door();
 	expect(validate(hall).ok(), "hall doorway stays an embedded solid");
-	expect_eq(hall.face_count(), 40, "saved Subtract applied 40 faces");
+	expect_eq(hall.face_count(), 24, "coplanar doorway fragments dissolve to 24 faces");
 	expect_near(hall.signed_volume(), 266.15, 0.05, "doorway volume after the 1.6x3x2 cutter");
 
 	int corners = 0;
@@ -297,4 +336,55 @@ SLAB_TEST(emit_of_the_hall_doorway_does_not_span_the_opening) {
 	expect(!emit_covers(out, outer_hole), "outer door plane is not covered");
 	expect(!emit_covers(out, inner_hole), "inner door plane is not covered");
 	expect(!emit_covers(out, throat), "the door throat is not covered");
+}
+
+SLAB_TEST(emit_normals_follow_the_full_oriented_loop_after_a_union_cut) {
+	const Mesh room = power_house_with_union_door();
+	expect(validate(room).ok(), "PowerHouse-style union doorway commits");
+	const std::vector<IVec3> reflex = {
+		{ 30, 40, 0 }, { 30, 10, 0 }, { 10, 10, 0 }, { 10, 40, 0 },
+		{ 0, 40, 0 }, { 0, 0, 0 }, { 40, 0, 0 }, { 40, 40, 0 },
+	};
+	expect(oriented_area_normal(reflex).z > 0.99f, "reflex loop follows its total positive winding");
+	std::vector<IVec3> reversed(reflex.rbegin(), reflex.rend());
+	expect(oriented_area_normal(reversed).z < -0.99f, "reversed reflex loop reverses its normal");
+	std::vector<FaceId> faces;
+	room.all_faces(faces);
+	for (const FaceId id : faces) expect(room.face_normal(id).length_squared() > 0.99f,
+			"whole-loop domain normal survives a collinear or reflex prefix");
+	EmitOut out;
+	emit_arrays(room, out);
+	int checked = 0;
+	int legacy_wrong = 0;
+	for (size_t i = 0; i + 2 < out.indices.size(); i += 3) {
+		const int32_t ia = out.indices[i];
+		const int32_t ib = out.indices[i + 1];
+		const int32_t ic = out.indices[i + 2];
+		const godot::Vector3 geometric = (out.verts[size_t(ib)] - out.verts[size_t(ia)]).cross(
+				out.verts[size_t(ic)] - out.verts[size_t(ia)]);
+		const godot::Vector3 emitted = out.normals[size_t(ia)];
+		expect(emitted.length_squared() > 0.99f, "every emitted doorway normal is a unit vector");
+		expect(geometric.dot(emitted) < 0.0f, "every emitted triangle winds against its face normal");
+		std::vector<VertexId> corners;
+		room.face_corners(out.provenance[i / 3], corners);
+		const godot::Vector3 a = room.position(corners[0]);
+		godot::Vector3 legacy = (room.position(corners[1]) - a).cross(room.position(corners[2]) - a);
+		if (legacy.length_squared() == 0.0f) {
+			for (size_t k = 1; k + 1 < corners.size(); k++) {
+				legacy = (room.position(corners[k]) - a).cross(room.position(corners[k + 1]) - a);
+				if (legacy.length_squared() > 0.0f) {
+					legacy.normalize();
+					break;
+				}
+			}
+		} else {
+			legacy.normalize();
+		}
+		if (geometric.dot(legacy) >= 0.0f) {
+			legacy_wrong++;
+		}
+		checked++;
+	}
+	expect(checked > 100, "complex union doorway exercises fragmented n-gons");
+	expect(legacy_wrong > 0, "the first-corner normal heuristic reproduces the lighting regression");
 }

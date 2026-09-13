@@ -47,4 +47,13 @@ The emitted normal used an initial triangle from each face. Valid Boolean faces 
 
 After rebuilding and reopening the saved scene, the author inspected both front and rear orthographic views with Display Normal selected. The large light/dark triangular patches were gone and the entrance remained visible. Faint seam lines remained visible after deselection. This is an editor rendering check; the corrected rendering still needs a running-game pass.
 
-The broader normal contract remains open. Changing `Mesh::face_normal` also enables coplanar dissolves that were accidentally skipped by the old normal calculation, exposing existing Boolean failures. Those failures must be resolved before treating selection, operation handles, and rendering as consistent.
+The shared normal correction now passes the full verifier. `Mesh::face_normal`, Boolean fragments, emitted triangles, and selection fills use one exact whole-loop calculation. Coplanar dissolve checks its proposed boundary before joining faces, fixing the failures exposed when correct normals enabled previously skipped merges. Region coplanarity now finds a noncollinear plane triple. The kernel passes 135 tests and 4,031 checks. The transformed doorway smoke verifies its volume, open doorway, and filled neighboring wall; valid coplanar cleanup reduces that fixture from 40 to 24 faces.
+
+The saved PowerHouse was then checked in the live editor and running game. Starting at START, the author reached the courtyard, jumped both hazard strips, and entered the room using normal controls. F3 reported grounded contact with `PowerHouse/__body` at feet `(38.73, 0.47, 23.70)`. The exterior and interior walls shade uniformly without the former large triangular patches. This closes the reproduced shading issue; it does not complete the annex's materials or level design.
+
+One local topology measurement reports `topo_cost=21360` and `boolean_ms=12.04`. This is a current measurement, not a controlled before/after comparison. The known house Euler value remains zero.
+
+## Follow-up workflow issues
+
+- Select Coplanar finds 21 front-wall faces around the doorway. Merge refuses them with a generic folded/disconnected-region message. The region is connected and flat but has two boundary cycles, the wall perimeter and doorway rim. A single Slab face cannot represent that hole. Keep the refusal and explain the actual limitation.
+- Surface Paint's native material resource picker is clipped almost out of sight after the Sample button in the live 1225 by 768 editor. Loading an existing material through that control is blocked. The temporary material addition used to expose this was undone, leaving the saved scene unchanged.

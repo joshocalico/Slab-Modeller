@@ -298,7 +298,7 @@ func _draw_element(gizmo: EditorNode3DGizmo, solid: Node3D, mode: int, id: int, 
 	if _paint_hides_albedo():
 		gizmo.add_lines(_outline(solid.face_corners(id)), get_material(PAINT_EDGE, gizmo), false)
 		return
-	_draw_face_fill(gizmo, solid.face_corners(id), FILL_HOVER if hovered else FILL)
+	_draw_face_fill(gizmo, solid.face_corners(id), solid.face_normal(id), FILL_HOVER if hovered else FILL)
 	gizmo.add_lines(_outline(solid.face_corners(id)), get_material(line_mat, gizmo), false)
 
 
@@ -320,29 +320,27 @@ static func line_material(base: String, xray: bool) -> String:
 	return WIRE_XRAY if base == WIRE else base
 
 
-func _draw_face_fill(gizmo: EditorNode3DGizmo, corners: PackedVector3Array, material_name: String) -> void:
-	if corners.size() < 3:
+func _draw_face_fill(gizmo: EditorNode3DGizmo, corners: PackedVector3Array, normal: Vector3, material_name: String) -> void:
+	var mesh := face_fill_mesh(corners, normal)
+	if mesh == null:
 		return
+	gizmo.add_mesh(mesh, get_material(material_name, gizmo))
+
+
+static func face_fill_mesh(corners: PackedVector3Array, normal: Vector3) -> ArrayMesh:
+	if corners.size() < 3 or normal.length_squared() < 1e-12:
+		return null
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var normal: Vector3 = (corners[1] - corners[0]).cross(corners[2] - corners[0])
-	if normal.length_squared() < 0.0001:
-		normal = Vector3.UP
-	else:
-		normal = normal.normalized()
-	for i in face_fill_indices(corners):
+	normal = normal.normalized()
+	for i in face_fill_indices(corners, normal):
 		st.set_normal(normal)
 		st.add_vertex(corners[i])
-	gizmo.add_mesh(st.commit(), get_material(material_name, gizmo))
+	return st.commit()
 
 
-static func face_fill_indices(corners: PackedVector3Array) -> PackedInt32Array:
-	if corners.size() < 3:
-		return PackedInt32Array()
-	var normal := Vector3.ZERO
-	for i in corners.size():
-		normal += corners[i].cross(corners[(i + 1) % corners.size()])
-	if normal.length_squared() < 1e-12:
+static func face_fill_indices(corners: PackedVector3Array, normal: Vector3) -> PackedInt32Array:
+	if corners.size() < 3 or normal.length_squared() < 1e-12:
 		return PackedInt32Array()
 	var axis: int = normal.abs().max_axis_index()
 	var polygon := PackedVector2Array()
@@ -351,7 +349,15 @@ static func face_fill_indices(corners: PackedVector3Array) -> PackedInt32Array:
 			0: polygon.append(Vector2(point.y, point.z))
 			1: polygon.append(Vector2(point.z, point.x))
 			2: polygon.append(Vector2(point.x, point.y))
-	return Geometry2D.triangulate_polygon(polygon)
+	var indices := Geometry2D.triangulate_polygon(polygon)
+	for i in range(0, indices.size(), 3):
+		var triangle_normal := (corners[indices[i + 1]] - corners[indices[i]]).cross(corners[indices[i + 2]] - corners[indices[i]])
+		# Godot treats clockwise triangles, viewed along the outward normal, as front-facing.
+		if triangle_normal.dot(normal) > 0.0:
+			var second := indices[i + 1]
+			indices[i + 1] = indices[i + 2]
+			indices[i + 2] = second
+	return indices
 
 
 func _vertex_ticks(point: Vector3) -> PackedVector3Array:

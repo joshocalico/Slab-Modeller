@@ -219,17 +219,7 @@ godot::Vector3 _centroid(const std::vector<IVec3> &p_loop) {
 }
 
 godot::Vector3 _normal(const std::vector<IVec3> &p_loop) {
-	if (p_loop.size() < 3) {
-		return godot::Vector3();
-	}
-	const godot::Vector3 a = dequantize(p_loop[0]);
-	for (size_t i = 1; i + 1 < p_loop.size(); i++) {
-		const godot::Vector3 n = (dequantize(p_loop[i]) - a).cross(dequantize(p_loop[i + 1]) - a);
-		if (n.length_squared() > 0.0f) {
-			return n.normalized();
-		}
-	}
-	return godot::Vector3();
+	return oriented_area_normal(p_loop);
 }
 
 void _xy_axis(const godot::Vector3 &p_p, int p_axis, float &r_x, float &r_y) {

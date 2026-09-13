@@ -336,8 +336,14 @@ func _check_boolean_uses_node_transforms() -> void:
 	actions.run("boolean_subtract")
 	_expect(not said.is_empty() and said[0].begins_with("Subtract applied."),
 		"Subtract reports that it cut, got %s" % [said])
-	_expect(hall.call("face_count") == 40,
-		"the doorway adds faces with node transforms, got %d from %d" % [hall.call("face_count"), faces_before])
+	_expect(hall.call("face_count") == 24,
+		"the transformed doorway dissolves coplanar fragments, got %d from %d" % [hall.call("face_count"), faces_before])
+	_expect(absf(float(hall.call("volume")) - 266.15) < 0.05,
+		"the transformed cutter removes the doorway volume")
+	_expect(not _mesh_segment_hit(hall, Vector3(6, 1.5, 3.5), Vector3(7, 1.5, 3.5)),
+		"the emitted doorway is open at the cutter's world position")
+	_expect(_mesh_segment_hit(hall, Vector3(6, 1.5, 1.5), Vector3(7, 1.5, 1.5)),
+		"the wall beside the transformed doorway remains filled")
 	_expect(cutter.is_inside_tree(), "Subtract retains the cutter solid")
 
 	var left: Node3D = ClassDB.instantiate("SlabSolid")
@@ -389,6 +395,17 @@ func _top_face(solid: Node3D) -> int:
 			up = n.y
 			best = id
 	return best
+
+
+func _mesh_segment_hit(solid: Node3D, start: Vector3, end: Vector3) -> bool:
+	var instance: MeshInstance3D = solid.get_node("Mesh")
+	var triangles := instance.mesh.get_faces()
+	for i in range(0, triangles.size(), 3):
+		if Geometry3D.segment_intersects_triangle(start, end,
+			instance.to_global(triangles[i]), instance.to_global(triangles[i + 1]),
+			instance.to_global(triangles[i + 2])) != null:
+			return true
+	return false
 
 
 func _all_unique(ids: PackedInt64Array) -> bool:
