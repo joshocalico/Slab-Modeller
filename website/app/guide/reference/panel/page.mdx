@@ -148,17 +148,12 @@ In **Pixel**, **Texture** names the selected faces' common material image. Mixed
 
 The gold **Surface Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
 
-<Figure
-  src="/img/panel-surface-paint.png"
-  alt="Surface Paint with Brick loaded, the active workspace highlighted, and the material preview fully visible."
-  caption="Surface Paint with an existing material loaded. Open the image to inspect the controls at full size."
-/>
+### Material / UV controls
 
 | Control | Result |
 | --- | --- |
 | Assign | Applies the Brush material to the selected faces. |
-| Make Unique | Copies the Brush in Material / UV, or the selected Texture in Pixel, onto the selected faces and makes its albedo editable. A default face can start with a blank image. |
-| Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. Save the scene afterward. |
+| Make Unique | Copies the Brush onto the selected faces and makes its albedo editable. With default-material faces, it creates a blank image. Mixed-material selections are refused. |
 | Sample | Adopts the selected faces' common material as the Brush without assigning the previous Brush. Select faces using one material before sampling. Alt-click a face in the 3D view samples that face and its UV values directly. |
 | Material palette | Chooses the Brush without assigning it. Click **Assign**, or click a front-facing viewport face, to apply it. |
 | Material picker | Chooses a `StandardMaterial3D` as the Brush and immediately assigns it to the selected faces. Undo restores the previous assignment and material slots. |
@@ -168,9 +163,21 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Apply UV | Writes the numeric UV values to the selected face. |
 | Reset UV | Returns repeats to one, offsets to zero, and rotation to zero. |
 | UV 90° | Adds 90° and applies it. |
-| Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
 
 On the UV canvas, drag to move, Shift-drag to scale, and Ctrl-drag to rotate. Use Cmd-drag to rotate on macOS. Scroll zooms and middle-drag pans. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
+
+### Pixel controls
+
+Pixel hides Assign, Sample, the material picker, the material palette, and the UV placement controls. This gives the image canvas more room.
+
+| Control | Result |
+| --- | --- |
+| Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
+| Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. It is disabled until an owned Texture is ready. Save the scene afterward. |
+| Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
+| Show UV | Shows the selected faces' UV outlines over the image. It is off by default. |
+
+The inline hint asks for a face, a common material, or **Make Unique** when the selection is not ready. With an owned Texture, it says to paint on the image or model, then save the paint and the scene.
 
 ## Selection
 

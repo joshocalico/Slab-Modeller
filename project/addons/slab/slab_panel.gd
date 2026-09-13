@@ -52,6 +52,13 @@ var _paint_chips: HBoxContainer
 var _paint_tool_uv: Button
 var _paint_tool_pixel: Button
 var _unique_button: Button
+var _paint_assign: Button
+var _paint_save: Button
+var _paint_sample: Button
+var _paint_actions: ScrollContainer
+var _paint_action_tools: HBoxContainer
+var _paint_help: Label
+var _paint_picker_wrap: Control
 var _paint_picker: Node
 var _paint_uv_hint: Label
 var _paint_fit_uv: Button
@@ -981,6 +988,7 @@ func _paint_target_row() -> Control:
 
 func _paint_action_row() -> Control:
 	var scroll := ScrollContainer.new()
+	_paint_actions = scroll
 	scroll.name = "PaintActions"
 	scroll.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
 	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -989,27 +997,44 @@ func _paint_action_row() -> Control:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.clip_contents = true
 	var tools := HBoxContainer.new()
+	_paint_action_tools = tools
 	tools.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
+	tools.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tools.clip_contents = true
 	tools.add_theme_constant_override("separation", 8)
-	tools.add_child(_named_action("Assign", "MaterialPreviewCube", "Assign the active material to the selected faces.", func() -> void:
+	_paint_assign = _named_action("Assign", "MaterialPreviewCube", "Assign the active material to the selected faces.", func() -> void:
 		if _paint:
 			_paint.assign_active_to_selection()
-	))
+	)
+	_paint_assign.name = "PaintAssign"
+	tools.add_child(_paint_assign)
 	_unique_button = _named_action("Make Unique", "Duplicate", "Copies this solid's material so painting does not rewrite shared tiles.", func() -> void:
 		if _paint:
 			_paint.make_unique()
 	)
 	tools.add_child(_unique_button)
-	tools.add_child(_named_action("Save Paint", "Save", "Writes the albedo PNG so paint survives reopen.", func() -> void:
+	_paint_save = _named_action("Save Paint", "Save", "Write the painted image to PNG, then save the scene.", func() -> void:
 		if _paint:
 			_paint.save_png(_paint.default_save_path())
-	))
-	tools.add_child(_named_action("Sample", "ListSelect", "Use the selected faces' common material as the brush. Alt-click a viewport face to sample it directly.", func() -> void:
+	)
+	_paint_save.name = "PaintSave"
+	tools.add_child(_paint_save)
+	_paint_sample = _named_action("Sample", "ListSelect", "Use the selected faces' common material as the brush. Alt-click a viewport face to sample it directly.", func() -> void:
 		if _paint:
 			_paint.sample_selection()
-	))
-	tools.add_child(_paint_picker_slot())
+	)
+	_paint_sample.name = "PaintSample"
+	tools.add_child(_paint_sample)
+	_paint_picker_wrap = _paint_picker_slot()
+	tools.add_child(_paint_picker_wrap)
+	_paint_help = Label.new()
+	_paint_help.name = "PaintHelp"
+	_paint_help.add_theme_font_size_override("font_size", _font(13))
+	_paint_help.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_paint_help.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_paint_help.clip_text = true
+	_paint_help.custom_minimum_size.x = _scaled(128.0)
+	tools.add_child(_paint_help)
 	scroll.add_child(tools)
 	return scroll
 
@@ -1064,7 +1089,7 @@ func _paint_picker_slot() -> Control:
 	wrap.name = "PaintMaterialPickerWrap"
 	wrap.custom_minimum_size = Vector2(_scaled(PAINT_PICKER_WIDTH), _scaled(PAINT_PICKER_HEIGHT))
 	wrap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	var picker: Node = _make_paint_picker()
 	wrap.add_child(picker)
@@ -1135,6 +1160,16 @@ func _brush_column() -> Control:
 		if _paint:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
+	var overlay := CheckBox.new()
+	overlay.name = "PaintUvOverlay"
+	overlay.text = "Show UV"
+	overlay.tooltip_text = "Overlay the selected face's UV boundaries on the image. Repeated tiles can overlap."
+	overlay.add_theme_font_size_override("font_size", _font(12))
+	overlay.focus_mode = Control.FOCUS_NONE
+	overlay.toggled.connect(func(visible: bool) -> void:
+		_paint_canvas.show_pixel_uv = visible
+	)
+	col.add_child(overlay)
 	return col
 
 
@@ -1272,6 +1307,19 @@ func _refresh_paint_chrome() -> void:
 	_paint_dirty.visible = not _paint_dirty.text.is_empty()
 	_paint_dirty.clip_text = true
 	_paint_dirty.tooltip_text = _paint_dirty.text
+	var pixel: bool = _paint != null and _paint.is_pixel()
+	_paint_assign.visible = not pixel
+	_paint_sample.visible = not pixel
+	_paint_picker_wrap.visible = not pixel
+	_paint_palette.visible = not pixel
+	_paint_save.visible = pixel
+	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
+	_paint_help.visible = pixel
+	_paint_help.text = _pixel_help_text()
+	_paint_help.tooltip_text = _paint_help.text
+	var action_height := _scaled(PAINT_ROW_HEIGHT if pixel else PAINT_PICKER_HEIGHT)
+	_paint_actions.custom_minimum_size.y = action_height
+	_paint_action_tools.custom_minimum_size.y = action_height
 	if _paint_tool_uv != null and _paint != null:
 		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
 		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
@@ -1301,6 +1349,18 @@ func _refresh_paint_chrome() -> void:
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
 	_refresh_paint_palette()
+
+
+func _pixel_help_text() -> String:
+	if _selection == null or _selection.objects.size() != 1 or _selection.ids.is_empty():
+		return "Select a face in Face mode to paint."
+	if _paint == null:
+		return ""
+	if _paint.material() == null:
+		return "Make Unique creates an image for these faces." if _paint.can_make_unique() else "Select faces that share one material."
+	if not _paint.is_owned(_paint.material()):
+		return "Make Unique before painting this shared texture."
+	return "Paint on the image or model. Save Paint, then save the scene."
 
 
 static func paint_target_text(selection: Variant) -> String:

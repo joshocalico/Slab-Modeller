@@ -29,12 +29,6 @@ Choosing the material adds it to the room and assigns it to the selected walls. 
 
 If you opened the full Slab source checkout, you can use the bundled plaster instead. Choose **Quick Load**, then select `limestone` from `res://demo/signal_foundry/materials/limestone.tres`. Addon-only installations do not include that demo material.
 
-<Figure
-  src="/img/panel-surface-paint.png"
-  alt="Surface Paint with a material loaded, the active workspace highlighted, and the material preview visible."
-  caption="Surface Paint in Material / UV. The material picker sits beside Sample."
-/>
-
 ## Create the floor material
 
 1. Click the highlighted Face mode button to leave Surface Paint.
@@ -74,6 +68,8 @@ Compared with the default repeat of `1`, the floor pattern now repeats twice as 
 When you select one or more faces with a common material before opening Surface Paint, Slab adopts that material as the **Brush** without changing the faces. A mixed or default-material selection opens with no assignable brush.
 
 While Surface Paint stays open, changing the selection keeps the current Brush. Click **Sample** to adopt the selected faces' common material without assigning anything. Select faces that use one material before sampling. You can also Alt-click a front-facing face in the 3D view to sample that face and its UV values directly.
+
+Material assignment and UV placement stay in **Material / UV**. **Save Paint** appears only in **Pixel**, where it saves changes drawn into an image.
 
 ## Check the room
 

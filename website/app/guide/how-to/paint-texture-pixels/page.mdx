@@ -38,7 +38,17 @@ Press Escape or right-click during a canvas drag to restore the previous UV plac
 4. Click **Save Paint**.
 5. Save the scene.
 
-Pixel mode labels the bound image as **Texture** and shows one copy of that actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
+Pixel mode hides Assign, Sample, the material picker, the palette, and the UV placement controls. **Make Unique**, **Save Paint**, and the pixel brush controls remain. Save Paint is disabled until the selected faces use an owned Texture. Turn on **Show UV** when you need the selected faces' outlines over the image; it starts off so the artwork stays clear.
+
+The hint explains what the current selection needs:
+
+- Select a face when nothing is selected.
+- Click **Make Unique** before painting a shared Texture.
+- Click **Make Unique** to create an image for default-material faces.
+- Select faces that share one material when the selection is mixed.
+- Paint on the image or model when the owned Texture is ready.
+
+Pixel labels the bound image as **Texture** and shows one copy of that actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
 
 Save Paint writes `res://slab_paint/<solid>_m<slot>.png` and records that path on the material. It does not save the scene. The status stays **Texture saved. Scene still needs saving.** until you save the scene.
 

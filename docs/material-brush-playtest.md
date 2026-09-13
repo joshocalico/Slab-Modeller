@@ -35,3 +35,13 @@ On the final native reload, Make Unique was disabled for the mixed selection wit
 A temporary unique gable texture was painted and saved with the scene. Undo removed the paint and reported Unsaved paint; Redo restored the saved pixels and cleared that status. The comparison now excludes derived mipmap bytes. Both temporary operations were undone, the scene saved, and the generated test PNG removed. The saved scene again matched the committed file exactly.
 
 Final `scripts/slab-verify` passed all gates, including 135 kernel tests with 4,031 checks and the new material-scope smoke. Documentation reference verification passed for 28 pages and 74 local references. Website lint and the 32-page production build passed during the documentation update.
+
+## Pixel workspace layout
+
+A subsequent native pass separated the controls by mode. Pixel shows Make Unique, Save Paint, and brush controls. Assign, Sample, the material picker, and the material palette remain in Material / UV. At the same editor and dock size, the square image grew from roughly 208 to 264 screen pixels per side. The shared-texture hint explains Make Unique, and Save Paint is disabled until the selected image is editable.
+
+Pixel now opens without repeated UV lines obscuring the image. The Show UV checkbox was clicked on and off in Godot; it displayed the original wrapped boundaries without dirtying the scene. Material / UV continues showing its full unwrapped outlines.
+
+Make Unique, a red stroke, Save Paint, and scene save were exercised through the simplified Pixel controls. Both edits were undone, the scene saved, and the temporary PNG removed. The saved scene matched the committed scene. A final reload confirmed the compact Material / UV picker and the mixed-selection Pixel state: no image, disabled Make Unique and Save Paint, and guidance to select faces sharing one material.
+
+The full verification suite passed. After the final picker-width adjustment, paint and chrome checks passed again with no script errors, followed by the native reload above. Documentation verification passed for 28 pages and 72 references; website lint and its 32-page build also passed.

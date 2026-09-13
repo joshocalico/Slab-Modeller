@@ -783,10 +783,19 @@ func _check_canvas_letterbox_and_press() -> void:
 		"the action row fits the native picker in a %s px band" % SlabPanel.PAINT_PICKER_HEIGHT)
 	_expect(not _rects_overlap(target.get_global_rect(), actions_row.get_global_rect()),
 		"target and actions do not overlap, %s vs %s" % [target.get_global_rect(), actions_row.get_global_rect()])
-	_expect(not _rects_overlap(actions_row.get_global_rect(), palette.get_global_rect()),
-		"actions and palette do not overlap, %s vs %s" % [actions_row.get_global_rect(), palette.get_global_rect()])
-	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
-		"palette and canvas do not overlap, %s vs %s" % [palette.get_global_rect(), canvas.get_global_rect()])
+	_expect(not palette.visible and not panel.find_child("PaintAssign", true, false).visible
+		and not panel.find_child("PaintSample", true, false).visible
+		and not panel.find_child("PaintMaterialPickerWrap", true, false).visible,
+		"Pixel removes material-assignment controls and palette")
+	var save_button: Button = panel.find_child("PaintSave", true, false)
+	_expect(save_button.visible and not save_button.disabled,
+		"Pixel exposes Save Paint for its editable texture")
+	_expect(not _rects_overlap(actions_row.get_global_rect(), canvas.get_global_rect()),
+		"compact Pixel actions do not overlap the larger canvas")
+	var pixel_canvas_height := canvas.size.y
+	var pixel_help: Label = panel.find_child("PaintHelp", true, false)
+	_expect(pixel_help.visible and pixel_help.text.contains("Save Paint"),
+		"editable Pixel texture has visible painting and saving guidance")
 	var face_label: Label = panel.find_child("PaintTarget", true, false).get_child(2) as Label
 	_expect(face_label != null and face_label.text.begins_with("%s · 1 face · " % solid.name)
 		and face_label.text.ends_with(paint.selected_material_summary()),
@@ -895,6 +904,17 @@ func _check_canvas_letterbox_and_press() -> void:
 		"the live hint matches the platform rotate modifier, got %s" % hint.text)
 	paint.tool = SlabPaint.Tool.MATERIAL_UV
 	panel.refresh()
+	await process_frame
+	_expect(palette.visible and panel.find_child("PaintAssign", true, false).visible
+		and panel.find_child("PaintSample", true, false).visible
+		and panel.find_child("PaintMaterialPickerWrap", true, false).visible,
+		"Material/UV restores material placement controls")
+	_expect(not save_button.visible and not pixel_help.visible,
+		"Material/UV hides pixel-only save controls and guidance")
+	_expect(pixel_canvas_height > canvas.size.y + 40.0,
+		"Pixel gives the recovered control rows to the image canvas")
+	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
+		"Material/UV palette stays above its canvas")
 	var fit_uv: Button = panel.find_child("PaintFitUv", true, false)
 	_expect(fit_uv != null and fit_uv.visible, "Material/UV exposes an explicit Fit UV control")
 	_expect(fit_uv != null and fit_uv.position.x >= 8.0 and fit_uv.position.x + fit_uv.size.x <= canvas.size.x - 7.0,

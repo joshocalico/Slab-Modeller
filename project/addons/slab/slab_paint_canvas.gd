@@ -28,6 +28,10 @@ var _uv_center := Vector2(0.5, 0.5)
 var _uv_pixels_per_unit: float = 100.0
 var _uv_pan := Vector2.ZERO
 var _uv_signature := ""
+var show_pixel_uv: bool = false:
+	set(value):
+		show_pixel_uv = value
+		queue_redraw()
 
 
 func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
@@ -201,7 +205,7 @@ func _draw() -> void:
 	if tex != null:
 		draw_texture_rect(tex, fitted, false)
 	var uvs: PackedVector2Array = _paint.selected_uvs() if _paint != null else PackedVector2Array()
-	if uvs.size() >= 2:
+	if show_pixel_uv and uvs.size() >= 2:
 		var color := Color(0.95, 0.82, 0.28)
 		if SlabPaintUv.crosses_wrap(uvs):
 			color = Color(0.95, 0.45, 0.2)
