@@ -44,9 +44,6 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Face": [
 			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "align_face",
 		],
-		"UV": [
-			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset", "uv_unwrap",
-		],
 		"Selection": SELECTION_IDS,
 	},
 }
@@ -126,7 +123,8 @@ func _check_mode_sections(actions: RefCounted, rows: Array[Dictionary]) -> void:
 			else:
 				_expect(section["fields"].is_empty(), "the %s section carries no fields" % heading)
 	for row in rows:
-		_expect(placed.has(row["id"]), "%s is shown in at least one mode" % row["id"])
+		_expect(placed.has(row["id"]) or SlabActions.section_of(row) == SlabActions.SECTION_UV,
+			"%s is shown in modelling or reserved for Surface Paint" % row["id"])
 	_expect(SlabActions.section_of(actions.find("select_loop")) == "Edge", "Select Loop is an Edge row")
 	_expect(SlabActions.section_of(actions.find("select_ring")) == "Edge", "Select Ring is an Edge row")
 

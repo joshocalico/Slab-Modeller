@@ -165,6 +165,20 @@ func _run() -> void:
 	paint_inspector_scroll.ensure_control_visible(panel.find_child("PaintMapping", true, false))
 	await process_frame
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-mapping", "capture_rect": panel.get_global_rect()}, "after")
+	var repeat_u: SpinBox = panel.find_child("paint_uv_repeat_u", true, false).get_child(1) as SpinBox
+	var repeat_v: SpinBox = panel.find_child("paint_uv_repeat_v", true, false).get_child(1) as SpinBox
+	repeat_u.get_line_edit().text = "2"
+	repeat_v.get_line_edit().text = "3"
+	var before_quick_repeat: PackedByteArray = solid.get("data")
+	await _click(_button_named(panel, "Repeat ×2"))
+	_check(panel.get("_actions").uv_scale == Vector2(4.0, 6.0) and repeat_u.value == 4.0 and repeat_v.value == 6.0,
+		"Repeat ×2 flushes pending U/V text and updates both fields")
+	await _click(_button_named(panel, "Repeat ÷2"))
+	_check(panel.get("_actions").uv_scale == Vector2(2.0, 3.0) and repeat_u.value == 2.0 and repeat_v.value == 3.0,
+		"Repeat ÷2 updates model and fields consistently")
+	await _history_shortcut(panel, false)
+	await _history_shortcut(panel, false)
+	_check(solid.get("data") == before_quick_repeat, "two quick-repeat Undos restore exact UV data")
 	await _pending_uv_value(panel, solid, selection)
 	var before: PackedByteArray = solid.get("data")
 	await _uv_gesture(canvas, true)

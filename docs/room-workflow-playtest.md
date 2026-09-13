@@ -184,3 +184,15 @@ Godot's material picker search accepted StandardMaterial3D followed by Down and 
 Pixel exposes only an Image section for image size; Mapping state, density, and Unwrap stay in Material / UV. Native inspection confirmed the existing 256-pixel artwork reports a read-only size. Mapping and the lower placement controls remain reachable by scrolling the shared inspector at the compact dock height.
 
 The final rendered regression passed with zero failures. It checks that Unwrap changes UV loops, centers their canvas bounds within two pixels, updates the Mapping label, and preserves a deliberately different Brush resource. The full slab-verify and documentation link checks passed. The regression capture uses a diagnostic brush and is retained as test evidence rather than a guide illustration.
+
+## One surface-editing workspace
+
+Native Face mode now shows geometry commands and a collapsed Selection disclosure, with no duplicate material chips or UV settings. Selecting the roof's top face and starting Align Face revealed its Oppose normals and Cancel controls. Cancel returned to the compact Face layout without changing the scene.
+
+Opened Surface Paint, typed Repeat U 2 and Repeat V 3 without Enter, scrolled to Placement actions, and clicked Repeat ×2. The roof texture and canvas changed immediately. Save and a read-only reload found top face 1 at repeats 4 and 6, with unchanged volume 3.87238744273782. Repeat ÷2 and Save produced repeats 2 and 3. Two native Undo actions and Save restored the exact scene, including repeats 1 and 1.
+
+Pixel still showed its image and brush controls separately. Scrolling exposed Radius, Opacity, and Show UV. Returning to Material / UV and then Face retained the modelling context. The compact Paint inspector requires scrolling to reach quick-repeat actions at this dock height. The native status used the older UV Larger label, so the action labels now match Repeat ×2 and Repeat ÷2.
+
+The Face panel reference image was replaced with the rendered editor capture. The house tutorial now uses New StandardMaterial3D, Inspector editing, and Assign for each region; it also explicitly removes or hides the Subtract cutter. The revised painting steps rendered cleanly in the browser.
+
+The final panel and Paint editor regressions reported zero failures. The final full verifier passed after the legacy-control cleanup and status-label correction. Documentation links and the website build passed. The saved Signal Foundry scene has no diff.

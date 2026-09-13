@@ -44,7 +44,7 @@ signal create_settings_changed
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
 const SECTION_UV := "UV"
-const SECTION_ORDER: Array = [SECTION_CREATE, "Object", "Vertex", "Edge", "Face", SECTION_UV, SECTION_SELECTION]
+const SECTION_ORDER: Array = [SECTION_CREATE, "Object", "Vertex", "Edge", "Face", SECTION_SELECTION]
 
 const BOOLEAN_UNION := 0
 const BOOLEAN_SUBTRACT := 1
@@ -421,30 +421,6 @@ func _positive_amount_op(method: String) -> Dictionary:
 	return { "method": method, "args": [_selection.ids, _positive_amount()] }
 
 
-func add_material() -> void:
-	var target: Node3D = _selection.solid
-	if target == null:
-		_report("Select a solid to add a material.")
-		return
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.72, 0.55, 0.38)
-	mat.roughness = 0.7
-	var before: Array = (target.get("materials") as Array).duplicate()
-	var after: Array = before.duplicate()
-	after.append(mat)
-	var prev_slot: int = material_slot
-	target.set("materials", after)
-	material_slot = after.size() - 1
-	if _undo != null:
-		_undo.create_action("Slab Add Material", UndoRedo.MERGE_DISABLE, target)
-		_undo.add_do_property(target, "materials", after)
-		_undo.add_undo_property(target, "materials", before)
-		_undo.add_do_property(self, "material_slot", material_slot)
-		_undo.add_undo_property(self, "material_slot", prev_slot)
-		_undo.commit_action(false)
-	_report(_selection.describe())
-
-
 func clamp_material_slot() -> void:
 	var target: Node3D = _selection.solid
 	if target == null:
@@ -520,7 +496,7 @@ func _uv_op() -> Dictionary:
 
 
 func _uv_scaled(factor: float) -> Dictionary:
-	uv_scale = Vector2(clampf(uv_scale.x * factor, 0.01, 64.0), clampf(uv_scale.y * factor, 0.01, 64.0))
+	uv_scale = Vector2(clampf(uv_scale.x * factor, 0.05, 64.0), clampf(uv_scale.y * factor, 0.05, 64.0))
 	return _uv_op()
 
 
@@ -705,8 +681,8 @@ func _build() -> Array[Dictionary]:
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),
-		_row("uv_scale_up", "UV Larger", "ZoomMore", face, 1, "Doubles the UV scale and applies it.", 0, _uv_scaled.bind(2.0)),
-		_row("uv_scale_down", "UV Smaller", "ZoomLess", face, 1, "Halves the UV scale and applies it.", 0, _uv_scaled.bind(0.5)),
+		_row("uv_scale_up", "Repeat ×2", "ZoomMore", face, 1, "Doubles the UV scale and applies it.", 0, _uv_scaled.bind(2.0)),
+		_row("uv_scale_down", "Repeat ÷2", "ZoomLess", face, 1, "Halves the UV scale and applies it.", 0, _uv_scaled.bind(0.5)),
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
 		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),

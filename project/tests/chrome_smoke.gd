@@ -113,30 +113,6 @@ func case_loop_cut_controls_preserve_edge_settings() -> void:
 	panel.free()
 
 
-func case_uv_settings_are_bounded_and_reports_survive_refresh() -> void:
-	var selection := SlabSelection.new()
-	selection.mode = SlabSelection.Mode.FACE
-	var actions := SlabActions.new(selection)
-	var panel := SlabPanel.new()
-	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	root.add_child(panel)
-	var toggle := panel.find_child("SectionUV", true, false) as Button
-	toggle.button_pressed = true
-	toggle.toggled.emit(true)
-	var scroll := panel.find_child("SettingsScroll", true, false) as ScrollContainer
-	expect(scroll != null and scroll.get_combined_minimum_size().y <= 100.0,
-		"expanded UV fields stay inside a bounded settings scroller, got %s" % (scroll.get_combined_minimum_size().y if scroll != null else -1))
-	expect(panel.find_child("uv_pixels_per_meter", true, false) != null and panel.find_child("uv_texture_resolution", true, false) != null,
-		"the bounded UV scroller contains density and texture resolution")
-	actions.reported.emit("Unwrapped 2 island(s); added 1 automatic cut(s).")
-	panel.refresh()
-	var status := panel.find_child("Status", true, false) as Label
-	expect(status != null and status.text.begins_with("Unwrapped 2"), "an undo refresh preserves the Unwrap result status")
-	actions.status_reset_requested.emit()
-	expect(status.text == selection.describe(), "ending a modal clears persistent preview guidance")
-	panel.free()
-
-
 func case_every_text_control_declares_a_font_size() -> void:
 	for mode in MODES:
 		var panel := _build_panel(1.0, mode)
@@ -220,28 +196,6 @@ func case_create_tooltips_follow_the_fields() -> void:
 	steps.value_changed.emit(steps.value)
 	expect(stair.tooltip_text.contains("20 steps") and not stair.tooltip_text.contains("8 steps"),
 		"turning the Steps spin rewrites the Stair tooltip, got %s" % stair.tooltip_text)
-	panel.free()
-
-
-func case_uv_quick_actions_update_the_spins() -> void:
-	var selection := SlabSelection.new()
-	var actions := SlabActions.new(selection)
-	var panel := SlabPanel.new()
-	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	selection.mode = SlabSelection.Mode.FACE
-	selection.set_ids(PackedInt64Array([7]))
-	var scale_x: SpinBox = _spins(panel.find_child("uv_scale_x", true, false))[0]
-	var rotation: SpinBox = _spins(panel.find_child("uv_rotation", true, false))[0]
-	expect(is_equal_approx(scale_x.value, 1.0), "UV scale X starts at 1")
-	actions.run("uv_scale_up")
-	expect(is_equal_approx(scale_x.value, 2.0), "UV Larger writes 2 into the spin, got %s" % scale_x.value)
-	actions.run("uv_scale_up")
-	expect(is_equal_approx(scale_x.value, 4.0), "a second UV Larger writes 4 into the spin, got %s" % scale_x.value)
-	actions.run("uv_rotate")
-	expect(is_equal_approx(rotation.value, 90.0), "UV Rotate writes 90 into the spin, got %s" % rotation.value)
-	actions.run("uv_reset")
-	expect(is_equal_approx(scale_x.value, 1.0) and is_equal_approx(rotation.value, 0.0),
-		"UV Reset restores the spins, got scale %s rotation %s" % [scale_x.value, rotation.value])
 	panel.free()
 
 
@@ -371,14 +325,13 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel.find_child("Settings", true, false)).size() == 7, "Face mode keeps five UV transform spins and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
+	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to Surface Paint")
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
 	expect(_label_for(panel, "Face") != null and panel.find_child("SectionSelection", true, false) != null,
 		"Face mode renders the Face and Selection headings")
-	expect(panel.find_child("SectionUV", true, false) != null, "Face mode renders a UV heading")
-	var uv_wrap: Node = panel.find_child("UvFields", true, false)
-	expect(uv_wrap != null and not panel.find_child("Settings", true, false).visible, "UV spins start hidden")
+	expect(panel.find_child("SectionUV", true, false) == null and panel.find_child("MaterialChips", true, false) == null,
+		"Face mode does not duplicate Surface Paint material and UV controls")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
 	var extrude: Button = _button_for(panel, "Extrude")
 	expect(extrude != null and extrude.text == "Extrude", "Extrude shows its name")
@@ -763,9 +716,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	selection.set_objects([solid])
 	selection.set_ids(PackedInt64Array([solid.call("get_faces")[0]]))
 	expect(not previews.visible and not settings.visible, "face selection keeps secondary settings collapsed")
-	var materials: Button = panel.find_child("SectionUV", true, false)
-	materials.button_pressed = true
-	expect(not previews.visible and settings.visible, "opening Materials & UV reveals selected face settings")
+	expect(not previews.visible and not settings.visible, "face selection keeps UV settings in Surface Paint")
 	selection.operation_preview = {"kind": 1}
 	actions.operation_active = true
 	actions.operation_state_changed.emit()
@@ -773,7 +724,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 		"an active preview exposes one amount field")
 	actions.operation_active = false
 	actions.operation_state_changed.emit()
-	expect(settings.visible, "leaving preview restores regular settings")
+	expect(not settings.visible, "leaving preview keeps duplicate Face settings hidden")
 	panel.free()
 	solid.free()
 
@@ -909,84 +860,6 @@ func case_face_distance_accepts_a_negative_extrude() -> void:
 	expect(is_equal_approx(value.amount, -1.0), "typing -1 keeps -1, got %s" % value.amount)
 	expect(is_equal_approx(amount.value, -1.0), "the spin does not clamp -1 up to 0.05")
 	panel.free()
-
-
-func case_add_material_defers_chip_rebuild() -> void:
-	var source: String = _source_of("slab_panel.gd")
-	var add: int = source.find("func _add_material")
-	expect(add != -1, "_add_material exists")
-	expect(source.find("call_deferred(\"_refresh_material_chips\")", add) != -1,
-		"Add Material defers chip rebuild so it does not free the emitting button")
-	expect(source.find("queue_free()", source.find("func _refresh_material_chips")) != -1,
-		"chip refresh retires rows with queue_free")
-	expect(_source_of("slab_actions.gd").contains("func add_material"),
-		"material array edits go through SlabActions for undo")
-
-
-func case_add_material_keeps_plus_alive_during_pressed() -> void:
-	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
-		expect(false, "SlabSolid is built")
-		return
-	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
-	root.add_child(solid)
-	expect(solid.call("make_box", Vector3(2, 2, 2)) == 0, "material-chip box builds")
-	var selection := SlabSelection.new()
-	var actions := SlabActions.new(selection)
-	var panel := SlabPanel.new()
-	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	selection.set_objects([solid])
-	selection.mode = SlabSelection.Mode.FACE
-	var add: Button = panel.find_child("add_material", true, false)
-	expect(add != null, "Face mode shows Add Material when a solid is selected")
-	if add == null:
-		panel.free()
-		solid.free()
-		return
-	var before: int = (solid.get("materials") as Array).size()
-	add.pressed.emit()
-	expect(is_instance_valid(add), "Add Material is not freed while emitting pressed")
-	expect((solid.get("materials") as Array).size() == before + 1, "Add Material still appends a slot")
-	panel.free()
-	solid.free()
-
-
-func case_material_undo_and_redo_refresh_the_palette() -> void:
-	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
-		expect(false, "SlabSolid is built")
-		return
-	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
-	root.add_child(solid)
-	expect(solid.call("make_box", Vector3(2, 2, 2)) == 0, "palette box builds")
-	var selection := SlabSelection.new()
-	var undo := SlabTestUndo.new()
-	var actions := SlabActions.new(selection, undo)
-	var panel := SlabPanel.new()
-	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	panel.bind_undo(undo)
-	selection.set_objects([solid])
-	selection.mode = SlabSelection.Mode.FACE
-	actions.add_material()
-	actions.add_material()
-	panel.refresh()
-	expect(_chip_count(panel) == 2, "two adds show two chips, got %d" % _chip_count(panel))
-	expect(actions.material_slot == 1, "the new slot is active, got %d" % actions.material_slot)
-	var first: Button = panel.find_child("material_0", true, false)
-	expect(first != null, "the first chip exists")
-	first.pressed.emit()
-	panel.refresh()
-	expect(actions.material_slot == 0, "clicking the first chip selects slot 0")
-	undo.undo()
-	panel.refresh()
-	expect((solid.get("materials") as Array).size() == 1, "undo leaves one material, got %d" % (solid.get("materials") as Array).size())
-	expect(_chip_count(panel) == 1, "the palette drops the undone chip, got %d" % _chip_count(panel))
-	expect(actions.material_slot == 0, "the active slot is clamped or restored to 0, got %d" % actions.material_slot)
-	undo.redo()
-	panel.refresh()
-	expect((solid.get("materials") as Array).size() == 2, "redo restores both materials, got %d" % (solid.get("materials") as Array).size())
-	expect(_chip_count(panel) == 2, "redo restores the second chip, got %d" % _chip_count(panel))
-	expect(panel.find_child("material_1", true, false) != null, "slot 1 is a chip again")
-	panel.free()
-	solid.free()
 
 
 func case_status_wraps_a_long_recovery_message() -> void:

@@ -206,9 +206,10 @@ func _check_texture_resolution_coherence() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var actions := SlabActions.new(selection)
+	var panel_undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, panel_undo)
 	paint.enter()
 	var flat := StandardMaterial3D.new()
 	flat.albedo_color = Color(0.2, 0.3, 0.4)
@@ -831,9 +832,10 @@ func _check_canvas_letterbox_and_press() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var actions := SlabActions.new(selection)
+	var panel_undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, panel_undo)
 	paint.enter()
 	var shared := StandardMaterial3D.new()
 	shared.resource_name = "Limestone"
@@ -1022,6 +1024,24 @@ func _check_canvas_letterbox_and_press() -> void:
 		"Material/UV exposes mapping state, density, and Unwrap")
 	_expect(panel.find_child("PaintPlacementTitle", true, false).text == "Placement",
 		"Mapping and Placement are distinct inspector sections")
+	var repeat_u: SpinBox = panel.find_child("paint_uv_repeat_u", true, false).get_child(1) as SpinBox
+	var repeat_v: SpinBox = panel.find_child("paint_uv_repeat_v", true, false).get_child(1) as SpinBox
+	repeat_u.get_line_edit().text = "2"
+	repeat_v.get_line_edit().text = "3"
+	var repeat_up: Button
+	var repeat_down: Button
+	for button in _buttons_under(panel.find_child("PaintUvControls", true, false)):
+		if String(button.get_meta("slab_label", "")) == "Repeat ×2": repeat_up = button
+		if String(button.get_meta("slab_label", "")) == "Repeat ÷2": repeat_down = button
+	var repeat_undo_before: int = panel_undo.actions.size()
+	repeat_up.pressed.emit()
+	_expect(actions.uv_scale == Vector2(4.0, 6.0) and repeat_u.value == 4.0 and repeat_v.value == 6.0
+		and panel_undo.actions.size() == repeat_undo_before + 1,
+		"Repeat ×2 flushes typed U/V fields and applies one undoable edit")
+	repeat_down.pressed.emit()
+	_expect(actions.uv_scale == Vector2(2.0, 3.0) and repeat_u.value == 2.0 and repeat_v.value == 3.0
+		and panel_undo.actions.size() == repeat_undo_before + 2,
+		"Repeat ÷2 halves both fields and applies one undoable edit, got %s fields %s/%s undo %s" % [actions.uv_scale, repeat_u.value, repeat_v.value, panel_undo.actions.size() - repeat_undo_before])
 	mapping_resolution.get_line_edit().text = "777"
 	panel.call("_commit_paint_mapping_inputs")
 	_expect(actions.uv_texture_resolution == 777,

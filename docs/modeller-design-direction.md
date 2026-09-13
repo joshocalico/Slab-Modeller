@@ -28,15 +28,15 @@ Selection conversion also matters during authoring. Rounding a roof requires its
 
 ## Consolidate surface editing without losing capabilities
 
-The legacy Materials & UV panel and Surface Paint share scale, offset, rotation, Apply, Reset, and quarter-turn actions. Consolidating those controls requires moving three substantive controls into Surface Paint first: Unwrap, Pixels/metre, and Texture px. Texture px also determines the blank image size for Pixel's Make Unique workflow, so it must be reachable there.
+Surface Paint owns material choice, Assign, UV placement, and Mapping. Face mode keeps geometry commands and the Selection disclosure. Its right-hand settings appear for Align Face rather than repeating Paint's fields.
 
-Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain useful and must stay available.
+Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions.
 
 Preserve brush identity across solids. Surface Paint chooses a material resource, then Assign applies it to selected faces. A target-local numeric slot is not a transferable brush. The material picker and palette both choose the Brush without changing the solid. Assign or a viewport paint click applies it. Sample adopts the selected material and UV values.
 
-The legacy Add Material creates a blank, unassigned slot. Decide on an explicit New Material workflow before removing it or rewriting the house tutorial around loaded resources. UV Larger and UV Smaller are expressible through Repeat fields or canvas scaling, but their one-click doubling and halving behavior should be retained if it earns space in the revised layout.
+New StandardMaterial3D in the picker replaces adding anonymous blank slots. Click its preview to edit it in Godot's Inspector, then Assign. Repeat ×2 and Repeat ÷2 preserve the old doubling and halving shortcuts beside Placement. These commit pending typed fields before applying one undoable edit.
 
-Update the house, unwrap, pixel-paint, and panel-reference pages together with the control migration. Current tests also depend on density, resolution, slot creation, and the legacy action inventory. Tests must follow the replacement workflow rather than preserve obsolete controls.
+The house tutorial follows this order: assign a wall material to all faces, select the roof and assign another resource, then repeat for the gables. It no longer relies on numeric material slots or the removed disclosure. The native room-workflow pass verified normal Face mode, Align Face settings and cancellation, quick repeats, saved UV values, and exact Undo restoration after this consolidation.
 
 ## Paint layout comparison
 

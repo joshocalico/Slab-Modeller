@@ -4,14 +4,14 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes keep their geometry command group open. **Materials & UV** in Face mode and **Selection** in Vertex, Edge, and Face modes are collapsed by default. Expand either heading to use its secondary commands. The panel remembers both choices while you switch selection modes during the editor session.
+The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **Surface Paint** for materials and UVs.
 
 Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel in Face mode, with the Materials and UV and Selection headings collapsed."
-  caption="Default Face mode. Geometry commands stay open. Materials & UV and Selection start collapsed."
+  alt="The Slab panel in Face mode, with the Selection heading collapsed and Surface Paint available in the header."
+  caption="Default Face mode. Geometry commands stay open. Selection starts collapsed; material and UV controls live in Surface Paint."
 />
 
 The header keeps the current selection visible, for example `1 face · Box`. Long names shorten with an ellipsis; the tooltip contains the full summary. The status line below shows tool instructions, results, and recovery messages without replacing the header selection.
@@ -29,9 +29,7 @@ The settings change with the current mode and active command. In Object mode, ch
 | Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
 | Cuts, Centre % | Edge | Count and position for Loop Cut. |
 | Target, Second solid, Swap operands | Object, with exactly 2 solids selected | Shows which solid receives a Boolean result and lets you exchange the operand order. The second solid is the Subtract cutter. |
-| UV scale, offset, rotation | Face, with **Materials & UV** expanded and faces selected | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
-| Pixels / metre, Texture px | Face, with **Materials & UV** expanded and faces selected | Physical density and normalization for Unwrap. |
-| Material palette | Face, with **Materials & UV** expanded and faces selected | The active material slot and the control that appends a material. **Set Material** assigns the active slot to selected faces. |
+| Oppose normals | Face, during Align Face | Chooses whether the source faces toward or away from the target normal. |
 
 There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting one of those commands replaces the idle settings with its preview controls.
 
@@ -128,20 +126,6 @@ Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
 
 See [Change topology](/guide/how-to/change-topology) for the selection rules and undo results of Connect, Dissolve, Subdivide, and Merge.
 
-## Materials & UV
-
-Shown as a collapsed heading in Face mode. Expand it to reveal these commands and the right-hand **Material & UV settings** for the selected faces.
-
-| Command | Needs | Result |
-| --- | --- | --- |
-| Set Material | 1 face | Assigns the active material chip to the faces. |
-| Apply UV | 1 face | Writes the UV scale, offset, and rotation settings. |
-| UV Larger | 1 face | Doubles the UV scale and applies it. |
-| UV Smaller | 1 face | Halves the UV scale and applies it. |
-| UV Rotate | 1 face | Turns the UV by 90 degrees. |
-| UV Reset | 1 face | Returns the UV to scale one and no rotation. |
-| Unwrap | 1 face | Unfolds the selected region at the requested density using marked and automatic seams. |
-
 ## Surface Paint
 
 **Surface Paint** in the header opens a separate workspace and switches to Face mode. Escape closes it. **Material / UV** assigns materials and places the selected face on the texture. **Pixel** paints the bound Texture's albedo on the canvas or directly in the 3D view.
@@ -169,6 +153,7 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Texture px | Sets the reference atlas width for Unwrap. It does not resize existing artwork. |
 | Unwrap | Creates seam-aware UV islands at the requested density and resets placement. An atlas that cannot fit leaves the solid unchanged and reports a suggested resolution. |
 | Repeat U, Repeat V | Sets texture repeats from 0.05 to 64. |
+| Repeat ×2, Repeat ÷2 | Doubles or halves both repeat values within the repeat limits and applies them in one undoable edit. Pending typed placement values are included. |
 | Offset U, Offset V | Moves the texture from -64 to 64. |
 | Rotation | Sets rotation from -360° to 360°. |
 | Apply UV | Writes the numeric UV values to the selected face. |

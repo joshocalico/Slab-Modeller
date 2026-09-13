@@ -30,7 +30,6 @@ var _last_report := ""
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
 var _settings_fields: HFlowContainer
-var _settings_chips: HFlowContainer
 var _buttons: Dictionary = {}
 var _create_group: ButtonGroup
 var _create_focus: StringName = &"make_box"
@@ -38,7 +37,6 @@ var _create_focus: StringName = &"make_box"
 var _built_mode: int = -1
 var _expanded_sections: Dictionary = {}
 var _settings_title: Label
-var _uv_wrap: HFlowContainer
 var _undo_hook: Object = null
 var _paint: RefCounted
 var _model_body: BoxContainer
@@ -243,10 +241,7 @@ func _operation_controls() -> Control:
 
 func _show_settings() -> bool:
 	if _selection.mode == SlabSelection.Mode.FACE:
-		if _selection.ids.is_empty():
-			return false
-		if not _actions.snap_align_active and not _expanded_sections.get(SlabActions.SECTION_UV, false):
-			return false
+		return not _selection.ids.is_empty() and _actions.snap_align_active and not _actions.operation_active
 	return not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _selection.ids.size() >= 2 or _actions.snap_align_active)
 
 
@@ -325,7 +320,6 @@ func refresh() -> void:
 		_refresh_settings()
 	_refresh_buttons()
 	_settings.visible = _show_settings()
-	_refresh_material_chips()
 	_refresh_selection_context()
 	set_status(_last_report if _last_report != "" else _selection.describe())
 	if _paint != null and _paint.active:
@@ -360,7 +354,7 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for section in sections:
 		var heading: String = section["heading"]
 		var flow := _section_flow(section["rows"])
-		if heading in [SlabActions.SECTION_UV, SlabActions.SECTION_SELECTION]:
+		if heading == SlabActions.SECTION_SELECTION:
 			_command_column.add_child(_section_toggle(heading, flow))
 		else:
 			_command_column.add_child(_section_label(heading))
@@ -393,7 +387,6 @@ func _refresh_settings() -> void:
 	if mode == SlabSelection.Mode.OBJECT:
 		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else ("Boolean operands" if _selection.objects.size() == 2 else "New %s" % _create_label())))
 		_settings_title.visible = true
-		_uv_wrap = null
 		if _actions.snap_align_active:
 			_add_snap_align_settings()
 		elif _actions.array_active:
@@ -452,38 +445,12 @@ func _refresh_settings() -> void:
 			create.name = "CreateShape"
 			_settings_fields.add_child(create)
 	elif mode == SlabSelection.Mode.FACE:
-		_settings_title.text = "Align Face" if _actions.snap_align_active else "Material & UV settings"
-		_settings_title.visible = true
 		if _actions.snap_align_active:
+			_settings_title.text = "Align Face"
+			_settings_title.visible = true
 			_add_snap_align_settings()
-			_uv_wrap = null
 		else:
-			_uv_wrap = HFlowContainer.new()
-			_uv_wrap.name = "UvFields"
-			_uv_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			_uv_wrap.add_theme_constant_override("h_separation", 10)
-			_uv_wrap.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
-				_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
-			, "", &"uv_scale_x"))
-			_uv_wrap.add_child(_spin("UV scale Y", 0.05, 64.0, 0.05, _actions.uv_scale.y, func(v: float) -> void:
-				_actions.uv_scale = Vector2(_actions.uv_scale.x, v)
-			, "", &"uv_scale_y"))
-			_uv_wrap.add_child(_spin("UV offset X", -64.0, 64.0, 0.05, _actions.uv_offset.x, func(v: float) -> void:
-				_actions.uv_offset = Vector2(v, _actions.uv_offset.y)
-			, "", &"uv_offset_x"))
-			_uv_wrap.add_child(_spin("UV offset Y", -64.0, 64.0, 0.05, _actions.uv_offset.y, func(v: float) -> void:
-				_actions.uv_offset = Vector2(_actions.uv_offset.x, v)
-			, "", &"uv_offset_y"))
-			_uv_wrap.add_child(_spin("UV rotation", -360.0, 360.0, 1.0, _actions.uv_rotation_degrees, func(v: float) -> void:
-				_actions.uv_rotation_degrees = v
-			, "", &"uv_rotation"))
-			_uv_wrap.add_child(_spin("Pixels / metre", 1, 4096, 1, _actions.uv_pixels_per_meter, func(v: float) -> void:
-				_actions.uv_pixels_per_meter = v
-			, "Density used by Unwrap.", &"uv_pixels_per_meter"))
-			_uv_wrap.add_child(_spin("Texture px", 16, 16384, 1, _actions.uv_texture_resolution, func(v: float) -> void:
-				_actions.uv_texture_resolution = int(v)
-			, "Texture resolution used to convert density into normalized UV scale.", &"uv_texture_resolution"))
-			_settings_fields.add_child(_uv_wrap)
+			_settings_title.visible = false
 	else:
 		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Weld" if mode == SlabSelection.Mode.VERTEX else "Loop cut")
 		_settings_title.visible = true
@@ -493,7 +460,6 @@ func _refresh_settings() -> void:
 			_settings_fields.add_child(_spin("Weld distance", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
 				_actions.amount = v
 			, "", &"amount"))
-		_uv_wrap = null
 	if mode == SlabSelection.Mode.EDGE and not _actions.snap_align_active:
 		_settings_fields.add_child(_spin("Cuts", 1, 32, 1, _actions.loop_count, func(v: float) -> void:
 			_actions.loop_count = int(v)
@@ -516,7 +482,6 @@ func _refresh_settings() -> void:
 		_loop_action_group.add_child(_loop_cancel)
 		_settings_fields.add_child(_loop_action_group)
 		_sync_loop_controls()
-	_refresh_material_chips()
 
 
 func _add_boolean_operands() -> void:
@@ -636,62 +601,6 @@ func _add_array_vector(label: String, key_prefix: String, value: Vector3, change
 		, "Parent-local %s %s component." % [label.to_lower(), axis.to_upper()], StringName("%s_%s" % [key_prefix, axis])))
 
 
-func _refresh_material_chips() -> void:
-	for child in _settings_chips.get_children():
-		_settings_chips.remove_child(child)
-		child.queue_free()
-	_settings_chips.visible = _selection.mode == SlabSelection.Mode.FACE
-	if _selection.mode != SlabSelection.Mode.FACE:
-		return
-	var solid: Node = _selection.solid
-	if solid == null:
-		var hint := Label.new()
-		hint.text = "Select a solid to paint materials."
-		hint.add_theme_font_size_override("font_size", _font(15))
-		hint.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
-		_settings_chips.add_child(hint)
-		return
-	_actions.clamp_material_slot()
-	var mats: Array = solid.materials
-	for i in mats.size():
-		_settings_chips.add_child(_material_chip(i, mats[i]))
-	var add := Button.new()
-	add.name = "add_material"
-	add.text = "Add Material"
-	add.icon = SlabIcons.texture("Add", _metrics.scale())
-	add.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	add.custom_minimum_size = Vector2(_scaled(CHIP_SIZE.x), _scaled(CHIP_SIZE.y))
-	add.tooltip_text = "Add a material to this solid."
-	add.focus_mode = Control.FOCUS_NONE
-	add.add_theme_font_size_override("font_size", _font(15))
-	add.pressed.connect(_add_material)
-	_settings_chips.add_child(add)
-
-
-func _material_chip(index: int, mat: Variant) -> Button:
-	var chip := Button.new()
-	chip.name = "material_%d" % index
-	chip.toggle_mode = true
-	chip.button_pressed = index == _actions.material_slot
-	chip.custom_minimum_size = Vector2(_scaled(CHIP_SIZE.x), _scaled(CHIP_SIZE.y))
-	chip.tooltip_text = "Paint with material %d." % index
-	chip.focus_mode = Control.FOCUS_NONE
-	chip.add_theme_font_size_override("font_size", _font(13))
-	if mat is StandardMaterial3D:
-		chip.self_modulate = mat.albedo_color
-	chip.icon = SlabIcons.texture("StandardMaterial3D", _metrics.scale())
-	chip.pressed.connect(func() -> void:
-		_actions.material_slot = index
-		call_deferred("_refresh_material_chips")
-	)
-	return chip
-
-
-func _add_material() -> void:
-	_actions.add_material()
-	call_deferred("_refresh_material_chips")
-
-
 func _create_label() -> String:
 	for entry in _actions.shapes.entries():
 		if StringName(entry["id"]) == _create_focus:
@@ -712,7 +621,7 @@ func _section_toggle(heading: String, flow: Control) -> Button:
 	button.focus_mode = Control.FOCUS_ALL
 	button.custom_minimum_size.y = _scaled(28.0)
 	button.add_theme_font_size_override("font_size", _font(16))
-	var caption := "Materials & UV" if heading == SlabActions.SECTION_UV else heading
+	var caption := heading
 	button.accessibility_name = caption + " commands"
 	var sync := func(open: bool) -> void:
 		button.text = ("▾  " if open else "▸  ") + caption
@@ -750,8 +659,6 @@ func _on_reported(text: String) -> void:
 	_sync_edit_fields()
 	if _paint != null and _paint.active:
 		_refresh_paint_chrome()
-	if _selection.mode == SlabSelection.Mode.FACE:
-		call_deferred("_refresh_material_chips")
 
 
 func _on_selection_changed() -> void:
@@ -794,11 +701,6 @@ func _reset_status() -> void:
 
 func _sync_edit_fields() -> void:
 	_set_spin(&"amount", _actions.amount)
-	_set_spin(&"uv_scale_x", _actions.uv_scale.x)
-	_set_spin(&"uv_scale_y", _actions.uv_scale.y)
-	_set_spin(&"uv_offset_x", _actions.uv_offset.x)
-	_set_spin(&"uv_offset_y", _actions.uv_offset.y)
-	_set_spin(&"uv_rotation", _actions.uv_rotation_degrees)
 
 
 func _set_spin(key: StringName, value: float) -> void:
@@ -886,11 +788,6 @@ func _settings_block() -> Control:
 	content.add_child(_settings_fields)
 	scroll.add_child(content)
 	_settings.add_child(scroll)
-	_settings_chips = HFlowContainer.new()
-	_settings_chips.name = "MaterialChips"
-	_settings_chips.add_theme_constant_override("h_separation", 6)
-	content.add_child(_settings_chips)
-	content.move_child(_settings_chips, 0)
 	return _settings
 
 
@@ -1284,9 +1181,18 @@ func _paint_uv_control_row() -> Control:
 	actions.add_theme_constant_override("h_separation", 4)
 	actions.add_child(_named_action("Apply UV", "ImageTexture", "Apply these UV values to the selected face.", func() -> void:
 		if _paint:
-			for spin in _spins_under(_paint_uv_controls):
-				spin.apply()
+			_commit_paint_uv_inputs()
 			_paint.apply_uv()
+	))
+	actions.add_child(_named_action("Repeat ×2", "ZoomMore", "Double both texture repeat values and apply them to the selected faces.", func() -> void:
+		_commit_paint_uv_inputs()
+		_paint.scale_uv(2.0)
+		_sync_paint_uv_input_text()
+	))
+	actions.add_child(_named_action("Repeat ÷2", "ZoomLess", "Halve both texture repeat values and apply them to the selected faces.", func() -> void:
+		_commit_paint_uv_inputs()
+		_paint.scale_uv(0.5)
+		_sync_paint_uv_input_text()
 	))
 	actions.add_child(_named_action("Reset UV", "Reload", "Reset repeats, offsets and rotation on the selected face.", func() -> void:
 		if _paint:
@@ -1780,6 +1686,26 @@ func _commit_paint_mapping_inputs() -> void:
 		return
 	for spin in _spins_under(_paint_mapping_controls):
 		spin.apply()
+		spin.get_line_edit().release_focus()
+
+
+func _commit_paint_uv_inputs() -> void:
+	if _paint_uv_controls == null:
+		return
+	for spin in _spins_under(_paint_uv_controls):
+		spin.apply()
+		spin.get_line_edit().release_focus()
+
+
+func _sync_paint_uv_input_text() -> void:
+	_set_spin(&"paint_uv_repeat_u", _actions.uv_scale.x)
+	_set_spin(&"paint_uv_repeat_v", _actions.uv_scale.y)
+	for key in [&"paint_uv_repeat_u", &"paint_uv_repeat_v"]:
+		var row: Node = find_child(String(key), true, false)
+		if row != null:
+			var spins := _spins_under(row)
+			if not spins.is_empty():
+				spins[0].get_line_edit().text = str(spins[0].value)
 
 
 func _sync_loop_values() -> void:

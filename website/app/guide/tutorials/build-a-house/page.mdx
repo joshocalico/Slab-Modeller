@@ -69,6 +69,7 @@ If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so 
 2. Move that cutter so it pokes through one wall. It should stick out on both sides of the wall.
 3. Click the house, then Shift-click the cutter. Confirm the panel names the house **Target** and the cutter **Second solid**; use **Swap operands** if needed.
 4. In **Object**, click **Subtract**.
+5. Hide or delete the cutter node so it does not fill the opening in the view.
 
 <Figure
   src="/img/house-03.png"
@@ -78,24 +79,31 @@ If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so 
 
 ## Paint three materials
 
-1. Click the house `SlabSolid` in the Scene tree.
-2. Press <kbd>4</kbd> for Face mode.
-3. Expand **Materials & UV**. In **Material & UV settings**, click the plus chip until you see three material chips.
-4. In the inspector, set slot 0 to a wall colour. Set slot 1 to a roof colour. Set slot 2 to a darker gable colour. Assign a repeating albedo on each if you have one.
+Start with one wall material on the whole house, then replace it on the roof and gables.
 
-Faces still use slot 0.
+1. Click the house `SlabSolid` in the Scene tree and press <kbd>4</kbd> for Face mode.
+2. Click a house face, then press <kbd>A</kbd> in the 3D view to select every face.
+3. Open **Surface Paint** and stay on **Material / UV**.
+4. Open the material picker and choose **New StandardMaterial3D**.
+5. Click its preview to open Godot's Inspector. Set **Albedo > Color** to a wall colour and choose a repeating **Albedo > Texture** if you have one.
+6. Click **Assign**. The house now uses the wall material.
 
-5. Click a roof face. Expand **Selection**, then click **Grow** until the vault is selected.
-6. Expand **Materials & UV**. Click chip 1, then click **Set Material**.
-7. Click a gable face, the flat end of the arch. Click chip 2, then **Set Material**.
+For the roof:
+
+1. Click the highlighted **Face** button to leave Surface Paint.
+2. Click a roof face, then Shift-click the remaining curved roof faces. Orbit the house to reach the back. Keep the flat gables out of this selection.
+3. Open **Surface Paint**, create another **New StandardMaterial3D**, and click its preview.
+4. Set its albedo to a roof colour or texture, then click **Assign**.
+
+Repeat that sequence for the flat gable faces using a darker material. Select faces in Face mode, then create and Assign their material in Surface Paint. Choosing a resource previews it; Assign changes the selected faces.
 
 <Figure
   src="/img/house-04.png"
   alt="The house with plaster walls, a terracotta roof, and darker gables."
-  caption="Slot 0 on the walls. Slot 1 on the vault. Slot 2 on the gables."
+  caption="Separate materials on the walls, vault, and gables."
 />
 
-Expand **Materials & UV**. In **Material & UV settings**, set **UV scale X** and **UV scale Y** to 2, then click **Apply UV** on the roof if the pattern is huge. **UV Larger** doubles the scale on the selected faces.
+With the roof faces selected in Surface Paint, set **Repeat U** and **Repeat V** to 2, then click **Apply UV** if the pattern is too large. **Repeat ×2** doubles both repeat values in one edit, making the texture pattern denser.
 
 ## Check
 

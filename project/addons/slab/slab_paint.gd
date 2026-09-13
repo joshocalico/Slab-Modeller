@@ -422,6 +422,12 @@ func apply_uv() -> void:
 		changed.emit()
 
 
+func scale_uv(factor: float) -> void:
+	if _actions != null:
+		_actions.run("uv_scale_up" if factor > 1.0 else "uv_scale_down")
+		changed.emit()
+
+
 func reset_uv() -> void:
 	if _actions != null:
 		_actions.run("uv_reset")
