@@ -117,3 +117,12 @@ At the compact dock size in the 1225 × 768 native editor, switching Material/UV
 Paint now derives a shared minimum from the larger tool layout. Hidden Material/UV controls still contribute to that minimum, while Pixel uses the extra space for the canvas. After restarting Godot, Material/UV and Pixel kept the divider at Y=409. Reopening directly into Pixel retained that minimum. Selected a Teal Steel roof face and switched both tools with the texture loaded; the viewport remained stationary. Exiting Paint returned the compact modelling layout. No scene changes were made.
 
 The focused chrome regression checks both tool directions, Pixel-first entry at 1.5× scale, and restoration of the modelling minimum. Paint smoke and the full slab-verify passed. Entering and leaving the Paint workspace can still resize the viewport; this change addresses switching tools inside it.
+
+
+## Persistent selection context
+
+Closing Paint left only “Surface Paint closed.” in the status line, hiding the selected object and face count until the next selection change. Added a compact selection summary in the existing header space. Element counts precede the object name so long names cannot hide the count. The existing status line continues to show operation guidance and recovery messages.
+
+In a restarted native editor, selected the roof face, entered Paint, and closed it. The header retained “1 face · MaintenanceBayRoof” beside the mode controls. Started Extrude, entered -1, and saw the crossing-face refusal with Apply disabled while the header retained the target. Cancelled and saved with no scene diff.
+
+Chrome coverage checks reports, selection changes, renames, clearing selection, and long names in a constrained dock. Panel smoke and the full slab-verify passed. The rendered panel editor replay also passed. Regenerated and inspected the Face, Object, Extrude preview, and Boolean panel captures through that editor workflow.

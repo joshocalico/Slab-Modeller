@@ -89,6 +89,7 @@ func _init() -> void:
 	_expect(selection.count() == 0, "count follows the cleared ids")
 	_expect(selection.solid == null, "a fresh selection has no solid")
 	_expect(selection.describe() == "No solid selected.", "status line reads as plain words")
+	_expect(selection.compact_description() == "No solid selected", "compact selection context omits viewport guidance")
 
 	var blocked: String = actions.disabled_reason(actions.find("extrude_faces"))
 	_expect(blocked == "Extrude needs Face mode.", "wrong mode disables extrude, got %s" % blocked)

@@ -25,6 +25,7 @@ var _selection: RefCounted
 var _actions: RefCounted
 var _metrics: RefCounted
 var _status: Label
+var _selection_context: Label
 var _last_report := ""
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
@@ -283,6 +284,7 @@ func refresh() -> void:
 	_refresh_buttons()
 	_settings.visible = _show_settings()
 	_refresh_material_chips()
+	_refresh_selection_context()
 	set_status(_last_report if _last_report != "" else _selection.describe())
 	if _paint != null and _paint.active:
 		_refresh_paint_chrome()
@@ -777,7 +779,25 @@ func _header() -> Control:
 			_paint.toggle()
 	)
 	row.add_child(_paint_toggle)
+	_selection_context = Label.new()
+	_selection_context.name = "SelectionContext"
+	_selection_context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_selection_context.custom_minimum_size.x = 0.0
+	_selection_context.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_selection_context.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_selection_context.clip_text = true
+	_selection_context.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_selection_context.add_theme_font_size_override("font_size", _font(14))
+	_selection_context.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	row.add_child(_selection_context)
 	return row
+
+
+func _refresh_selection_context() -> void:
+	if _selection_context == null:
+		return
+	_selection_context.text = _selection.compact_description()
+	_selection_context.tooltip_text = _selection_context.text
 
 
 func _settings_block() -> Control:

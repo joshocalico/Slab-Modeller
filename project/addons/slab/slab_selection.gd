@@ -238,3 +238,19 @@ func describe() -> String:
 		return "%s · Click %s %s in the viewport to select it." % [who, article, nouns[0]]
 	var noun: String = nouns[0] if ids.size() == 1 else nouns[1]
 	return "%s, %d %s." % [who, ids.size(), noun]
+
+
+func compact_description() -> String:
+	drop_invalid()
+	if objects.is_empty():
+		return "No solid selected"
+	if objects.size() > 1:
+		return "%d solids selected" % objects.size()
+	var who: String = objects[0].name
+	if mode == Mode.OBJECT:
+		return who
+	var nouns: Array = MODE_NOUNS[mode]
+	if ids.is_empty():
+		return "No %s selected · %s" % [nouns[0], who]
+	var noun: String = nouns[0] if ids.size() == 1 else nouns[1]
+	return "%d %s · %s" % [ids.size(), noun, who]

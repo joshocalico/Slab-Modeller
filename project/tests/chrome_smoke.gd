@@ -821,6 +821,10 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 	panel.size = Vector2(300, 320)
 	await process_frame
 	await process_frame
+	var context: Label = panel.find_child("SelectionContext", true, false)
+	expect(context != null and context.text == "2 solids selected", "the header keeps compact multi-solid context")
+	expect(context.custom_minimum_size.x == 0.0 and context.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS,
+		"selection context yields width and ellipsizes in narrow docks")
 	var operands: Control = panel.find_child("BooleanOperands", true, false)
 	expect(operands != null, "two selected solids expose Boolean operands")
 	var labels: Array[Node] = operands.find_children("*", "Label", true, false)
@@ -838,11 +842,26 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 	labels = operands.find_children("*", "Label", true, false)
 	expect(labels[0].text == "Target: RenamedDoorCutter", "renaming a selected operand updates its role without reselection")
 	selection.set_objects([target])
+	target.name = "PowerHouseRoofFaceWithAnIntentionallyLongAuthoringName"
+	await process_frame
+	expect(context.text == target.name and context.tooltip_text == target.name
+		and context.get_combined_minimum_size().x <= 1.0,
+		"long selection names stay complete in the tooltip without adding a text-width minimum")
 	target.name = "RenamedRoom"
 	expect(panel.get_node("Status").text.contains("RenamedRoom"), "renaming the selected solid updates status immediately")
+	expect(context.text == "RenamedRoom" and context.tooltip_text == "RenamedRoom",
+		"renaming the selected solid updates permanent header context")
+	actions.reported.emit("Current report")
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([1, 2]))
+	expect(context.text == "2 faces · RenamedRoom" and panel.get_node("Status").text == selection.describe(),
+		"element selection updates header context and clears superseded feedback")
 	actions.reported.emit("Current report")
 	cutter.name = "UnselectedCutter"
-	expect(panel.get_node("Status").text == "Current report", "renaming an unselected solid does not erase current feedback")
+	expect(panel.get_node("Status").text == "Current report" and context.text == "2 faces · RenamedRoom",
+		"feedback does not obscure selection context and unselected renames do not erase it")
+	selection.set_objects([])
+	expect(context.text == "No solid selected", "clearing selection updates permanent header context")
 	panel.free()
 	target.free()
 	cutter.free()
