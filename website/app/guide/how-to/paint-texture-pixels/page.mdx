@@ -10,19 +10,21 @@ Use this when you want to draw into a face material's albedo texture.
 2. Select the face.
 3. Click **Surface Paint** in the Slab header.
 4. Check that **Brush** names the material you want to copy. If needed, choose a material chip or use the material picker.
-5. Click **Make Unique**.
+5. Click **Assign** if the Brush differs from the material on the selected face.
+6. Click **Pixel**. If the material has no image, set **New image px** to the desired image size.
+7. Click **Make Unique**.
 
 Opening Surface Paint with faces that share one material adopts it as the Brush without changing the selection. A material chip changes the Brush only; click **Assign** to apply it. The material picker is different: choosing a `StandardMaterial3D` immediately assigns it to the selected faces.
 
 Select the face before opening Surface Paint. Entering with only the solid selected opens with no Brush, and a plain viewport click cannot paint until you choose or sample a material. To recover without leaving Surface Paint, Alt-click the textured face to sample its material and UV values, then click **Make Unique**.
 
-Make Unique copies the Brush into a new slot and assigns that slot to the selected face. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
+In Pixel, Make Unique copies the selected faces' common material into a new slot and assigns that slot to the selection. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
 
-For a material with no texture, **Make Unique** creates the paint image at **Texture px**, the same resolution used by **Unwrap**. To set it, close Surface Paint, expand **Materials & UV** in Face mode, and change **Texture px**. Then reopen Surface Paint and make the copy. When a material already has artwork, Slab preserves its dimensions and updates **Texture px** to show the image width.
+For a material with no texture, **Make Unique** creates a square image at **New image px**. When a material already has artwork, Slab preserves its dimensions. **Texture px** then shows the image width and cannot resize it.
 
 ## Place the texture
 
-Stay on **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
+Switch to **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
 
 The canvas background previews the Brush. The outlines and UV edits belong to the selected faces. If the canvas caption says **Assign to apply to selection**, click **Assign** to put that material on the faces before adjusting its placement.
 

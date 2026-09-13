@@ -863,6 +863,16 @@ func _check_canvas_letterbox_and_press() -> void:
 	var pixel_help: Label = panel.find_child("PaintHelp", true, false)
 	_expect(pixel_help.visible and pixel_help.text.contains("Save Paint"),
 		"editable Pixel texture has visible painting and saving guidance")
+	var mapping: Control = panel.find_child("PaintMapping", true, false)
+	var mapping_resolution: SpinBox = panel.find_child("paint_uv_texture_resolution", true, false).get_child(1) as SpinBox
+	_expect(mapping != null and mapping.is_visible_in_tree()
+		and panel.find_child("PaintMappingState", true, false).visible == false
+		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible == false
+		and panel.find_child("PaintUnwrap", true, false).visible == false,
+		"Pixel reduces Mapping to image-size controls")
+	_expect(not mapping_resolution.editable
+		and (mapping_resolution.get_parent().get_child(0) as Label).text == "Texture px",
+		"existing Pixel artwork reports its dimensions without offering a resize")
 	var face_label: Label = panel.find_child("PaintTarget", true, false).get_child(2) as Label
 	_expect(face_label != null and face_label.text.begins_with("%s · 1 face · " % solid.name)
 		and face_label.text.ends_with(paint.selected_material_summary()),
@@ -974,6 +984,18 @@ func _check_canvas_letterbox_and_press() -> void:
 	paint.tool = SlabPaint.Tool.MATERIAL_UV
 	panel.refresh()
 	await process_frame
+	_expect(mapping_resolution.editable, "Material/UV can set the reference atlas resolution")
+	_expect(panel.find_child("PaintMappingState", true, false).visible
+		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible
+		and panel.find_child("PaintUnwrap", true, false).visible,
+		"Material/UV exposes mapping state, density, and Unwrap")
+	_expect(panel.find_child("PaintPlacementTitle", true, false).text == "Placement",
+		"Mapping and Placement are distinct inspector sections")
+	mapping_resolution.get_line_edit().text = "777"
+	panel.call("_commit_paint_mapping_inputs")
+	_expect(actions.uv_texture_resolution == 777,
+		"Mapping actions commit pending Texture px text before running")
+	actions.uv_texture_resolution = 32
 	_expect(palette.visible and panel.find_child("PaintAssign", true, false).visible
 		and panel.find_child("PaintSample", true, false).visible
 		and panel.find_child("PaintMaterialPickerWrap", true, false).visible,

@@ -84,16 +84,28 @@ func _run() -> void:
 	shared_selection.set_ids(sides)
 	var reports: Array[String] = []
 	shared_actions.reported.connect(func(text: String) -> void: reports.append(text))
+	shared_actions.uv_scale = Vector2(2.0, 3.0)
+	shared_actions.uv_offset = Vector2(0.25, -0.5)
+	shared_actions.uv_rotation_degrees = 15.0
 	var before_shared_overflow: PackedByteArray = clone.get("data")
+	var undo_count_before_overflow: int = shared_undo.actions.size()
 	shared_actions.run("uv_unwrap")
 	check(not reports.is_empty() and reports.back().contains("too small") and reports.back().contains("Pixels / metre") and reports.back().contains("Texture px"),
 		"shared Unwrap turns atlas overflow into actionable density and resolution guidance")
 	check(clone.get("data") == before_shared_overflow, "shared atlas overflow leaves UV data unchanged")
+	check(shared_undo.actions.size() == undo_count_before_overflow
+		and shared_actions.uv_scale == Vector2(2.0, 3.0)
+		and shared_actions.uv_offset == Vector2(0.25, -0.5)
+		and is_equal_approx(shared_actions.uv_rotation_degrees, 15.0),
+		"shared atlas overflow preserves history and pending placement state")
 	shared_actions.uv_pixels_per_meter = 128.0
 	shared_actions.uv_texture_resolution = 2048
 	shared_actions.run("uv_unwrap")
 	check(not reports.is_empty() and reports.back().contains("island") and reports.back().contains("automatic cut"),
 		"shared Unwrap recovery reports islands and automatic cuts")
+	check(shared_actions.uv_scale == Vector2.ONE and shared_actions.uv_offset == Vector2.ZERO
+		and is_zero_approx(shared_actions.uv_rotation_degrees),
+		"successful Unwrap resets shared placement state to the kernel mapping")
 
 	var undo := Undo.new()
 	undo.create_action("Unwrap UV")

@@ -156,6 +156,8 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 
 ### Material / UV controls
 
+**Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands; **Placement** moves, rotates, and scales the current mapping. A successful Unwrap resets placement and frames the new islands in the canvas.
+
 | Control | Result |
 | --- | --- |
 | Assign | Applies the Brush material to the selected faces. |
@@ -163,6 +165,9 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Sample | Adopts the selected faces' common material as the Brush without assigning the previous Brush. Select faces using one material before sampling. Alt-click a face in the 3D view samples that face and its UV values directly. |
 | Material palette | Chooses the Brush without assigning it. Click **Assign**, or click a front-facing viewport face, to apply it. |
 | Material picker | Chooses a `StandardMaterial3D` as the Brush and immediately assigns it to the selected faces. Undo restores the previous assignment and material slots. |
+| Pixels/metre | Sets the density for Unwrap. |
+| Texture px | Sets the reference atlas width for Unwrap. It does not resize existing artwork. |
+| Unwrap | Creates seam-aware UV islands at the requested density and resets placement. An atlas that cannot fit leaves the solid unchanged and reports a suggested resolution. |
 | Repeat U, Repeat V | Sets texture repeats from 0.05 to 64. |
 | Offset U, Offset V | Moves the texture from -64 to 64. |
 | Rotation | Sets rotation from -360° to 360°. |
@@ -176,12 +181,13 @@ On the UV canvas, drag to move, Shift-drag to scale, and Ctrl-drag to rotate. Us
 
 ### Pixel controls
 
-Pixel hides Assign, Sample, the material picker, the material palette, and the UV placement controls. This gives the image canvas more room.
+Pixel hides Assign, Sample, the material picker, the material palette, Mapping, and the UV placement controls. Its **Image** section contains the image-size field.
 
 | Control | Result |
 | --- | --- |
 | Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
 | Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. It is disabled until an owned Texture is ready. Save the scene afterward. |
+| New image px | Sets the square image size used by Make Unique when the material has no artwork. For existing artwork, the read-only Texture px field shows its width. |
 | Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
 | Show UV | Shows the selected faces' UV outlines over the image. It is off by default. |
 

@@ -77,6 +77,37 @@ func _run() -> void:
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-picker", "capture_rect": panel.get_global_rect()}, "after")
 	var paint: RefCounted = panel.get("_paint")
 	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	var distinct_brush := StandardMaterial3D.new()
+	distinct_brush.resource_name = "Unwrap identity probe"
+	paint.set("_brush_material", distinct_brush)
+	var brush_before_unwrap: Material = paint.brush_material()
+	var loops_before_unwrap: Array = paint.selected_uv_loops().duplicate(true)
+	panel.get("_actions").uv_pixels_per_meter = 16.0
+	panel.get("_actions").uv_texture_resolution = 2048
+	var unwrap_button: Button = panel.find_child("PaintUnwrap", true, false) as Button
+	var paint_inspector_scroll: ScrollContainer = panel.find_child("PaintInspector", true, false)
+	paint_inspector_scroll.ensure_control_visible(unwrap_button)
+	await process_frame
+	await _click(unwrap_button)
+	await create_timer(0.2).timeout
+	var loops_after_unwrap: Array = paint.selected_uv_loops()
+	_check(loops_after_unwrap != loops_before_unwrap, "Unwrap refreshes the canvas from the new UV loops")
+	var canvas_lo := Vector2(INF, INF)
+	var canvas_hi := Vector2(-INF, -INF)
+	for loop: PackedVector2Array in loops_after_unwrap:
+		for uv: Vector2 in loop:
+			var mapped: Vector2 = canvas.call("_uv_to_canvas", uv)
+			canvas_lo = canvas_lo.min(mapped)
+			canvas_hi = canvas_hi.max(mapped)
+	_check(((canvas_lo + canvas_hi) * 0.5).distance_to(canvas.size * 0.5) <= 2.0,
+		"Unwrap reframes the new UV bounds at the canvas centre")
+	_check(panel.find_child("PaintMappingState", true, false).text == "Unwrapped mapping",
+		"Unwrap refreshes the visible Mapping state")
+	_check(brush_before_unwrap != paint.material() and paint.brush_material() == brush_before_unwrap,
+		"Unwrap refresh preserves the chosen brush resource")
+	paint_inspector_scroll.ensure_control_visible(panel.find_child("PaintMapping", true, false))
+	await process_frame
+	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-mapping", "capture_rect": panel.get_global_rect()}, "after")
 	await _pending_uv_value(panel, solid, selection)
 	var before: PackedByteArray = solid.get("data")
 	await _uv_gesture(canvas, true)

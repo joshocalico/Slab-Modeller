@@ -67,6 +67,14 @@ var _paint_picker: Node
 var _paint_uv_hint: Label
 var _paint_fit_uv: Button
 var _paint_uv_controls: Control
+var _paint_mapping_controls: Control
+var _paint_mapping_grid: GridContainer
+var _paint_mapping_title: Label
+var _paint_mapping_state: Label
+var _paint_density_row: Control
+var _paint_unwrap: Button
+var _paint_texture_px_label: Label
+var _paint_texture_px_spin: SpinBox
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
@@ -740,6 +748,8 @@ func _on_reported(text: String) -> void:
 	_last_report = text
 	set_status(text)
 	_sync_edit_fields()
+	if _paint != null and _paint.active:
+		_refresh_paint_chrome()
 	if _selection.mode == SlabSelection.Mode.FACE:
 		call_deferred("_refresh_material_chips")
 
@@ -1022,6 +1032,8 @@ func _paint_block() -> Control:
 	inspector.add_child(_paint_action_row())
 	_paint_uv_controls = _paint_uv_control_row()
 	inspector.add_child(_paint_uv_controls)
+	_paint_mapping_controls = _paint_mapping_section()
+	inspector.add_child(_paint_mapping_controls)
 	_paint_palette = ScrollContainer.new()
 	_paint_palette.name = "PaintPalette"
 	_paint_palette.custom_minimum_size.y = _scaled(PAINT_PALETTE_HEIGHT)
@@ -1160,6 +1172,7 @@ func _paint_action_row() -> Control:
 	buttons.add_child(_paint_assign)
 	_unique_button = _named_action("Make Unique", "Duplicate", "Copies this solid's material so painting does not rewrite shared tiles.", func() -> void:
 		if _paint:
+			_commit_paint_mapping_inputs()
 			_paint.make_unique()
 	)
 	buttons.add_child(_unique_button)
@@ -1189,6 +1202,51 @@ func _paint_action_row() -> Control:
 	return tools
 
 
+func _paint_mapping_section() -> Control:
+	var section := VBoxContainer.new()
+	section.name = "PaintMapping"
+	section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	section.add_theme_constant_override("separation", 4)
+	var title := Label.new()
+	_paint_mapping_title = title
+	title.text = "Mapping"
+	title.add_theme_font_size_override("font_size", _font(13))
+	title.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	section.add_child(title)
+	_paint_mapping_state = Label.new()
+	_paint_mapping_state.name = "PaintMappingState"
+	_paint_mapping_state.add_theme_font_size_override("font_size", _font(12))
+	_paint_mapping_state.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	section.add_child(_paint_mapping_state)
+	var fields := GridContainer.new()
+	_paint_mapping_grid = fields
+	fields.columns = 2
+	fields.add_theme_constant_override("h_separation", 4)
+	fields.add_theme_constant_override("v_separation", 4)
+	_paint_density_row = _compact_spin("Pixels/metre", 1, 4096, 1, _actions.uv_pixels_per_meter, func(v: float) -> void:
+		_actions.uv_pixels_per_meter = v
+	, "Density used by Unwrap.", &"paint_uv_pixels_per_meter")
+	fields.add_child(_paint_density_row)
+	var texture_px := _compact_spin("Texture px", 16, 16384, 1, _actions.uv_texture_resolution, func(v: float) -> void:
+		_actions.uv_texture_resolution = int(v)
+	, "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique. Existing artwork is not resized.", &"paint_uv_texture_resolution")
+	_paint_texture_px_label = texture_px.get_child(0) as Label
+	_paint_texture_px_spin = texture_px.get_child(1) as SpinBox
+	fields.add_child(texture_px)
+	section.add_child(fields)
+	var unwrap := _named_action("Unwrap", "ArrayMesh", "Unfold the selected face region at this density and texture resolution.", func() -> void:
+		_commit_paint_mapping_inputs()
+		_actions.run("uv_unwrap")
+		if _paint != null and _last_report.begins_with("Unwrapped "):
+			_paint.refresh_uv_mapping()
+			_paint_canvas.frame_uv.call_deferred()
+	)
+	_paint_unwrap = unwrap
+	unwrap.name = "PaintUnwrap"
+	section.add_child(unwrap)
+	return section
+
+
 func _paint_uv_control_row() -> Control:
 	var fields := VBoxContainer.new()
 	fields.name = "PaintUvControls"
@@ -1196,6 +1254,12 @@ func _paint_uv_control_row() -> Control:
 	fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fields.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	fields.add_theme_constant_override("separation", 4)
+	var title := Label.new()
+	title.name = "PaintPlacementTitle"
+	title.text = "Placement"
+	title.add_theme_font_size_override("font_size", _font(13))
+	title.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	fields.add_child(title)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 4)
@@ -1501,7 +1565,30 @@ func _refresh_paint_chrome() -> void:
 		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if pixel else 350.0)
 	if _paint_inspector_fields != null:
 		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if pixel else 342.0)
+	if _paint_mapping_grid != null:
+		_paint_mapping_grid.columns = 1 if pixel else 2
+	if _paint_mapping_title != null:
+		_paint_mapping_title.text = "Image" if pixel else "Mapping"
+	if _paint_mapping_state != null:
+		_paint_mapping_state.text = _paint_mapping_summary()
+		_paint_mapping_state.visible = not pixel
+	if _paint_density_row != null:
+		_paint_density_row.visible = not pixel
+	if _paint_unwrap != null:
+		_paint_unwrap.visible = not pixel
+	var pixel_has_artwork := false
+	if pixel and _paint != null:
+		var pixel_material: Variant = _paint.material()
+		pixel_has_artwork = pixel_material is StandardMaterial3D and pixel_material.albedo_texture != null
+	if _paint_texture_px_label != null:
+		_paint_texture_px_label.text = "Texture px" if not pixel or pixel_has_artwork else "New image px"
+		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique."
+	if _paint_texture_px_spin != null:
+		_paint_texture_px_spin.editable = not pixel_has_artwork
+		_paint_texture_px_spin.tooltip_text = _paint_texture_px_label.tooltip_text
 	if _paint != null:
+		_set_spin(&"paint_uv_pixels_per_meter", _actions.uv_pixels_per_meter)
+		_set_spin(&"paint_uv_texture_resolution", _actions.uv_texture_resolution)
 		_set_spin(&"paint_uv_repeat_u", _actions.uv_scale.x)
 		_set_spin(&"paint_uv_repeat_v", _actions.uv_scale.y)
 		_set_spin(&"paint_uv_offset_u", _actions.uv_offset.x)
@@ -1518,6 +1605,21 @@ func _refresh_paint_chrome() -> void:
 	if _paint != null and _paint.active:
 		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
 	update_minimum_size()
+
+
+func _paint_mapping_summary() -> String:
+	if _selection == null or _selection.solid == null or _selection.ids.is_empty():
+		return "No face mapping selected"
+	var unwrapped := 0
+	for face in _selection.ids:
+		var attrs: Dictionary = _selection.solid.call("face_uv", face)
+		if bool(attrs.get("unwrapped", false)):
+			unwrapped += 1
+	if unwrapped == 0:
+		return "Planar mapping"
+	if unwrapped == _selection.ids.size():
+		return "Unwrapped mapping"
+	return "Mixed mapping"
 
 
 func _pixel_help_text() -> String:
@@ -1666,6 +1768,13 @@ func _spins_under(node: Node) -> Array[SpinBox]:
 	for child in node.get_children():
 		out.append_array(_spins_under(child))
 	return out
+
+
+func _commit_paint_mapping_inputs() -> void:
+	if _paint_mapping_controls == null:
+		return
+	for spin in _spins_under(_paint_mapping_controls):
+		spin.apply()
 
 
 func _sync_loop_values() -> void:

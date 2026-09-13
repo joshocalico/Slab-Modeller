@@ -170,3 +170,17 @@ The rendered paint editor regression failed on the original code and passed afte
 The same interaction failed in Extrude: typing 0.05 without Enter and clicking Apply committed the previous 0.5 m value. The saved roof height increased from 0.200195 to 0.700195. Preview controls now retain pending keyboard input across panel refreshes and submit it before Apply. Programmatic value changes remain authoritative, including the room tutorial's -2.4 m extrusion.
 
 The rendered panel regression covers pending Inset distance, Bevel width and segments, and the existing programmatic room sequence. It reports zero failures. Native typing of 0.05 followed directly by Apply and Save produced a roof height of 0.25 m, within the lattice rounding of the requested extrusion. One native Undo and Save restored the scene with no diff.
+
+## Mapping inside Surface Paint
+
+Selected all 18 faces of MaintenanceBayRoof in native Face mode, then opened Surface Paint. The Mapping controls adopted the existing teal texture's width of 256 pixels. Unwrap at 256 pixels/metre refused the atlas and suggested 4096 pixels, without marking the scene dirty. Typed 16 into Pixels/metre without Enter and clicked Unwrap. Save and read-only reload found all 18 faces unwrapped, 15 seams, two material slots, and unchanged volume 3.87238744273782. One Undo and Save restored the exact scene.
+
+The first replay exposed a stale canvas after Unwrap: the model and saved data changed, but the outline remained planar until Fit UV. Successful Unwrap now refreshes UV state and frames the new loops without rebinding the selected brush. A fresh native replay confirmed the new net appeared and framed itself immediately. Undo restored planar mapping.
+
+Created a new untextured StandardMaterial3D through Godot's material picker and switched to Pixel. Typed 128 into New image px without Enter, then clicked Make Unique and saved the scene. Read-only reload found one embedded 128 by 128 image, with the same 18 faces and volume. Two Undo actions followed by Save restored the original material slots and the exact scene. No paint PNG was written during this test.
+
+Godot's material picker search accepted StandardMaterial3D followed by Down and Enter. The newly created material appeared under its generated subresource identifier, which is less readable than a user-facing material name. Improve that label when consolidating material creation.
+
+Pixel exposes only an Image section for image size; Mapping state, density, and Unwrap stay in Material / UV. Native inspection confirmed the existing 256-pixel artwork reports a read-only size. Mapping and the lower placement controls remain reachable by scrolling the shared inspector at the compact dock height.
+
+The final rendered regression passed with zero failures. It checks that Unwrap changes UV loops, centers their canvas bounds within two pixels, updates the Mapping label, and preserves a deliberately different Brush resource. The full slab-verify and documentation link checks passed. The regression capture uses a diagnostic brush and is retained as test evidence rather than a guide illustration.

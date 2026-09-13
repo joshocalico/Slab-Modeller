@@ -272,6 +272,11 @@ func selected_uv_loops() -> Array[PackedVector2Array]:
 	return loops
 
 
+func refresh_uv_mapping() -> void:
+	_sync_uv_from_selection()
+	changed.emit()
+
+
 func make_unique() -> int:
 	var solid: Node3D = _selection.solid if _selection != null else null
 	if solid == null:
@@ -709,6 +714,7 @@ func _bind_brush_to_selection() -> void:
 	_slot = -1
 	_material = _brush_material
 	_image = _image_from_material(_brush_material)
+	_sync_texture_resolution_from_artwork(_brush_material, _image)
 	_texture = _brush_material.albedo_texture as ImageTexture
 	if _texture == null:
 		_texture = ImageTexture.create_from_image(_image)
@@ -758,6 +764,7 @@ func _bind_from_selection() -> void:
 	if src is StandardMaterial3D:
 		_material = src
 		_image = _image_from_material(src)
+		_sync_texture_resolution_from_artwork(src, _image)
 		if src.albedo_texture is ImageTexture and _is_unique(src):
 			_texture = src.albedo_texture
 			(_texture as ImageTexture).set_image(_image)
@@ -929,6 +936,11 @@ func _bind_editable(solid: Node3D, slot: int, mat: StandardMaterial3D, img: Imag
 	_texture = tex
 	mat.albedo_texture = tex
 	if _actions != null and img != null and not img.is_empty():
+		_actions.uv_texture_resolution = img.get_width()
+
+
+func _sync_texture_resolution_from_artwork(mat: StandardMaterial3D, img: Image) -> void:
+	if _actions != null and mat != null and mat.albedo_texture != null and img != null and not img.is_empty():
 		_actions.uv_texture_resolution = img.get_width()
 
 

@@ -637,6 +637,9 @@ func _unwrap_target(target: Node3D) -> String:
 	if err != OK:
 		return "Unwrap failed. %s" % describe_error(err, "uv_unwrap")
 	var after: PackedByteArray = target.get("data")
+	uv_scale = Vector2.ONE
+	uv_offset = Vector2.ZERO
+	uv_rotation_degrees = 0.0
 	if _undo != null and after != before:
 		_undo.create_action("Slab Unwrap UV", UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
