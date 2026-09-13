@@ -22,7 +22,9 @@ Stay on **Material / UV**. Drag on the canvas to move the selected face's UVs. S
 
 For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**, and **Rotation**, then click **Apply UV**. **UV 90°** turns the placement by 90 degrees. **Reset UV** returns repeats to one and offsets and rotation to zero.
 
-Alt-click a face in the 3D view to sample its material and UV values.
+Choose a material chip and click **Assign** to apply it to the selected faces. **Sample** copies material and UV values from the selected face; Alt-click a face in the 3D view to sample it directly.
+
+Press Escape or right-click during a canvas drag to restore the previous UV placement. Changing selection or switching tools also cancels the drag. Releasing the mouse commits one undoable change.
 
 ## Paint
 
@@ -32,8 +34,8 @@ Alt-click a face in the 3D view to sample its material and UV values.
 4. Click **Save Paint**.
 5. Save the scene.
 
-The brush radius is measured in texture pixels. A stroke wraps with the UVs when the material repeats. Backfaces are ignored in the 3D view.
+The brush radius is measured in texture pixels. A stroke wraps with the UVs when the material repeats. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
 
 Save Paint writes `res://slab_paint/<solid>_m<slot>.png` and records that path on the material. It does not save the scene. The status stays **Texture saved. Scene still needs saving.** until you save the scene.
 
-Undo and redo replace complete stroke images. Escape cancels an active stroke. With no stroke active, Escape closes Surface Paint.
+Undo and redo replace complete stroke images. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes Surface Paint.

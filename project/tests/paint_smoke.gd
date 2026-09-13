@@ -28,6 +28,7 @@ func _boot() -> void:
 	_check_uv_modifier_dispatch()
 	_check_uv_transform_and_wrap()
 	_check_numeric_uv_apply_and_selection_sync()
+	_check_uv_drag_transaction()
 	_check_cylinder_and_concave()
 	_check_raster_wrap_and_stroke()
 	_check_wrap_outline_tiles()
@@ -43,6 +44,50 @@ func _boot() -> void:
 	await process_frame
 	_check_viewport_paint_does_not_extrude()
 	_finish()
+
+
+func _check_uv_drag_transaction() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([_top_face(solid)]))
+	var actions := SlabActions.new(selection)
+	var undo := SlabTestUndo.new()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var before: PackedByteArray = solid.get("data")
+	var offset: Vector2 = actions.uv_offset
+	paint.begin_uv_drag()
+	paint.drag_uv(Vector2(0.2, 0.1))
+	_expect(solid.get("data") != before, "UV drag previews on the mesh")
+	paint.cancel_uv_drag()
+	paint.end_uv_drag()
+	_expect(solid.get("data") == before and actions.uv_offset == offset and undo.actions.is_empty(), "UV cancel restores mesh and controls without history")
+	paint.begin_uv_drag()
+	paint.drag_uv(Vector2(0.2, 0.1))
+	selection.set_ids(PackedInt64Array([_side_face(solid)]))
+	paint.end_uv_drag()
+	_expect(solid.get("data") == before and undo.actions.is_empty(), "selection change cancels original UV transaction")
+	paint.begin_uv_drag()
+	paint.drag_uv(Vector2(0.3, 0.1))
+	paint.tool = SlabPaint.Tool.PIXEL
+	_expect(solid.get("data") == before and not paint.uv_drag_active, "tool change cancels UV transaction")
+	paint.tool = SlabPaint.Tool.MATERIAL_UV
+	paint.begin_uv_drag()
+	paint.drag_uv(Vector2(0.2, 0.1))
+	paint.end_uv_drag()
+	var after: PackedByteArray = solid.get("data")
+	_expect(undo.actions.size() == 1 and after != before, "UV release commits one action")
+	undo.undo()
+	_expect(solid.get("data") == before, "UV undo restores exact mesh")
+	undo.redo()
+	_expect(solid.get("data") == after, "UV redo restores exact placement")
+	paint.exit()
+	solid.free()
 
 
 func _check_uv_matches_emit() -> void:
@@ -718,8 +763,8 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
 		"palette and canvas do not overlap, %s vs %s" % [palette.get_global_rect(), canvas.get_global_rect()])
 	var face_label: Label = panel.find_child("PaintTarget", true, false).get_child(2) as Label
-	_expect(face_label != null and face_label.text.begins_with("Face:"),
-		"the target row keeps a Face caption, got %s" % (face_label.text if face_label else "missing"))
+	_expect(face_label != null and face_label.text == "1 face selected",
+		"the target row describes the selected face count, got %s" % (face_label.text if face_label else "missing"))
 	_expect(face_label != null and face_label.get_global_rect().size.x >= 48.0,
 		"Face is readable, size=%s" % (face_label.get_global_rect().size if face_label else Vector2.ZERO))
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)

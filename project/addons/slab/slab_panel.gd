@@ -41,6 +41,7 @@ var _model_body: BoxContainer
 var _paint_body: Control
 var _paint_toggle: Button
 var _paint_canvas: Control
+var _paint_brush: Control
 var _paint_face: Label
 var _paint_mat: Label
 var _paint_dirty: Label
@@ -503,8 +504,9 @@ func _refresh_material_chips() -> void:
 		_settings_chips.add_child(_material_chip(i, mats[i]))
 	var add := Button.new()
 	add.name = "add_material"
+	add.text = "Add Material"
 	add.icon = SlabIcons.texture("Add", _metrics.scale())
-	add.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	add.custom_minimum_size = Vector2(_scaled(CHIP_SIZE.x), _scaled(CHIP_SIZE.y))
 	add.tooltip_text = "Add a material to this solid."
 	add.focus_mode = Control.FOCUS_NONE
@@ -839,6 +841,8 @@ func _paint_block() -> Control:
 	_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
 	_paint_uv_hint.add_theme_font_size_override("font_size", _font(12))
 	_paint_uv_hint.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62, 0.92))
+	_paint_uv_hint.add_theme_color_override("font_shadow_color", Color.BLACK)
+	_paint_uv_hint.add_theme_constant_override("shadow_outline_size", 4)
 	_paint_uv_hint.clip_text = true
 	_paint_uv_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -849,7 +853,8 @@ func _paint_block() -> Control:
 	_paint_uv_hint.offset_bottom = 18
 	_paint_canvas.add_child(_paint_uv_hint)
 	row.add_child(_paint_canvas)
-	row.add_child(_brush_column())
+	_paint_brush = _brush_column()
+	row.add_child(_paint_brush)
 	body.add_child(row)
 	return body
 
@@ -890,6 +895,10 @@ func _paint_action_row() -> Control:
 	tools.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
 	tools.clip_contents = true
 	tools.add_theme_constant_override("separation", 8)
+	tools.add_child(_named_action("Assign", "MaterialPreviewCube", "Assign the active material to the selected faces.", func() -> void:
+		if _paint:
+			_paint.assign_active_to_selection()
+	))
 	_unique_button = _named_action("Make Unique", "Duplicate", "Copies this solid's material so painting does not rewrite shared tiles.", func() -> void:
 		if _paint:
 			_paint.make_unique()
@@ -899,7 +908,7 @@ func _paint_action_row() -> Control:
 		if _paint:
 			_paint.save_png(_paint.default_save_path())
 	))
-	tools.add_child(_named_action("Sample", "ListSelect", "Click a face in the viewport with Alt, or this then a face, to copy material and UV.", func() -> void:
+	tools.add_child(_named_action("Sample", "ListSelect", "Copy material and UV from the selected face. Alt-click a viewport face to sample it directly.", func() -> void:
 		if _paint and _selection.solid != null and not _selection.ids.is_empty():
 			_paint.sample_face(_selection.solid, _selection.ids[0])
 	))
@@ -1182,10 +1191,8 @@ func _on_paint_changed() -> void:
 func _refresh_paint_chrome() -> void:
 	if _paint_face == null:
 		return
-	var face_text := "none"
-	if _selection != null and not _selection.ids.is_empty():
-		face_text = str(_selection.ids[0])
-	_paint_face.text = "Face: %s" % face_text
+	var count: int = _selection.ids.size() if _selection != null else 0
+	_paint_face.text = "1 face selected" if count == 1 else "%d faces selected" % count
 	var mat_text := "none"
 	if _paint != null and _paint.slot() >= 0:
 		var mat: Variant = _paint.material()
@@ -1205,6 +1212,8 @@ func _refresh_paint_chrome() -> void:
 		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
 	if _paint_uv_controls != null:
 		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
+	if _paint_brush != null:
+		_paint_brush.visible = _paint != null and _paint.is_pixel()
 	if _paint != null:
 		_set_spin(&"paint_uv_repeat_u", _actions.uv_scale.x)
 		_set_spin(&"paint_uv_repeat_v", _actions.uv_scale.y)

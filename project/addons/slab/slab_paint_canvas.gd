@@ -39,8 +39,14 @@ func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
 		if not _paint.image_changed.is_connected(queue_redraw):
 			_paint.image_changed.connect(queue_redraw)
 	if _paint != null and _paint.has_signal("changed"):
-		if not _paint.changed.is_connected(queue_redraw):
-			_paint.changed.connect(queue_redraw)
+		if not _paint.changed.is_connected(_paint_changed):
+			_paint.changed.connect(_paint_changed)
+
+
+func _paint_changed() -> void:
+	if not _paint.stroke_active and not _paint.uv_drag_active:
+		_dragging = false
+	queue_redraw()
 
 
 func image_rect() -> Rect2:
@@ -72,6 +78,10 @@ func hits_image(pos: Vector2) -> bool:
 
 func _gui_input(event: InputEvent) -> void:
 	if _paint == null or not _paint.active:
+		return
+	if (event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE) or (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT):
+		cancel()
+		accept_event()
 		return
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -142,6 +152,7 @@ func cancel() -> void:
 	if _dragging:
 		_dragging = false
 		stroke_cancelled.emit()
+		_paint.cancel_uv_drag()
 	_panning = false
 
 

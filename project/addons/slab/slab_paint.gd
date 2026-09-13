@@ -27,6 +27,7 @@ var active: bool = false:
 			return
 		if not value:
 			cancel_stroke()
+			cancel_uv_drag()
 		active = value
 		changed.emit()
 
@@ -35,6 +36,7 @@ var tool: int = Tool.MATERIAL_UV:
 		if value == tool:
 			return
 		cancel_stroke()
+		cancel_uv_drag()
 		tool = value
 		changed.emit()
 
@@ -60,6 +62,9 @@ var _uv_offset_start := Vector2.ZERO
 var _uv_scale_start := Vector2.ONE
 var _uv_rotation_start := 0.0
 var _uv_before_data := PackedByteArray()
+var uv_drag_active := false
+var _uv_solid: Node3D
+var _uv_ids := PackedInt64Array()
 var _brush_node: MeshInstance3D
 var _dirty_ids: Dictionary = {}
 
@@ -262,16 +267,20 @@ func reset_uv() -> void:
 
 
 func begin_uv_drag() -> void:
-	if _selection == null or _selection.solid == null:
+	cancel_uv_drag()
+	if _selection == null or _selection.solid == null or _selection.ids.is_empty():
 		return
+	_uv_solid = _selection.solid
+	_uv_ids = _selection.ids.duplicate()
+	uv_drag_active = true
 	_uv_offset_start = _actions.uv_offset
 	_uv_scale_start = _actions.uv_scale
 	_uv_rotation_start = _actions.uv_rotation_degrees
-	_uv_before_data = _selection.solid.get("data")
+	_uv_before_data = _uv_solid.get("data")
 
 
 func drag_uv(delta_uv: Vector2, mode: int = UV_MOVE) -> void:
-	if _selection == null or _selection.solid == null or _selection.ids.is_empty():
+	if not uv_drag_active or not is_instance_valid(_uv_solid):
 		return
 	if mode == UV_SCALE:
 		_actions.uv_scale = Vector2(
@@ -282,14 +291,18 @@ func drag_uv(delta_uv: Vector2, mode: int = UV_MOVE) -> void:
 		_actions.uv_rotation_degrees = _uv_rotation_start + delta_uv.x * 180.0
 	else:
 		_actions.uv_offset = _uv_offset_start + delta_uv
-	_selection.solid.call("set_face_uv", _selection.ids, _actions.uv_scale, _actions.uv_offset, deg_to_rad(_actions.uv_rotation_degrees))
+	_uv_solid.call("set_face_uv", _uv_ids, _actions.uv_scale, _actions.uv_offset, deg_to_rad(_actions.uv_rotation_degrees))
 	changed.emit()
 
 
 func end_uv_drag() -> void:
-	if _selection == null or _selection.solid == null:
+	if not uv_drag_active:
 		return
-	var solid: Node3D = _selection.solid
+	uv_drag_active = false
+	var solid: Node3D = _uv_solid
+	_uv_solid = null
+	if not is_instance_valid(solid):
+		return
 	var after: PackedByteArray = solid.get("data")
 	if after == _uv_before_data:
 		return
@@ -304,6 +317,21 @@ func end_uv_drag() -> void:
 		_undo.add_do_property(_actions, "uv_rotation_degrees", _actions.uv_rotation_degrees)
 		_undo.add_undo_property(_actions, "uv_rotation_degrees", _uv_rotation_start)
 		_undo.commit_action(false)
+	changed.emit()
+
+
+func cancel_uv_drag() -> void:
+	if not uv_drag_active:
+		return
+	uv_drag_active = false
+	var solid: Node3D = _uv_solid
+	_uv_solid = null
+	if is_instance_valid(solid):
+		solid.set("data", _uv_before_data)
+	_actions.uv_offset = _uv_offset_start
+	_actions.uv_scale = _uv_scale_start
+	_actions.uv_rotation_degrees = _uv_rotation_start
+	changed.emit()
 
 
 func begin_stroke() -> bool:
@@ -423,6 +451,8 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 		if event.keycode == KEY_ESCAPE:
 			if stroke_active:
 				cancel_stroke()
+			elif uv_drag_active:
+				cancel_uv_drag()
 			else:
 				exit()
 			return VERDICT_STOP
@@ -450,6 +480,13 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 				_selection.set_ids(PackedInt64Array([face]))
 				assign_active_to_selection()
 			return VERDICT_STOP
+		var target: Dictionary = _face_paint_target(solid, face)
+		if target.is_empty():
+			return VERDICT_STOP
+		_selection.set_objects([solid])
+		_selection.set_ids(PackedInt64Array([face]))
+		_actions.material_slot = int(target["slot"])
+		_bind_from_selection()
 		if not begin_stroke():
 			return VERDICT_STOP
 		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
@@ -463,14 +500,33 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 		_sync_brush_preview(world_root, camera, event.position)
 	if event is InputEventMouseMotion and stroke_active:
 		if hit.is_empty():
+			_last_pixel = Vector2(-1, -1)
 			return VERDICT_STOP
 		var solid: Node3D = hit.get("solid")
 		var face: int = int(hit.get("id", 0))
 		if not SlabPaintUv.faces_camera(solid, face, camera, hit["world"]):
+			_last_pixel = Vector2(-1, -1)
+			return VERDICT_STOP
+		var target: Dictionary = _face_paint_target(solid, face)
+		if target.is_empty() or target["material"] != _stroke_material:
+			_last_pixel = Vector2(-1, -1)
 			return VERDICT_STOP
 		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
 		return VERDICT_STOP
 	return VERDICT_PASS
+
+
+func _face_paint_target(solid: Node3D, face: int) -> Dictionary:
+	if solid == null:
+		return {}
+	var attrs: Dictionary = solid.call("face_uv", face)
+	if attrs.is_empty():
+		return {}
+	var slot: int = int(attrs.get("slot", -1))
+	var mats: Array = solid.get("materials")
+	if slot < 0 or slot >= mats.size() or not (mats[slot] is StandardMaterial3D):
+		return {}
+	return {"slot": slot, "material": mats[slot]}
 
 
 func _dab_at(pixel: Vector2) -> void:
@@ -494,6 +550,8 @@ func _dab_at(pixel: Vector2) -> void:
 
 
 func rebind() -> void:
+	cancel_stroke()
+	cancel_uv_drag()
 	_bind_from_selection()
 
 
@@ -696,6 +754,7 @@ func _on_selection_changed() -> void:
 	if not active:
 		return
 	cancel_stroke()
+	cancel_uv_drag()
 	_bind_from_selection()
 
 
@@ -755,6 +814,14 @@ func _sync_brush_preview(world_root: Node, camera: Camera3D, screen: Vector2) ->
 	if solid == null or not SlabPaintUv.faces_camera(solid, face, camera, hit["world"]):
 		_hide_brush()
 		return
+	var target: Dictionary = _face_paint_target(solid, face)
+	var target_material: StandardMaterial3D = target.get("material")
+	if target_material == null or not _is_unique(target_material):
+		_hide_brush()
+		return
+	if stroke_active and target_material != _stroke_material:
+		_hide_brush()
+		return
 	if _brush_node == null or not is_instance_valid(_brush_node) or _brush_node.get_parent() != solid:
 		_free_brush()
 		_brush_node = MeshInstance3D.new()
@@ -771,7 +838,8 @@ func _sync_brush_preview(world_root: Node, camera: Camera3D, screen: Vector2) ->
 		mat.no_depth_test = true
 		_brush_node.material_override = mat
 		solid.add_child(_brush_node)
-	var radius: float = _brush_world_radius(solid, face)
+	var texture_width: int = target_material.albedo_texture.get_width() if target_material.albedo_texture != null else DEFAULT_SIZE
+	var radius: float = _brush_world_radius(solid, face, texture_width)
 	var sphere: SphereMesh = _brush_node.mesh
 	sphere.radius = radius
 	sphere.height = radius * 2.0
@@ -779,13 +847,14 @@ func _sync_brush_preview(world_root: Node, camera: Camera3D, screen: Vector2) ->
 	_brush_node.visible = true
 
 
-func _brush_world_radius(solid: Node3D, face: int) -> float:
+func _brush_world_radius(solid: Node3D, face: int, texture_width: int = 0) -> float:
 	var corners: PackedVector3Array = solid.face_corners(face)
-	if corners.size() < 2 or _image == null or _image.is_empty():
+	if corners.size() < 2:
 		return 0.04
 	var uv0: Vector2 = SlabPaintUv.point_uv(solid, face, corners[0])
 	var uv1: Vector2 = SlabPaintUv.point_uv(solid, face, corners[1])
-	var uv_px: float = uv0.distance_to(uv1) * float(_image.get_width())
+	var width: int = texture_width if texture_width > 0 else (_image.get_width() if _image != null and not _image.is_empty() else DEFAULT_SIZE)
+	var uv_px: float = uv0.distance_to(uv1) * float(width)
 	var world: float = corners[0].distance_to(corners[1])
 	if uv_px < 0.001:
 		return 0.04
