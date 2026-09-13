@@ -1,4 +1,4 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cc7t1ouq8ca8c"]
 
 [ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/brick.svg" id="1_vk20s"]
 

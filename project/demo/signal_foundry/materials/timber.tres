@@ -1,4 +1,4 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://dpjna3rgvsgb1"]
 
 [ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/timber.svg" id="1_ipd4j"]
 

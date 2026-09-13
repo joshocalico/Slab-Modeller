@@ -1,4 +1,4 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://cw6ff5v0edmbw"]
 
 [ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/teal_steel.svg" id="1_derk4"]
 

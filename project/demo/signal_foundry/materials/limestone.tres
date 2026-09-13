@@ -1,4 +1,4 @@
-[gd_resource type="StandardMaterial3D" format=3]
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://yqj2d5aq0ecj"]
 
 [ext_resource type="Texture2D" path="res://demo/signal_foundry/materials/limestone.svg" id="1_vqf5d"]
 
