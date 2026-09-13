@@ -9,9 +9,9 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | Key | Mode | What a click does |
 | --- | --- | --- |
 | <kbd>1</kbd> | Object | Focus a `SlabSolid`. The node Move gizmo transforms the solid. Drag does not move vertices. |
-| <kbd>2</kbd> | Vertex | Pick a vertex. The Move gizmo translates it. |
-| <kbd>3</kbd> | Edge | Pick an edge. The Move gizmo translates both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
-| <kbd>4</kbd> | Face | Pick a face. The Move gizmo translates it. Shift-drag extrudes. |
+| <kbd>2</kbd> | Vertex | Pick a vertex. Move, Rotate, and Scale transform the selection around the configured pivot and axes. |
+| <kbd>3</kbd> | Edge | Pick an edge. The transform gizmo acts on both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
+| <kbd>4</kbd> | Face | Pick a face. The transform gizmo acts on all its vertices. Shift-drag extrudes. |
 | <kbd>Escape</kbd> | Object | Leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In Surface Paint it cancels a stroke, or closes the workspace when idle. |
 
 <kbd>W</kbd>, <kbd>E</kbd>, and <kbd>R</kbd> are Godot's Move, Rotate, and Scale tools. Slab claims <kbd>E</kbd> in Face mode for Extrude when a face is selected.
@@ -24,6 +24,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | Drag past 6 pixels | Without Shift, the editor Move gizmo keeps the event. Shift-drag extrudes a face or bevels an edge. The view cannot orbit until that grab releases. |
 | Hover with no buttons | Pass. Orbit still works. |
 | Miss in element mode with a solid selected | Clear element ids. Keep the solid. |
+| <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Cycle forward or backward through candidates under the pointer when X-ray selection is enabled. |
 
 ## Panel shortcuts
 
@@ -53,4 +54,4 @@ Select Ring, the Create icons, and the Object boolean icons have no keys.
 
 Surface Paint takes keyboard input while it is open, so modelling mode and command keys do not run there.
 
-Plane Cut, Array, Bevel, Loop Cut, Snap to Vertex, and Align Face are modal previews. Enter applies Plane Cut, Array, Bevel, or Loop Cut. A left click chooses the target for Snap or Align. Escape or right-click cancels any of these previews without applying it.
+Extrude, Inset, Bevel, Plane Cut, Array, Loop Cut, Snap to Vertex, and Align Face are modal previews. Drag an operation handle or use its numeric field, then press Enter or click Apply. A left click chooses the target for Snap or Align. Escape, right-click, or Cancel closes a preview without applying it.

@@ -104,6 +104,7 @@ public:
 	int collapse_vertices(const PackedInt64Array &p_vertices);
 	int connect_vertices(const PackedInt64Array &p_vertices);
 	int move_vertices(const PackedInt64Array &p_vertices, const Vector3 &p_delta);
+	int transform_vertices(const PackedInt64Array &p_vertices, const Transform3D &p_transform);
 
 	int boolean_with(SlabSolid *p_other, int p_mode);
 	int plane_cut(const Vector3 &p_origin, const Vector3 &p_normal, bool p_keep_positive, int p_cap_material);

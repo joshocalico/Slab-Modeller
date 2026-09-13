@@ -38,3 +38,10 @@ static func translate(solid: Node3D, mode: int, ids: PackedInt64Array, delta: Ve
 	if verts.is_empty():
 		return OK
 	return solid.move_vertices(verts, delta)
+
+
+static func transform(solid: Node3D, mode: int, ids: PackedInt64Array, xform: Transform3D) -> int:
+	var verts: PackedInt64Array = vertices(solid, mode, ids)
+	if verts.is_empty() or xform.is_equal_approx(Transform3D.IDENTITY):
+		return OK
+	return solid.transform_vertices(verts, xform)

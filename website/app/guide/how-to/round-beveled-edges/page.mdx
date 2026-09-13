@@ -8,13 +8,13 @@ Use a segmented bevel to soften a blockout edge or round the three edges that me
 
 1. Select a `SlabSolid` and switch to Edge mode.
 2. Select one or more edges, then choose **Bevel**.
-3. Set **Amount** to the distance removed from each adjoining face.
+3. Drag the purple width arc, or set **Amount** to the exact distance removed from each adjoining face.
 4. Set **Segments** from 1 to 16. One segment is a straight chamfer; additional segments follow a rounded profile.
 
 The cyan preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built.
 
 ## Apply or cancel
 
-Press Enter or click **Apply** to commit the preview as one undo action. Press Escape or right-click to cancel. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.
+Press Enter or click **Apply** to commit the preview as one undo action. Click **Cancel**, press Escape, or right-click to leave the solid unchanged. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.
 
 Very small amounts with many segments can collapse several samples onto the same lattice point. Slab refuses that result; increase the amount or reduce the segment count.

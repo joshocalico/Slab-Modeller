@@ -28,12 +28,29 @@ A, Grow, Invert, Select Loop, and Select Ring on the panel also change the set. 
 
 Click without moving the mouse still selects. Motion under 6 pixels is still a click.
 
-Press <kbd>W</kbd> for the Move gizmo. That gizmo translates the selected vertices, edges, or faces. Rotate and Scale do not move vertices. A plain drag is left for that gizmo, so the view can still orbit.
+Choose Godot's Move, Rotate, or Scale tool in the 3D toolbar. <kbd>W</kbd> selects Move and <kbd>R</kbd> selects Scale. In Face mode Slab reserves <kbd>E</kbd> for Extrude, so choose Rotate from the toolbar there. The gizmo transforms every vertex represented by the selected vertices, edges, or faces in one validated edit. A plain drag is left for that gizmo, so the view can still orbit.
 
-- Shift-drag on a face extrudes first, then moves the new cap.
-- Shift-drag on an edge bevels it. The drag distance is the chamfer amount.
+## Place and orient the gizmo
 
-Release ends a Shift-drag. The next Shift-drag starts from the new positions. Escape during a Shift-drag restores the mesh and keeps the mode.
+Use **Pivot** in the Slab panel to place the handle at the selection centre, the active element, or an exact custom world position. The active element is the last element added to the selection.
+
+Use **Axes** to choose world axes, the solid's local axes, or the selected face's axes. Face axes use the active selected face and are available only in Face mode. Slab keeps these axes orthogonal under a nonuniform node scale.
+
+Each completed gizmo drag is one undo action. A transform that would collapse or invalidate the solid is refused and leaves the last valid mesh unchanged.
+
+## Use operation handles
+
+Select faces and click **Extrude** or **Inset**, or select edges and click **Bevel**. Slab shows the proposed result and a separate coloured handle with its current measurement.
+
+Drag the handle to change the amount. For an exact value, type **Distance** for Extrude or Inset, or **Amount** for Bevel. Click **Apply** or press Enter to commit one undo action. Click **Cancel**, press Escape, or right-click to leave the solid unchanged.
+
+Extrude uses an arrow along the face normal. Inset uses a width marker across the face boundary. Bevel uses an arc across the selected edge. If the proposed mesh is invalid, Slab shows the refused geometry and does not enable a bad commit.
+
+Shift-drag remains a direct gesture: Shift-drag a face to extrude it, or Shift-drag an edge to bevel it. Release commits the grab. Escape during the drag restores the mesh and keeps the current mode.
+
+## Pick through the solid
+
+Enable **X-ray selection** to include occluded vertices, edges, and faces. The candidates and wire display remain visible through the solid. Press <kbd>Tab</kbd> to cycle candidates under the pointer and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle backward, then click to select the highlighted candidate. Turn X-ray off to restrict picking and highlights to visible geometry.
 
 ## Keep a multi-selection when you move
 

@@ -13,6 +13,7 @@ const SlabArray := preload("res://addons/slab/slab_array.gd")
 const SlabSnapAlign := preload("res://addons/slab/slab_snap_align.gd")
 const SlabBevel := preload("res://addons/slab/slab_bevel.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
+const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
 
 enum Verdict { PASS, STOP, CUSTOM }
 
@@ -66,16 +67,35 @@ var _bevel: RefCounted
 var _paint: RefCounted
 var _gizmo_nodes: Array[Node3D] = []
 var _grab: Grab = Grab.idle()
+var _pick_candidates: Array[Dictionary] = []
+var _candidate_index := 0
+var _candidate_screen := Vector2(INF, INF)
+var _candidate_camera: Camera3D
+var _candidate_mode := -1
+var _operation := preload("res://addons/slab/slab_operation_handles.gd").new()
+var _operation_dragging := false
+var _operation_press := Vector2.ZERO
+var _operation_start := 0.0
+var _pending_native_press := false
+var _pending_native_dragged := false
+var _pending_native_screen := Vector2.ZERO
+var _pending_native_candidate: Dictionary = {}
 
 
 func _init(host: RefCounted) -> void:
 	_host = host
 	_selection = SlabSelection.new()
+	_selection.settings_changed.connect(_clear_candidates)
 	_metrics = SlabMetrics.of(host)
 
 
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
+	_actions.operation_requested.connect(_begin_operation)
+	_actions.operation_amount_changed.connect(_change_operation_amount)
+	_actions.operation_apply_requested.connect(_confirm_operation)
+	_actions.operation_cancel_requested.connect(_cancel_operation)
+	_selection.changed.connect(_cancel_operation)
 	_actions.plane_requested.connect(func() -> void:
 		if _loop != null and _loop.active:
 			_loop.cancel()
@@ -139,6 +159,8 @@ static func after_gui_input(verdict: int) -> int:
 func handle(camera: Camera3D, event: InputEvent) -> int:
 	if _selection == null:
 		return Verdict.PASS
+	if _operation.active:
+		return _handle_operation(camera, event)
 	if _snap_align != null and _snap_align.active:
 		return _snap_align.handle(camera, event)
 	if _bevel != null and _bevel.active:
@@ -203,6 +225,10 @@ func gizmo_targets() -> Array[Node3D]:
 
 func state() -> RefCounted:
 	return _selection
+
+
+func native_gizmo_pending() -> bool:
+	return _pending_native_press
 
 
 func metrics() -> RefCounted:
@@ -390,6 +416,10 @@ func _sync_bevel_state() -> void:
 
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
+	if _pending_native_press:
+		if event.position.distance_to(_pending_native_screen) >= _metrics.px(DRAG_THRESHOLD_PX):
+			_pending_native_dragged = true
+		return Verdict.PASS
 	if not _grab.active():
 		_on_hover(camera, event.position)
 		return Verdict.PASS
@@ -405,22 +435,36 @@ func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
 
 
 func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
+	_pending_native_press = false
+	_pending_native_dragged = false
+	_pending_native_candidate.clear()
 	if _grab.active():
 		_on_release()
 	var additive: bool = event.shift_pressed or event.ctrl_pressed or event.meta_pressed
 	var screen: Vector2 = screen_of(event)
-	var hit: Node3D = SlabPick.pick_solid(_host.scene_root(), camera, screen)
+	var candidate := _candidate_at(camera, screen)
+	var hit: Node3D = candidate.get("solid")
 	if _selection.mode == SlabSelection.Mode.OBJECT:
+		hit = SlabPick.pick_solid(_host.scene_root(), camera, screen)
 		if hit == null:
 			return Verdict.PASS
 		_focus(hit, additive)
 		return Verdict.CUSTOM
+	if not additive and not event.double_click and not _selection.ids.is_empty():
+		# Native gizmo handles can cover otherwise pickable geometry. Resolve a
+		# plain click on release; if it becomes a drag, keep the current element
+		# set and leave the complete gesture to Godot.
+		_pending_native_press = true
+		_pending_native_screen = screen
+		_pending_native_candidate = candidate
+		var native := _near_native_gizmo(camera, screen)
+		return Verdict.PASS if native else Verdict.CUSTOM
 	if hit == null:
 		if not additive:
 			_selection.clear_ids()
 		return Verdict.CUSTOM if _selection.solid != null else Verdict.PASS
 	_focus(hit, false)
-	var id: int = SlabPick.pick(hit, _selection.mode, camera, screen, _metrics.pick_radius())
+	var id: int = int(candidate.get("id", 0))
 	if id == 0:
 		if not additive:
 			_selection.clear_ids()
@@ -435,7 +479,46 @@ func _on_press(camera: Camera3D, event: InputEventMouseButton) -> int:
 	return Verdict.CUSTOM
 
 
+func _near_native_gizmo(camera: Camera3D, screen: Vector2) -> bool:
+	var frame := SlabSelectionFrame.from_selection(_selection)
+	if not frame.get("valid", false):
+		return false
+	var world: Transform3D = frame["world"]
+	var centre := camera.unproject_position(world.origin)
+	var offset := screen - centre
+	var scale: float = _metrics.px(1.0)
+	var radius := offset.length()
+	if radius <= 13.0 * scale or (radius >= 52.0 * scale and radius <= 98.0 * scale):
+		return true
+	var reach := maxf(camera.global_position.distance_to(world.origin) * 0.2, 0.25)
+	for axis in [world.basis.x, world.basis.y, world.basis.z]:
+		var toward := camera.unproject_position(world.origin + axis * reach) - centre
+		if toward.is_zero_approx():
+			continue
+		var direction := toward.normalized()
+		var along := offset.dot(direction)
+		var across := absf(offset.cross(direction))
+		if along >= 7.0 * scale and along <= 112.0 * scale and across <= 9.0 * scale:
+			return true
+	return false
+
+
 func _on_release() -> int:
+	if _pending_native_press:
+		var dragged := _pending_native_dragged
+		var candidate := _pending_native_candidate
+		_pending_native_press = false
+		_pending_native_dragged = false
+		_pending_native_candidate = {}
+		if not dragged:
+			var hit: Node3D = candidate.get("solid")
+			var id := int(candidate.get("id", 0))
+			if hit == null or id == 0:
+				_selection.clear_ids()
+			else:
+				_focus(hit, false)
+				_selection.toggle_id(id, false)
+		return Verdict.PASS if dragged else Verdict.CUSTOM
 	if _grab.phase == Grab.Phase.IDLE:
 		return Verdict.PASS
 	if _grab.phase == Grab.Phase.PRESSED:
@@ -450,6 +533,14 @@ func _on_key(event: InputEventKey) -> int:
 		if event.keycode == KEY_ESCAPE:
 			return _cancel()
 		return Verdict.STOP
+	if event.keycode == KEY_TAB and not event.ctrl_pressed and not event.meta_pressed and not event.alt_pressed and _candidate_mode == _selection.mode:
+		if _pick_candidates.size() > 1:
+			_candidate_index = posmod(_candidate_index + (-1 if event.shift_pressed else 1), _pick_candidates.size())
+			var candidate: Dictionary = _pick_candidates[_candidate_index]
+			_selection.set_hover(candidate.get("solid"), int(candidate.get("id", 0)))
+			if _actions != null:
+				_actions.reported.emit("Candidate %d / %d. Click to select; Tab cycles, Shift-Tab reverses." % [_candidate_index + 1, _pick_candidates.size()])
+			return Verdict.STOP
 	if event.ctrl_pressed or event.meta_pressed:
 		return Verdict.PASS
 	if event.keycode == KEY_ESCAPE:
@@ -643,11 +734,35 @@ static func _face_anchor(camera: Camera3D, screen: Vector2, solid: Node3D, face:
 
 
 func _on_hover(camera: Camera3D, screen: Vector2) -> void:
-	var hit: Node3D = SlabPick.pick_solid(_host.scene_root(), camera, screen)
-	if hit == null or _selection.mode == SlabSelection.Mode.OBJECT:
-		_selection.set_hover(hit, 0)
+	if _selection.mode == SlabSelection.Mode.OBJECT:
+		_selection.set_hover(SlabPick.pick_solid(_host.scene_root(), camera, screen), 0)
 		return
-	_selection.set_hover(hit, SlabPick.pick(hit, _selection.mode, camera, screen, _metrics.pick_radius()))
+	var candidate := _candidate_at(camera, screen)
+	_selection.set_hover(candidate.get("solid"), int(candidate.get("id", 0)))
+
+
+func _clear_candidates() -> void:
+	_pick_candidates.clear()
+	_candidate_index = 0
+	_candidate_screen = Vector2(INF, INF)
+
+
+func _candidate_at(camera: Camera3D, screen: Vector2) -> Dictionary:
+	var next: Array[Dictionary] = SlabPick.scene_candidates(_host.scene_root(), _selection.mode,
+		camera, screen, _metrics.pick_radius(), not _selection.xray)
+	var same: bool = camera == _candidate_camera and _candidate_mode == _selection.mode and screen.distance_to(_candidate_screen) <= 2.0 and next.size() == _pick_candidates.size()
+	if same:
+		for i in next.size():
+			if next[i].get("solid") != _pick_candidates[i].get("solid") or next[i].get("id") != _pick_candidates[i].get("id"):
+				same = false
+				break
+	if not same:
+		_candidate_index = 0
+	_pick_candidates = next
+	_candidate_camera = camera
+	_candidate_mode = _selection.mode
+	_candidate_screen = screen
+	return _pick_candidates[_candidate_index] if not _pick_candidates.is_empty() else {}
 
 
 func _focus(solid: Node3D, additive: bool) -> void:
@@ -668,3 +783,99 @@ func _touch_gizmo(node: Variant, seen: Dictionary, next: Array[Node3D]) -> void:
 
 static func screen_of(event: InputEventMouseButton) -> Vector2:
 	return event.position
+
+
+func _begin_operation(kind: int) -> void:
+	_cancel_operation()
+	if _selection.solid == null or _selection.ids.is_empty() or _selection.mode != (SlabSelection.Mode.EDGE if kind == 2 else SlabSelection.Mode.FACE):
+		_actions.reported.emit("Select edges for Bevel, or faces for Extrude and Inset.")
+		return
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_bevel()
+	_exit_paint()
+	if _plane != null and _plane.active: _plane.cancel()
+	if _loop != null and _loop.active: _loop.cancel()
+	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.amount, _actions.bevel_segments):
+		_publish_operation()
+
+
+func _publish_operation() -> void:
+	if not _operation.active: return
+	var shape: Dictionary = _operation.geometry()
+	shape["solid"] = _operation.solid
+	shape["preview_lines"] = _operation.preview_lines
+	shape["error"] = _operation.error
+	_selection.operation_preview = shape
+	_actions.operation_active = true
+	_actions.operation_amount = _operation.amount
+	_actions.operation_state_changed.emit()
+	_selection.hover_changed.emit()
+	_actions.reported.emit(shape["label"] + (". Drag the handle or enter an amount; Apply confirms, Escape cancels." if _operation.error == OK else ". " + _actions.describe_error(_operation.error, "extrude_faces" if _operation.kind == 0 else "")))
+
+
+func _change_operation_amount(value: float) -> void:
+	if not _operation.active: return
+	_operation.set_amount(value)
+	_publish_operation()
+
+
+func _handle_operation(camera: Camera3D, event: InputEvent) -> int:
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_ESCAPE: _cancel_operation()
+		elif event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER: _confirm_operation()
+		else: return Verdict.PASS
+		return Verdict.STOP
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			_cancel_operation()
+			return Verdict.STOP
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed and _operation.hit_test(camera, event.position, _metrics.pick_radius()):
+				_operation_dragging = true
+				_operation_press = event.position
+				_operation_start = _operation.amount
+				return Verdict.STOP
+			elif not event.pressed:
+				var dragged := _operation_dragging
+				_operation_dragging = false
+				return Verdict.STOP if dragged else Verdict.PASS
+			return Verdict.PASS
+	if event is InputEventMouseMotion and _operation_dragging:
+		_change_operation_amount(_operation_start + _operation.drag_value(camera, _operation_press, event.position))
+		return Verdict.STOP
+	return Verdict.PASS
+
+
+func _cancel_operation() -> void:
+	var was_active: bool = _operation.active
+	_operation.cancel()
+	_operation_dragging = false
+	_selection.operation_preview = {}
+	if _actions != null:
+		_actions.operation_active = false
+		_actions.operation_state_changed.emit()
+		if was_active: _actions.status_reset_requested.emit()
+	_selection.hover_changed.emit()
+
+
+func _confirm_operation() -> void:
+	var before_ids: PackedInt64Array = _selection.ids.duplicate()
+	var result: Dictionary = _operation.confirm()
+	if result.is_empty(): return
+	_cancel_operation()
+	var after_ids: PackedInt64Array = result["result_ids"]
+	if after_ids.is_empty(): after_ids = before_ids
+	var undo: Object = _host.undo()
+	if undo != null:
+		undo.create_action("Slab Handle Edit", UndoRedo.MERGE_DISABLE, result["solid"])
+		undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
+		undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
+		undo.commit_action(false)
+	_selection.set_ids(after_ids)
+	_actions.reported.emit("Handle edit applied.")
+
+
+func _restore_operation(solid: Node3D, data: PackedByteArray, ids: PackedInt64Array) -> void:
+	solid.set("data", data)
+	_selection.set_ids(ids)

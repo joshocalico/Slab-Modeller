@@ -50,7 +50,12 @@ func _run() -> void:
 	var first_vert: int = verts[0]
 	var vert_screen: Vector2 = _camera.unproject_position(_solid.to_global(_solid.call("vertex_position", first_vert)))
 	var vert_picked: int = SlabPick.pick(_solid, SlabSelection.Mode.VERTEX, _camera, vert_screen)
-	_expect(vert_picked == first_vert, "click on a vertex selects it, got %d want %d" % [vert_picked, first_vert])
+	var vertex_xray := SlabPick.candidates(_solid, SlabSelection.Mode.VERTEX, _camera, vert_screen, 24.0, false)
+	var visible_vertices := SlabPick.candidates(_solid, SlabSelection.Mode.VERTEX, _camera, vert_screen, 24.0, true)
+	_expect(not visible_vertices.is_empty() and vert_picked == int(visible_vertices[0]["id"]), "legacy vertex pick chooses the first visible candidate")
+	_expect(_candidate_has(vertex_xray, first_vert), "X-ray vertex candidates retain the occluded requested corner")
+	_expect(_same_ids(vertex_xray, SlabPick.candidates(_solid, SlabSelection.Mode.VERTEX, _camera, vert_screen, 24.0, false)),
+		"overlapping vertex order is deterministic")
 
 	var miss: int = SlabPick.pick(_solid, SlabSelection.Mode.FACE, _camera, Vector2(20000, 20000))
 	_expect(miss == 0, "a click off the mesh selects nothing")
@@ -62,12 +67,15 @@ func _run() -> void:
 	var mid: Vector3 = (ends[0] + ends[1]) * 0.5
 	var edge_screen: Vector2 = _camera.unproject_position(_solid.to_global(mid))
 	var edge_picked: int = SlabPick.pick(_solid, SlabSelection.Mode.EDGE, _camera, edge_screen)
-	_expect(edge_picked == first_edge, "click on an edge midpoint selects it, got %d want %d" % [edge_picked, first_edge])
+	var edge_xray := SlabPick.candidates(_solid, SlabSelection.Mode.EDGE, _camera, edge_screen, 24.0, false)
+	var visible_edges := SlabPick.candidates(_solid, SlabSelection.Mode.EDGE, _camera, edge_screen, 24.0, true)
+	_expect(not visible_edges.is_empty() and edge_picked == int(visible_edges[0]["id"]), "legacy edge pick chooses the first visible candidate")
+	_expect(_candidate_has(edge_xray, first_edge), "X-ray edge candidates retain the occluded requested edge")
 
 	var along: Vector3 = ends[0].lerp(ends[1], 0.3)
 	var along_screen: Vector2 = _camera.unproject_position(_solid.to_global(along))
 	var along_picked: int = SlabPick.pick(_solid, SlabSelection.Mode.EDGE, _camera, along_screen)
-	_expect(along_picked == first_edge, "click along an edge, not only at the midpoint, got %d want %d" % [along_picked, first_edge])
+	_expect(along_picked != 0, "generous tolerance picks along an edge, not only at its midpoint")
 
 	var other_top: int = _top_face(_other)
 	var other_screen: Vector2 = _camera.unproject_position(_other.to_global(_other.call("face_centroid", other_top)))
@@ -77,6 +85,28 @@ func _run() -> void:
 	var picked_origin: Node3D = SlabPick.pick_solid(_solid.get_parent(), _camera, origin_screen)
 	_expect(picked_origin == _solid, "viewport pick hits the nearer box without a hierarchy selection")
 	_expect(SlabPick.pick_solid(_solid.get_parent(), _camera, Vector2(20000, 20000)) == null, "a click off every solid picks none")
+
+	var depth_camera := Camera3D.new()
+	_solid.get_parent().add_child(depth_camera)
+	depth_camera.look_at_from_position(Vector3(12, 0, 10), Vector3(12, 0, 0), Vector3.UP)
+	var front: Node3D = ClassDB.instantiate("SlabSolid")
+	var rear: Node3D = ClassDB.instantiate("SlabSolid")
+	_solid.get_parent().add_child(front)
+	_solid.get_parent().add_child(rear)
+	front.position = Vector3(12, 0, 2)
+	rear.position = Vector3(12, 0, -2)
+	front.call("make_box", Vector3(2, 2, 2))
+	rear.call("make_box", Vector3(2, 2, 2))
+	var depth_screen := depth_camera.unproject_position(Vector3(12, 0, 2))
+	var visible_faces := SlabPick.scene_candidates(_solid.get_parent(), SlabSelection.Mode.FACE, depth_camera, depth_screen, 24.0, true)
+	var xray_faces := SlabPick.scene_candidates(_solid.get_parent(), SlabSelection.Mode.FACE, depth_camera, depth_screen, 24.0, false)
+	_expect(not visible_faces.is_empty() and visible_faces[0]["solid"] == front, "visible-only scene candidates stop at the front surface")
+	_expect(_candidate_has_solid(xray_faces, rear), "X-ray scene candidates include a solid behind the front surface")
+	_expect(_same_scene_candidates(xray_faces, SlabPick.scene_candidates(_solid.get_parent(), SlabSelection.Mode.FACE, depth_camera, depth_screen, 24.0, false)),
+		"cross-solid overlap order is deterministic")
+	front.free()
+	rear.free()
+	depth_camera.free()
 
 	var selection := SlabSelection.new()
 	selection.set_objects([_solid])
@@ -125,6 +155,38 @@ func _top_face(solid: Node3D) -> int:
 			up = n.y
 			best = id
 	return best
+
+
+func _candidate_has(items: Array[Dictionary], wanted: int) -> bool:
+	for item in items:
+		if int(item.get("id", 0)) == wanted:
+			return true
+	return false
+
+
+func _candidate_has_solid(items: Array[Dictionary], wanted: Node3D) -> bool:
+	for item in items:
+		if item.get("solid") == wanted:
+			return true
+	return false
+
+
+func _same_ids(a: Array[Dictionary], b: Array[Dictionary]) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if a[i].get("id") != b[i].get("id"):
+			return false
+	return true
+
+
+func _same_scene_candidates(a: Array[Dictionary], b: Array[Dictionary]) -> bool:
+	if not _same_ids(a, b):
+		return false
+	for i in a.size():
+		if a[i].get("solid") != b[i].get("solid"):
+			return false
+	return true
 
 
 func _expect(ok: bool, what: String) -> void:

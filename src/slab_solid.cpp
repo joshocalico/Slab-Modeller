@@ -100,6 +100,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("collapse_vertices", "vertices"), &SlabSolid::collapse_vertices);
 	ClassDB::bind_method(D_METHOD("connect_vertices", "vertices"), &SlabSolid::connect_vertices);
 	ClassDB::bind_method(D_METHOD("move_vertices", "vertices", "delta"), &SlabSolid::move_vertices);
+	ClassDB::bind_method(D_METHOD("transform_vertices", "vertices", "transform"), &SlabSolid::transform_vertices);
 
 	ClassDB::bind_method(D_METHOD("boolean_with", "other", "mode"), &SlabSolid::boolean_with);
 	ClassDB::bind_method(D_METHOD("plane_cut", "origin", "normal", "keep_positive", "cap_material"), &SlabSolid::plane_cut);
@@ -886,6 +887,26 @@ int SlabSolid::move_vertices(const PackedInt64Array &p_vertices, const Vector3 &
 	const slab::MeshFault fault = slab::ops::move_vertices(edit, ids, p_delta);
 	if (!fault.ok()) {
 		return _reject(edit.scratch(), fault, slab::FaultElement::VERTEX, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
+	}
+	return _commit(std::move(edit));
+}
+
+int SlabSolid::transform_vertices(const PackedInt64Array &p_vertices, const Transform3D &p_transform) {
+	std::vector<slab::VertexId> ids;
+	if (!_vertex_ids(p_vertices, ids)) {
+		return _reject(live_mesh, { slab::MeshError::STALE_HANDLE,
+				p_vertices.is_empty() ? slab::INVALID_IDX : slab::unpack_vertex(p_vertices[0]).slot,
+				slab::FaultElement::VERTEX });
+	}
+	slab::MeshEdit edit(live_mesh);
+	for (const slab::VertexId id : ids) {
+		slab::IVec3 target;
+		if (!slab::quantize(p_transform.xform(live_mesh.position(id)), target)) {
+			return _reject(edit.scratch(), { slab::MeshError::COORD_OUT_OF_RANGE, id.slot,
+					slab::FaultElement::VERTEX });
+		}
+		edit.move_vertex(id, target);
+		if (!edit.last_fault().ok()) return _reject(edit.scratch(), edit.last_fault());
 	}
 	return _commit(std::move(edit));
 }

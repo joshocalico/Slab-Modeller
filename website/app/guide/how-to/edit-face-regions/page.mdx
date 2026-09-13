@@ -8,8 +8,9 @@ Use this when adjacent faces should extrude or inset as one patch.
 
 1. Press <kbd>4</kbd> for Face mode.
 2. Select adjacent faces on one solid.
-3. Set **Distance**. Positive moves outward. Negative moves inward.
-4. Press <kbd>E</kbd>.
+3. Click **Extrude**, or press <kbd>E</kbd>.
+4. Drag the cyan arrow, or type **Distance**. Positive moves outward. Negative moves inward.
+5. Click **Apply** or press Enter.
 
 Slab moves every selected face in one shared direction. It keeps the edges between the cap faces and builds side walls around every boundary loop, including the boundary of an unselected hole. A bent selection uses an area-weighted average of its face normals.
 
@@ -18,12 +19,15 @@ The faces must form one edge-connected region. Two patches that meet only at a v
 ## Inset a region
 
 1. Select adjacent coplanar faces.
-2. Set a positive **Distance**.
-3. Press <kbd>I</kbd>.
+2. Click **Inset**, or press <kbd>I</kbd>.
+3. Drag the gold width marker, or type a positive **Distance**.
+4. Click **Apply** or press Enter.
 
 Inset moves the shared boundary inward. Internal cap edges stay in place as part of the new cap layout. A region can surround an unselected island; Slab treats that inner loop as another boundary.
 
 Inset requires every selected face to lie on one plane and face the same way. It refuses folded selections.
+
+Escape, right-click, or **Cancel** closes either preview without changing the solid. Apply creates one undo action. A refused preview shows the attempted result but cannot commit.
 
 ## Hollow a divided cap
 

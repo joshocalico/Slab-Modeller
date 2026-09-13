@@ -7,6 +7,13 @@ const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 
 signal reported(text: String)
 signal status_reset_requested
+signal operation_requested(kind: int)
+signal operation_amount_changed(value: float)
+signal operation_apply_requested
+signal operation_cancel_requested
+signal operation_state_changed
+var operation_active := false
+var operation_amount := 0.5
 signal loop_requested
 signal loop_settings_changed
 signal loop_values_updated

@@ -3,8 +3,41 @@ extends RefCounted
 
 signal changed
 signal hover_changed
+signal settings_changed
 
 enum Mode { OBJECT, VERTEX, EDGE, FACE }
+enum Pivot { SELECTION, ACTIVE, CUSTOM }
+enum Orientation { WORLD, LOCAL, FACE }
+
+var pivot_mode: int = Pivot.SELECTION
+var orientation: int = Orientation.WORLD
+var custom_pivot_world := Vector3.ZERO
+var xray: bool = false
+var active_id: int = 0
+
+
+func configure_pivot(value: int, position: Variant = null) -> void:
+	if value < Pivot.SELECTION or value > Pivot.CUSTOM:
+		return
+	pivot_mode = value
+	if position is Vector3:
+		custom_pivot_world = position
+	settings_changed.emit()
+
+
+func configure_orientation(value: int) -> void:
+	if value < Orientation.WORLD or value > Orientation.FACE:
+		return
+	orientation = value
+	settings_changed.emit()
+
+
+func set_xray(value: bool) -> void:
+	if xray == value:
+		return
+	xray = value
+	set_hover(null, 0)
+	settings_changed.emit()
 
 const SOLID_CLASS := "SlabSolid"
 
@@ -27,7 +60,10 @@ var mode: int = Mode.OBJECT:
 		if value == mode or not MODE_LABELS.has(value):
 			return
 		mode = value
+		if orientation == Orientation.FACE and mode != Mode.FACE:
+			orientation = Orientation.WORLD
 		ids = PackedInt64Array()
+		active_id = 0
 		hover_id = 0
 		changed.emit()
 		hover_changed.emit()
@@ -41,6 +77,7 @@ var preview_lines := PackedVector3Array()
 var array_preview_solid: Node3D = null
 var array_preview_transforms: Array[Transform3D] = []
 var snap_align_preview: Dictionary = {}
+var operation_preview: Dictionary = {}
 
 var hover_solid: Node3D = null
 
@@ -91,6 +128,7 @@ func set_objects(nodes: Array) -> void:
 		return
 	objects = kept
 	ids = PackedInt64Array()
+	active_id = 0
 	changed.emit()
 
 
@@ -98,6 +136,7 @@ func set_ids(value: PackedInt64Array) -> void:
 	if value == ids:
 		return
 	ids = value
+	active_id = ids[ids.size() - 1] if not ids.is_empty() else 0
 	changed.emit()
 
 

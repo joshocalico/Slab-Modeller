@@ -55,6 +55,8 @@ var _paint_uv_controls: Control
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
+var _selection_controls: Control
+var _operation_row: Control
 
 
 func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
@@ -73,6 +75,11 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 
 	_status = _status_label()
 	add_child(_header())
+	_selection_controls = preload("res://addons/slab/slab_selection_controls.gd").new()
+	_selection_controls.setup(_selection, _metrics)
+	add_child(_selection_controls)
+	_operation_row = _operation_controls()
+	add_child(_operation_row)
 	add_child(_status)
 	_model_body = VBoxContainer.new()
 	_model_body.name = "ModelBody"
@@ -89,6 +96,49 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_actions.reported.connect(_on_reported)
 	_actions.status_reset_requested.connect(_reset_status)
 	refresh()
+
+
+func _operation_controls() -> Control:
+	var row := HFlowContainer.new()
+	row.name = "OperationHandles"
+	for kind in 3:
+		var button := Button.new()
+		button.text = ["Extrude handle", "Inset handle", "Bevel handle"][kind]
+		button.add_theme_font_size_override("font_size", _font(14))
+		button.pressed.connect(func() -> void:
+			button.release_focus()
+			_actions.operation_requested.emit(kind))
+		row.add_child(button)
+	var amount := SpinBox.new()
+	amount.name = "HandleAmount"
+	amount.min_value = -64.0
+	amount.max_value = 64.0
+	amount.step = 0.001
+	amount.suffix = "m"
+	amount.custom_minimum_size.x = _scaled(100)
+	amount.add_theme_font_size_override("font_size", _font(14))
+	amount.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	amount.value_changed.connect(func(value: float) -> void: _actions.operation_amount_changed.emit(value))
+	row.add_child(amount)
+	for apply in [true, false]:
+		var button := Button.new()
+		button.text = "Apply" if apply else "Cancel"
+		button.add_theme_font_size_override("font_size", _font(14))
+		button.pressed.connect(func() -> void:
+			button.release_focus()
+			if apply: _actions.operation_apply_requested.emit()
+			else: _actions.operation_cancel_requested.emit())
+		row.add_child(button)
+	var sync := func() -> void:
+		for i in 3:
+			row.get_child(i).disabled = _selection.ids.is_empty() or _selection.mode != (2 if i == 2 else 3)
+		for i in range(3, row.get_child_count()):
+			row.get_child(i).visible = _actions.operation_active
+		amount.set_value_no_signal(_actions.operation_amount)
+	_selection.changed.connect(sync)
+	_actions.operation_state_changed.connect(sync)
+	sync.call()
+	return row
 
 
 func _get_minimum_size() -> Vector2:
@@ -1091,6 +1141,8 @@ func _paint_caption(heading: String, text: String) -> Label:
 
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
+	if _selection_controls != null: _selection_controls.visible = not on
+	if _operation_row != null: _operation_row.visible = not on
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(on)
 	if _model_body != null:

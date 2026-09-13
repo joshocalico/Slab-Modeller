@@ -21,6 +21,44 @@ var _ran := 0
 var _frames := 0
 
 
+func case_xray_cycle_hover_matches_click() -> void:
+	var box: Node3D = _world.box()
+	_select(box, SlabSelection.Mode.FACE)
+	var screen: Vector2 = _world.at_face(box, _world.top_face(box))
+	_session.state().set_xray(true)
+	_session.handle(_world.camera(), _world.motion(screen))
+	var first: int = _session.state().hover_id
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_TAB))
+	var second: int = _session.state().hover_id
+	expect(verdict == SlabViewport.Verdict.STOP and first != 0 and second != first,
+		"Tab cycles the hovered face to an occluded candidate in X-ray")
+	_session.handle(_world.camera(), _world.click(screen))
+	expect(_session.state().ids == PackedInt64Array([second]), "click selects exactly the cycled hover candidate")
+	_session.state().set_xray(false)
+	_session.handle(_world.camera(), _world.motion(screen))
+	expect(_session.state().hover_id == first, "visible-only resets the cycle to the visible face")
+
+
+func case_operation_handle_exact_apply_and_cancel() -> void:
+	var box: Node3D = _world.box()
+	_select(box, SlabSelection.Mode.FACE)
+	_session.state().set_ids(PackedInt64Array([_world.top_face(box)]))
+	var actions := preload("res://addons/slab/slab_actions.gd").new(_session.state())
+	_session.bind_actions(actions)
+	var before: PackedByteArray = box.get("data")
+	actions.operation_requested.emit(0)
+	actions.operation_amount_changed.emit(0.375)
+	expect(actions.operation_active and box.get("data") == before, "handle exact amount previews without mutating the solid")
+	expect(_session.state().operation_preview.get("label", "").contains("0.375"), "handle label shows the exact amount")
+	actions.operation_cancel_requested.emit()
+	expect(not actions.operation_active and box.get("data") == before, "handle cancel preserves original data")
+	actions.operation_requested.emit(0)
+	actions.operation_amount_changed.emit(0.375)
+	actions.operation_apply_requested.emit()
+	expect(not actions.operation_active and box.get("data") != before, "handle Apply commits preview and exits modal state")
+	expect(not _session.state().ids.is_empty(), "handle Apply retains cap selection")
+
+
 func case_empty_selection_first_click_selects_the_solid() -> void:
 	var box: Node3D = _world.box()
 	expect(_host.selected_nodes().is_empty(), "the editor selection starts empty")
@@ -39,10 +77,50 @@ func case_empty_space_click_keeps_slab_authority() -> void:
 	_session.state().set_ids(PackedInt64Array([_world.top_face(box)]))
 
 	var verdict: int = _session.handle(_world.camera(), _world.click(VOID))
+	var release: int = _session.handle(_world.camera(), _world.release(VOID))
 
 	expect(verdict == SlabViewport.Verdict.CUSTOM, "a miss with a solid selected stays inside Slab")
+	expect(release == SlabViewport.Verdict.CUSTOM, "a plain miss clears when the click completes")
 	expect(_session.state().ids.is_empty(), "the miss clears the element selection")
 	expect(_host.commands().is_empty(), "a miss never touches the editor selection")
+
+
+func case_native_gizmo_drag_preserves_element_selection() -> void:
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box])
+	_session.adopt_host_selection()
+	_session.state().mode = SlabSelection.Mode.FACE
+	var face: int = _world.top_face(box)
+	_session.state().set_ids(PackedInt64Array([face]))
+	var press := _world.at_face(box, face)
+	var verdict := _session.handle(_world.camera(), _world.click(press))
+	var motion := _world.motion(press + Vector2(24, 0))
+	motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	var drag_verdict := _session.handle(_world.camera(), motion)
+	var release := _session.handle(_world.camera(), _world.release(press + Vector2(24, 0)))
+	expect(verdict == SlabViewport.Verdict.PASS and drag_verdict == SlabViewport.Verdict.PASS and release == SlabViewport.Verdict.PASS,
+		"a miss that becomes a drag is delegated to Godot's native gizmo")
+	expect(_session.state().ids == PackedInt64Array([face]), "native gizmo drag preserves the selected elements")
+
+
+func case_native_gizmo_drag_preserves_selection_over_pickable_geometry() -> void:
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box])
+	_session.adopt_host_selection()
+	_session.state().mode = SlabSelection.Mode.FACE
+	var selected: int = _world.top_face(box)
+	_session.state().set_ids(PackedInt64Array([selected]))
+	var press := _world.at_face(box, selected)
+	_session.handle(_world.camera(), _world.motion(press))
+	expect(_session.state().hover_id != 0, "test finds pickable geometry beneath the native pivot handle")
+	var verdict := _session.handle(_world.camera(), _world.click(press))
+	var motion := _world.motion(press + Vector2(24, 0))
+	motion.button_mask = MOUSE_BUTTON_MASK_LEFT
+	var drag_verdict := _session.handle(_world.camera(), motion)
+	var release := _session.handle(_world.camera(), _world.release(press + Vector2(24, 0)))
+	expect(verdict == SlabViewport.Verdict.PASS and drag_verdict == SlabViewport.Verdict.PASS and release == SlabViewport.Verdict.PASS,
+		"a drag over pickable geometry remains available to the native gizmo")
+	expect(_session.state().ids == PackedInt64Array([selected]), "geometry beneath a native handle does not replace the transformed selection")
 
 
 func case_empty_space_click_with_nothing_selected_passes() -> void:

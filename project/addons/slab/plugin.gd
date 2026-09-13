@@ -26,10 +26,12 @@ var _solid_gizmo: EditorNode3DGizmoPlugin
 var _subgizmo_token := ""
 var _subgizmo_solid: Node3D = null
 var _workspace := "3D"
+var _overlay_camera: Camera3D
 
 
 func _enter_tree() -> void:
 	set_input_event_forwarding_always_enabled()
+	set_force_draw_over_forwarding_enabled()
 	set_process_shortcut_input(true)
 	_host = SlabEditorHostLive.with_undo(get_undo_redo())
 	_session = SlabViewport.new(_host)
@@ -59,6 +61,8 @@ func _enter_tree() -> void:
 	_host.connect_host_selection(_on_editor_selection_changed)
 	_selection.changed.connect(_refresh_gizmos)
 	_selection.hover_changed.connect(_refresh_gizmos)
+	_selection.settings_changed.connect(_on_selection_settings_changed)
+	_sync_native_local_axes()
 	_on_editor_selection_changed()
 	main_screen_changed.connect(_on_main_screen_changed)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
@@ -75,6 +79,8 @@ func _exit_tree() -> void:
 			_selection.changed.disconnect(_refresh_gizmos)
 		if _selection.hover_changed.is_connected(_refresh_gizmos):
 			_selection.hover_changed.disconnect(_refresh_gizmos)
+		if _selection.settings_changed.is_connected(_on_selection_settings_changed):
+			_selection.settings_changed.disconnect(_on_selection_settings_changed)
 	if _paint:
 		if _paint.has_signal("changed") and _paint.changed.is_connected(_refresh_gizmos):
 			_paint.changed.disconnect(_refresh_gizmos)
@@ -105,12 +111,22 @@ func _handles(object: Object) -> bool:
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
+	_overlay_camera = viewport_camera
+	update_overlays()
 	if _session == null:
 		return AFTER_GUI_INPUT_PASS
 	if event is InputEventKey and get_viewport().is_input_handled():
 		return AFTER_GUI_INPUT_STOP
+	var native_was_pending: bool = _session.native_gizmo_pending()
 	var verdict: int = _session.handle(viewport_camera, event)
-	_refresh_gizmos()
+	# Updating a Node3D's gizmos schedules a rebuild. Doing that between the
+	# native handle press and its motion invalidates Godot's active subgizmo.
+	if not native_was_pending and not _session.native_gizmo_pending():
+		_refresh_gizmos()
+	else:
+		update_overlays()
+		if native_was_pending and not _session.native_gizmo_pending():
+			_refresh_gizmos.call_deferred()
 	if verdict == SlabViewport.Verdict.STOP and event is InputEventKey:
 		get_viewport().set_input_as_handled()
 	return SlabViewport.after_gui_input(verdict)
@@ -136,6 +152,37 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func _on_main_screen_changed(screen_name: String) -> void:
 	_workspace = screen_name
+
+
+func _on_selection_settings_changed() -> void:
+	_sync_native_local_axes()
+	_refresh_gizmos()
+
+
+func _sync_native_local_axes() -> void:
+	if _selection == null:
+		return
+	var viewport_3d := EditorInterface.get_editor_viewport_3d(0)
+	var spatial := spatial_editor_root(viewport_3d)
+	if spatial == null:
+		return
+	var want_local: bool = _selection.orientation != SlabSelection.Orientation.WORLD
+	for child in spatial.find_children("*", "Button", true, false):
+		var button := child as Button
+		if button == null or not shortcut_has_key(button.shortcut, KEY_T):
+			continue
+		if button.button_pressed != want_local:
+			button.button_pressed = want_local
+		return
+
+
+static func shortcut_has_key(shortcut: Shortcut, keycode: Key) -> bool:
+	if shortcut == null:
+		return false
+	for event in shortcut.events:
+		if event is InputEventKey and (event.keycode == keycode or event.physical_keycode == keycode):
+			return true
+	return false
 
 
 static func should_claim_shortcut(
@@ -190,12 +237,15 @@ static func focus_is_outside_spatial_editor(focus: Control, viewport_3d: Node) -
 
 static func spatial_editor_root(viewport_3d: Node) -> Node:
 	var node: Node = viewport_3d
+	var viewport_root: Node = null
 	while node != null:
 		var cls: String = node.get_class()
-		if cls == "Node3DEditor" or cls == "Node3DEditorViewport":
+		if cls == "Node3DEditor":
 			return node
+		if cls == "Node3DEditorViewport" and viewport_root == null:
+			viewport_root = node
 		node = node.get_parent()
-	return viewport_3d
+	return viewport_root if viewport_root != null else viewport_3d
 
 
 static func focus_owner(viewport: Viewport) -> Control:
@@ -227,6 +277,46 @@ func _refresh_gizmos() -> void:
 		if is_instance_valid(node):
 			node.update_gizmos()
 	_sync_subgizmo()
+	update_overlays()
+
+
+func _forward_3d_force_draw_over_viewport(overlay: Control) -> void:
+	if _selection == null or _overlay_camera == null or not is_instance_valid(_overlay_camera):
+		return
+	var label: Dictionary = SolidGizmo.operation_overlay_label(_selection.operation_preview, _overlay_camera)
+	if label.is_empty(): return
+	var preview: Dictionary = _selection.operation_preview
+	var kind := int(preview.get("kind", 0))
+	var color := Color(0.2, 0.95, 0.85) if kind == 0 else (Color(0.95, 0.72, 0.18) if kind == 1 else Color(0.8, 0.45, 1.0))
+	if int(preview.get("error", OK)) != OK:
+		color = Color(1.0, 0.2, 0.3)
+	var lines := SolidGizmo.operation_handle_lines(preview)
+	for i in range(0, lines.size() - 1, 2):
+		if _overlay_camera.is_position_behind(lines[i]) or _overlay_camera.is_position_behind(lines[i + 1]):
+			continue
+		var start := _overlay_camera.unproject_position(lines[i])
+		var end := _overlay_camera.unproject_position(lines[i + 1])
+		overlay.draw_line(start, end, Color(0.04, 0.05, 0.06, 0.9), 4.0, true)
+		overlay.draw_line(start, end, color, 2.0, true)
+	var tip := _overlay_camera.unproject_position(preview.get("tip", Vector3.ZERO))
+	overlay.draw_circle(tip, 7.0, Color(0.04, 0.05, 0.06))
+	overlay.draw_circle(tip, 5.0, color)
+	var font: Font = ThemeDB.fallback_font
+	var size: int = int(14 * EditorInterface.get_editor_scale())
+	var point: Vector2 = label["screen"]
+	var text: String = label["text"]
+	var extent: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size)
+	point.x = clampf(point.x, 8, maxf(8, overlay.size.x - extent.x - 8))
+	point.y = clampf(point.y, size + 8, maxf(size + 8, overlay.size.y - 8))
+	overlay.draw_style_box(_handle_label_style(), Rect2(point - Vector2(6, size), extent + Vector2(12, 8)))
+	overlay.draw_string(font, point, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color.WHITE)
+
+
+func _handle_label_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.08, 0.1, 0.9)
+	style.set_corner_radius_all(4)
+	return style
 
 
 func _sync_subgizmo() -> void:
@@ -234,7 +324,7 @@ func _sync_subgizmo() -> void:
 	if solid == null or not is_instance_valid(solid) or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
 		_clear_subgizmo()
 		return
-	var token: String = "%s:%d:%s" % [solid.get_instance_id(), _selection.mode, ",".join(_id_tokens(_selection.ids))]
+	var token: String = "%s:%d:%s:%d:%d:%d:%s" % [solid.get_instance_id(), _selection.mode, ",".join(_id_tokens(_selection.ids)), _selection.pivot_mode, _selection.orientation, _selection.active_id, _selection.custom_pivot_world]
 	if token == _subgizmo_token:
 		return
 	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:

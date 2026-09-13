@@ -21,13 +21,14 @@ The face translates with the gizmo. It is not locked to the face normal.
   caption="A pulled face. The solid stays closed."
 />
 
-## Extrude by a typed amount
+## Extrude with the operation handle
 
-1. Set **Distance** on the panel.
-2. Select one or more faces.
-3. Press <kbd>E</kbd>. Or hover the Face icons until you see **Extrude**. Click it.
+1. Select one or more faces.
+2. Click **Extrude**, or press <kbd>E</kbd>.
+3. Drag the cyan arrow along the face normal, or type an exact **Distance**.
+4. Click **Apply** or press Enter.
 
-The cap moves by Distance, not by mouse travel. Positive values move outward. Negative values move inward.
+Positive values move outward. Negative values move inward. Click **Cancel**, press Escape, or right-click to discard the preview. Apply creates one undo action.
 
 ## Extrude by dragging
 
@@ -35,4 +36,4 @@ Hold Shift, click a face, and drag past the threshold. Slab extrudes once at the
 
 ## Inset instead of pull
 
-Select the face and press <kbd>I</kbd>. Inset shrinks a copy of the face on the same plane. The absolute Distance is the inset depth.
+Select the face and click **Inset**, or press <kbd>I</kbd>. Drag the gold width marker or type an exact **Distance**, then Apply. Inset shrinks a copy of the face on the same plane and uses the absolute distance. A refused preview leaves the solid unchanged.

@@ -88,7 +88,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Bevel | 1 edge | Previews an Amount-wide bevel. Segments 1 is a chamfer; 2 to 16 form a rounded profile. |
+| Bevel | 1 edge | Opens a preview with a draggable purple width arc. Amount sets the exact width. |
 | Bridge | 2 edges | Builds a face between two open edges. |
 | Connect | 2 edges | Cuts a new edge between edge midpoints. |
 | Loop Cut | Edge mode | Previews cuts through a quad strip. Click to slide, wheel to change count, type a percentage, Enter to apply. |
@@ -102,8 +102,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Extrude | 1 face | Pulls one face along its normal. A connected selection moves as one region and builds walls only around its boundary. |
-| Inset | 1 face | Shrinks one face, or a connected coplanar selection inside its shared boundary. |
+| Extrude | 1 face | Opens a preview with a draggable cyan normal arrow. A connected selection moves as one region and builds walls only around its boundary. |
+| Inset | 1 face | Opens a preview with a draggable gold boundary-width marker for one face or a connected coplanar selection. |
 | Delete | 1 face | Deletes the selected faces. |
 | Flip Normals | 1 face | Reverses which way the faces point. |
 | Subdivide | 1 face | Splits each face into four. |
@@ -151,10 +151,14 @@ Shown in Vertex, Edge, and Face mode. Each command works on the current mode's e
 | Grow | Adds the neighbours of the selection. |
 | Snap to Vertex | Highlights an actual source vertex, then moves the selection to a vertex clicked on another solid. |
 
+The selection controls above the command rows configure the editor transform gizmo. **Pivot** chooses Selection centre, the last-selected Active element, or a Custom world XYZ position. **Axes** chooses World, Object local, or Selected face orientation. Selected face axes are enabled only for a face selection. **X-ray selection** includes occluded candidates and draws selection lines through the solid; Tab and Shift-Tab cycle overlapping candidates.
+
 ## Loop cut settings
 
 In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the group centre along the starting edge. The group stops before its outer cuts leave the edge. See [Cut and slide edge loops](/guide/how-to/cut-edge-loops).
 
 ## Modal settings
 
-**Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. **Bevel** exposes Amount and 1 to 16 Segments. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.
+**Extrude** and **Inset** expose Distance, Apply, and Cancel. **Bevel** exposes Amount, 1 to 16 Segments, Apply, and Cancel. Their coloured handles change the same numeric value; the field is the exact-entry path. Enter applies one undo action. Escape, right-click, or Cancel leaves the solid unchanged. Invalid previews are refused and cannot commit.
+
+**Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.
