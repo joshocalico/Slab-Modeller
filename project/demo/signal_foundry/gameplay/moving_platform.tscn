@@ -4,6 +4,7 @@
 
 [node name="MovingPlatform" type="AnimatableBody3D"]
 sync_to_physics = true
+collision_priority = 0.1
 script = ExtResource("1")
 
 [node name="PlaceSlabChildrenHere" type="Node3D" parent="."]

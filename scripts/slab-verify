@@ -34,6 +34,10 @@ for extra in solid_smoke sweep_smoke panel_smoke pick_smoke viewport_smoke bevel
 	fi
 done
 
+for gameplay in check_player check_interactions check_animations; do
+	step "signal_foundry/${gameplay}" scripts/godot --headless --path project --script "res://demo/signal_foundry/gameplay/${gameplay}.gd"
+done
+
 step "editor plugin initializes clean" bash -c '
 	out="$(scripts/godot --editor --headless --path project --quit-after 2 2>&1)"
 	echo "${out}" | grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Invalid call" && exit 1

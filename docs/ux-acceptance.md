@@ -26,6 +26,9 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 
 - Selection modes use a persistent gold highlight, including hover. Empty element selections explain the next viewport action. Materials & UV and Selection command groups start collapsed and remember their state across mode switches for the editor session. Materials & UV reveals its commands and selected-face settings together, with the palette first and UV axes side by side. The rendered panel test verifies keyboard selection while collapsed, keyboard disclosure activation, mode-switch persistence, and the existing room/preview/Undo workflows. The live Signal Foundry editor was also checked with the dock reduced to roughly 250 pixels high. The seven affected guide pages and three panel captures match the new controls.
 
+- Signal Foundry was played from the saved START through all three cells, the four raised service landings, courtyard checkpoint, moving lift, two hazard jumps, and powered exit using computer-controlled normal inputs. A deliberate R verified the new editor-authored CatwalkCheckpoint; a deliberate hazard contact after completion preserved all three cells. This is route reachability and recovery evidence, not a no-reset speedrun or proof of the broader level-design target. See [Signal Foundry playtest](signal-foundry-playtest.md).
+- A descending lift was reproduced pushing a player through a static floor. Lower carrier collision priority prevents the fall/reset in a regression at three lateral offsets over multiple cycles; restoring the old priority makes all three cases fail. The main verifier now includes player, interaction, and moving-platform gameplay checks.
+
 ## Remaining acceptance work
 
 | Area | Evidence still required |

@@ -17,6 +17,49 @@ func expect(ok: bool, what: String) -> void:
 		push_error("FAIL " + what)
 
 
+func descending_lift_keeps_player_above_floor(
+	world: Node3D, platform_scene: PackedScene, rider_scene: PackedScene, rider_x: float
+) -> bool:
+	var floor: Node3D = ClassDB.instantiate("SlabSolid")
+	floor.name = "CrushFloor"
+	floor.position = Vector3(-3, 0.05, -3)
+	floor.call("make_box", Vector3(8, 0.4, 8))
+	world.add_child(floor)
+
+	var descending_lift: AnimatableBody3D = platform_scene.instantiate()
+	descending_lift.name = "DescendingLift"
+	descending_lift.position = Vector3(0, 0.45, 0)
+	descending_lift.local_travel = Vector3(0, 2, 0)
+	descending_lift.travel_duration = 1.0
+	descending_lift.endpoint_pause = 0.1
+	var deck: Node3D = ClassDB.instantiate("SlabSolid")
+	deck.call("make_box", Vector3(2, 0.3, 4))
+	deck.scale = Vector3(1, 1, 0.5)
+	descending_lift.get_node("PlaceSlabChildrenHere").add_child(deck)
+	world.add_child(descending_lift)
+
+	# Enter beneath the carrier only once it is clear of the floor.
+	for frame in 70:
+		await physics_frame
+	var trapped_rider: CharacterBody3D = rider_scene.instantiate()
+	trapped_rider.position = Vector3(rider_x, 0.45, 1.0)
+	world.add_child(trapped_rider)
+	await physics_frame
+	trapped_rider.activate_checkpoint(Transform3D(Basis.IDENTITY, Vector3(-2, 0.45, -2)), "TEST")
+	var min_y := trapped_rider.position.y
+	var reset_seen := false
+	for frame in 300:
+		await physics_frame
+		min_y = minf(min_y, trapped_rider.position.y)
+		reset_seen = reset_seen or trapped_rider.position.x < -1.5
+	var stayed_safe: bool = not reset_seen and min_y >= 0.35
+	descending_lift.queue_free()
+	trapped_rider.queue_free()
+	floor.queue_free()
+	await process_frame
+	return stayed_safe
+
+
 func run() -> void:
 	var world := Node3D.new()
 	root.add_child(world)
@@ -32,6 +75,7 @@ func run() -> void:
 	var platform_scene: PackedScene = load("res://demo/signal_foundry/gameplay/moving_platform.tscn")
 	expect(platform_scene != null, "moving platform scene loads")
 	var platform: AnimatableBody3D = platform_scene.instantiate()
+	expect(is_equal_approx(platform.collision_priority, 0.1), "moving carrier yields to static world collision")
 	platform.local_travel = Vector3(0, 0, 4)
 	platform.travel_duration = 2.0
 	platform.endpoint_pause = 0.0
@@ -85,6 +129,12 @@ func run() -> void:
 		await physics_frame
 	expect(lift.position.y > lift_start_y + 0.4, "live authored-size lift moves upward through physics ticks")
 	expect(rider.position.y > rider_start_y + 0.4, "AnimatableBody lift carries player from reported spawn")
+	lift.queue_free()
+	rider.queue_free()
+	await process_frame
+	for rider_x in [0.35, 1.0, 1.65]:
+		expect(await descending_lift_keeps_player_above_floor(world, platform_scene, rider_scene, rider_x),
+			"descending lift does not push player through floor at x=%.2f across multiple cycles" % rider_x)
 
 	var hazard_scene: PackedScene = load("res://demo/signal_foundry/gameplay/hazard_reset.tscn")
 	expect(hazard_scene != null, "hazard reset scene loads")
