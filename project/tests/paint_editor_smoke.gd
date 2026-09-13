@@ -39,7 +39,7 @@ func _run() -> void:
 			selection.set_ids(PackedInt64Array([id]))
 	await _click(_button_named(panel, "Surface Paint"))
 	var target_label: Label = panel.get("_paint_face")
-	_check(target_label.text == "%s · 1 face selected" % solid.name, "paint_target_names_solid_and_face_count")
+	_check(target_label.text.begins_with("%s · 1 face · " % solid.name), "paint_target_names_solid_and_face_count")
 	var workspace: Button = panel.find_child("SurfacePaint", true, false)
 	_check(workspace.button_pressed and workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
 		"paint_workspace_remains_highlighted_while_hovered")
@@ -59,7 +59,7 @@ func _run() -> void:
 	picker.emit_signal("resource_changed", imported)
 	await create_timer(0.2).timeout
 	_check(panel.get("_paint").material() == imported, "material_picker_loads_imported_material")
-	_check(target_label.text == "%s · 1 face selected" % solid.name,
+	_check(target_label.text == "%s · 1 face · %s" % [solid.name, panel.get("_paint").selected_material_summary()],
 		"material_status_keeps_paint_target_context")
 	var actions_row: Control = panel.find_child("PaintActions", true, false)
 	var thumbnail: TextureRect
@@ -73,6 +73,7 @@ func _run() -> void:
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-picker", "capture_rect": panel.get_global_rect()}, "after")
 	var paint: RefCounted = panel.get("_paint")
 	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	await _pending_uv_value(panel, solid, selection)
 	var before: PackedByteArray = solid.get("data")
 	await _uv_gesture(canvas, true)
 	_check(solid.get("data") == before and not paint.uv_drag_active and paint.active, "escape_cancels_uv_without_closing_workspace")
@@ -116,6 +117,25 @@ func _run() -> void:
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)
+
+
+func _pending_uv_value(panel: Control, solid: Node3D, selection: RefCounted) -> void:
+	var before: PackedByteArray = solid.get("data")
+	var field: Node = panel.find_child("paint_uv_rotation", true, false)
+	var spin: SpinBox = field.find_children("*", "SpinBox", true, false)[0]
+	spin.get_line_edit().grab_focus()
+	spin.get_line_edit().text = "15"
+	await _click(_button_named(panel.find_child("PaintUvControls", true, false), "Apply UV"))
+	var rotation: float = solid.call("face_uv", selection.ids[0]).get("rotation", 0.0)
+	_check(is_equal_approx(rotation, deg_to_rad(15.0)), "apply_uv_uses_typed_rotation_without_enter")
+	var after: PackedByteArray = solid.get("data")
+	if after == before:
+		return
+	await _history_shortcut(panel, false)
+	_check(solid.get("data") == before, "typed_uv_apply_is_one_undo_action")
+	await _history_shortcut(panel, true)
+	_check(solid.get("data") == after, "typed_uv_apply_redo_restores_exact_data")
+	await _history_shortcut(panel, false)
 
 func _history_shortcut(panel: Control, redo: bool) -> void:
 	var key := InputEventKey.new()

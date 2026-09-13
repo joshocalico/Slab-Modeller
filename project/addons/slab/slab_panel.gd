@@ -1173,6 +1173,8 @@ func _paint_uv_control_row() -> Control:
 	, "Texture rotation in degrees.", &"paint_uv_rotation"))
 	fields.add_child(_named_action("Apply UV", "ImageTexture", "Apply these UV values to the selected face.", func() -> void:
 		if _paint:
+			for spin in _spins_under(_paint_uv_controls):
+				spin.apply()
 			_paint.apply_uv()
 	))
 	fields.add_child(_named_action("Reset UV", "Reload", "Reset repeats, offsets and rotation on the selected face.", func() -> void:

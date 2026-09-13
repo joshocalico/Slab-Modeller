@@ -158,3 +158,9 @@ Kernel coverage includes all 24 perimeter selection orders with oriented face ge
 The default 0.5 m preview on this thin roof also exposed a remaining feedback issue: the displayed requested width can exceed the geometry's clamped width. The saved 0.03 m case uses the measured requested width. Investigate reporting effective width before claiming exact numeric feedback for oversized amounts.
 
 The full slab-verify passed after updating the panel command inventory and the old bevel-refusal expectations. The rendered panel editor test reported zero failures. Refreshed and inspected the Face and Materials & UV captures with Select Boundary visible. Documentation links passed, and the website build passed.
+
+## Typed UV input
+
+In Surface Paint, selected the roof top face, typed Rotation 15 without pressing Enter, and clicked Apply UV. The field displayed 15 but the texture remained unchanged; the status reported no change. Apply UV now commits pending text in its UV fields before running the operation.
+
+The rendered paint editor regression failed on the original code and passed after the fix, including one Undo and exact Redo. Updated its two stale target-label expectations to include the current material summary. Native replay rotated the roof texture immediately after the same typed-input sequence. One Undo and Save restored the scene with no diff. The complete paint editor replay and full slab-verify passed.
