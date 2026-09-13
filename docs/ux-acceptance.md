@@ -24,6 +24,8 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 - A copied addon was installed into a fresh project, used to create a 6 by 1 by 6 box through editor controls, saved, and reopened in another editor process. Dimensions, editability, and collision survived. The installation guide documents this verified macOS path and distinguishes unverified platforms.
 - At 320 and 390 px, panel and keyboard references have no page-wide horizontal overflow; wide tables scroll locally, and navigation/contents disclosures work.
 
+- Selection modes use a persistent gold highlight, including hover. Empty element selections explain the next viewport action. Materials & UV and Selection command groups start collapsed and remember their state across mode switches for the editor session. Materials & UV reveals its commands and selected-face settings together, with the palette first and UV axes side by side. The rendered panel test verifies keyboard selection while collapsed, keyboard disclosure activation, mode-switch persistence, and the existing room/preview/Undo workflows. The live Signal Foundry editor was also checked with the dock reduced to roughly 250 pixels high. The seven affected guide pages and three panel captures match the new controls.
+
 ## Remaining acceptance work
 
 | Area | Evidence still required |

@@ -12,7 +12,7 @@ If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-
 
 1. Click the room `SlabSolid` in the Scene tree.
 2. Press <kbd>4</kbd> for Face mode.
-3. On the Slab panel, under the Face icons, click **Add Material**. That appends a `StandardMaterial3D` on **Materials**.
+3. Expand **Materials & UV**, then click **Add Material** in **Material & UV settings**. That appends a `StandardMaterial3D` on **Materials**.
 4. Click **Add Material** again.
 
 The inspector **Materials** array now has two slots. Chip 0 is the first. Chip 1 is the second. A face stores an index into that array. There is no cap at 32.
@@ -34,9 +34,9 @@ The whole room may still use slot 0. Faces default to 0.
 ## Paint the walls
 
 1. Stay in Face mode.
-2. Click a wall face. Shift-click the other walls, or click **Grow** in **Selection** until the walls are selected.
-3. Click chip 1 on the Slab panel so it is the active paint.
-4. Click **Set Material** in **Face**.
+2. Click a wall face. Shift-click the other walls, or expand **Selection** and click **Grow** until the walls are selected.
+3. Expand **Materials & UV** if it is closed, then click chip 1 so it is the active paint.
+4. Click **Set Material**.
 
 The walls should switch to the plaster. The floor stays on slot 0. Wall tops point up, so they stay on slot 0 until you paint them too.
 
@@ -58,21 +58,21 @@ These steps use the compact UV controls in the modelling workspace. The larger S
 
 1. Click the floor face.
 2. Click chip 0 if you still need to paint it. Skip that if the floor is already brown.
-3. Open **UV** in Face settings. Set **UV scale X** and **UV scale Y** to `2`.
-4. Click **Apply UV** in **UV**.
+3. Expand **Materials & UV**. In **Material & UV settings**, set **UV scale X** and **UV scale Y** to `2`.
+4. Click **Apply UV** in **Materials & UV**.
 
 The pattern on the floor should tighten. If it is still huge, click **UV Larger**. **UV Larger** doubles the scale on the selected faces and applies it. The settings spins follow.
 
 <Figure
-  src="/img/panel.png"
-  alt="The Slab panel in Face mode, with Face commands and UV settings."
-  caption="Face mode. Open UV for exact placement. The UV command row applies, scales, rotates, or resets it."
+  src="/img/panel-materials.png"
+  alt="The Slab panel in Face mode with Materials and UV expanded beside Material and UV settings."
+  caption="Expand Materials & UV to reveal its commands and the Material & UV settings."
 />
 
 ## Fix a wall that runs the wrong way
 
 1. Click a wall face.
-2. Click **UV Rotate**.
+2. Expand **Materials & UV** if it is closed, then click **UV Rotate**.
 
 The pattern turns 90 degrees on that face. Click again if it is still sideways. **UV Reset** returns that face to scale one and no rotation.
 

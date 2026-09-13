@@ -206,6 +206,7 @@ func describe() -> String:
 	var nouns: Array = MODE_NOUNS[mode]
 	var who: String = objects[0].name
 	if ids.is_empty():
-		return "%s, %s mode, none selected." % [who, mode_label()]
+		var article := "an" if mode == Mode.EDGE else "a"
+		return "%s · Click %s %s in the viewport to select it." % [who, article, nouns[0]]
 	var noun: String = nouns[0] if ids.size() == 1 else nouns[1]
 	return "%s, %d %s." % [who, ids.size(), noun]

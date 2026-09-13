@@ -85,9 +85,9 @@ func case_uv_settings_are_bounded_and_reports_survive_refresh() -> void:
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	var toggle := panel.find_child("uv_toggle", true, false) as Button
+	var toggle := panel.find_child("SectionUV", true, false) as Button
 	toggle.button_pressed = true
-	toggle.pressed.emit()
+	toggle.toggled.emit(true)
 	var scroll := panel.find_child("SettingsScroll", true, false) as ScrollContainer
 	expect(scroll != null and scroll.get_combined_minimum_size().y <= 100.0,
 		"expanded UV fields stay inside a bounded settings scroller, got %s" % (scroll.get_combined_minimum_size().y if scroll != null else -1))
@@ -339,11 +339,11 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	expect(_spins(panel.find_child("Settings", true, false)).size() == 7, "Face mode keeps five UV transform spins and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
-	expect(_label_for(panel, "Face") != null and _label_for(panel, "Selection") != null,
+	expect(_label_for(panel, "Face") != null and panel.find_child("SectionSelection", true, false) != null,
 		"Face mode renders the Face and Selection headings")
-	expect(_label_for(panel, "UV") != null, "Face mode renders a UV heading")
+	expect(panel.find_child("SectionUV", true, false) != null, "Face mode renders a UV heading")
 	var uv_wrap: Node = panel.find_child("UvFields", true, false)
-	expect(uv_wrap != null and not uv_wrap.visible, "UV spins start hidden")
+	expect(uv_wrap != null and not panel.find_child("Settings", true, false).visible, "UV spins start hidden")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
 	var extrude: Button = _button_for(panel, "Extrude")
 	expect(extrude != null and extrude.text == "Extrude", "Extrude shows its name")
@@ -679,7 +679,16 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	selection.mode = SlabSelection.Mode.VERTEX
 	expect(not previews.visible and not settings.visible, "Vertex mode has no unused amount or preview controls")
 	selection.mode = SlabSelection.Mode.FACE
-	expect(not previews.visible and settings.visible, "Face mode shows settings without duplicate launchers")
+	expect(not previews.visible and not settings.visible, "Face mode hides settings until a face is selected")
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	root.add_child(solid)
+	expect(solid.call("make_box", Vector3(2, 2, 2)) == 0, "context box builds")
+	selection.set_objects([solid])
+	selection.set_ids(PackedInt64Array([solid.call("get_faces")[0]]))
+	expect(not previews.visible and not settings.visible, "face selection keeps secondary settings collapsed")
+	var materials: Button = panel.find_child("SectionUV", true, false)
+	materials.button_pressed = true
+	expect(not previews.visible and settings.visible, "opening Materials & UV reveals selected face settings")
 	selection.operation_preview = {"kind": 1}
 	actions.operation_active = true
 	actions.operation_state_changed.emit()
@@ -689,6 +698,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	actions.operation_state_changed.emit()
 	expect(settings.visible, "leaving preview restores regular settings")
 	panel.free()
+	solid.free()
 
 
 func case_settings_follow_available_dock_width() -> void:

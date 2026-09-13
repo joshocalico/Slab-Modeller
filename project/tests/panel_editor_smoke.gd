@@ -44,11 +44,46 @@ func _run() -> void:
 	var focus := InputEventKey.new()
 	focus.keycode = KEY_F
 	focus.pressed = true
-	_surface(viewport.get_parent().get_parent()).gui_input.emit(focus)
+	_surface(viewport.get_parent().get_parent()).grab_focus()
+	viewport.push_input(focus)
+	focus.pressed = false
+	viewport.push_input(focus)
 	await create_timer(0.5).timeout
-	_check(not preview.visible and settings.visible, "face_restores_settings")
-	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-face"}, "after")
+	_check(not preview.visible and not settings.visible, "face_starts_with_geometry_tools")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-compact"}, "after")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-doc-panel", "capture_rect": panel.get_global_rect()}, "after")
+	var select_all := InputEventKey.new()
+	select_all.keycode = KEY_A
+	select_all.pressed = true
+	panel.get_viewport().push_input(select_all)
+	select_all.pressed = false
+	panel.get_viewport().push_input(select_all)
+	await create_timer(0.2).timeout
+	_check(selection.ids.size() == solid.call("get_faces").size(), "collapsed_selection_keeps_keyboard_shortcuts")
+	_check(not panel.find_child("SectionSelection", true, false).button_pressed, "shortcut_does_not_expand_section")
+	selection.set_ids(PackedInt64Array([top]))
+	await _click(panel.find_child("SectionUV", true, false))
+	_check(settings.visible, "materials_disclosure_reveals_settings")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-face"}, "after")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-doc-panel-materials", "capture_rect": panel.get_global_rect()}, "after")
+	var scale_x: Control = panel.find_child("uv_scale_x", true, false)
+	var scale_y: Control = panel.find_child("uv_scale_y", true, false)
+	_check(is_equal_approx(scale_x.global_position.y, scale_y.global_position.y), "uv_axes_share_a_row")
+	await _click(_mode(panel, 2))
+	await _click(_mode(panel, 3))
+	selection.set_ids(PackedInt64Array([top]))
+	_check(panel.find_child("SectionUV", true, false).button_pressed and settings.visible, "materials_disclosure_survives_mode_switch")
+	var disclosure: Button = panel.find_child("SectionUV", true, false)
+	disclosure.grab_focus()
+	var accept := InputEventKey.new()
+	accept.keycode = KEY_SPACE
+	accept.pressed = true
+	panel.get_viewport().push_input(accept)
+	accept.pressed = false
+	panel.get_viewport().push_input(accept)
+	await create_timer(0.2).timeout
+	_check(not disclosure.button_pressed and not settings.visible, "keyboard_collapses_materials")
+	await _click(disclosure)
 	await _click(_button_named(panel.find_child("Commands", true, false), "Extrude"))
 	_check(actions.operation_active and solid.get("data") == before, "extrude_button_opens_preview")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-preview"}, "after")

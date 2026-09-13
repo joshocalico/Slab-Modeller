@@ -4,12 +4,14 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes show their own command group and **Selection**. Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
+The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes keep their geometry command group open. **Materials & UV** in Face mode and **Selection** in Vertex, Edge, and Face modes are collapsed by default. Expand either heading to use its secondary commands. The panel remembers both choices while you switch selection modes during the editor session.
+
+Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel in Face mode, with Face and Selection commands beside Face settings."
-  caption="Idle Face mode. The settings contain UV controls and the material palette. Extrude and Inset stay in the Face command group."
+  alt="The Slab panel in Face mode, with the Materials and UV and Selection headings collapsed."
+  caption="Default Face mode. Geometry commands stay open. Materials & UV and Selection start collapsed."
 />
 
 The header status line repeats the selection, for example `Box, 1 face.`
@@ -26,9 +28,9 @@ The settings change with the current mode and active command. In Object mode, ch
 | Steps, Sides, Segments, Thickness, Arc | Object, after choosing Stair, Cylinder, or Arch | Only the parameters that shape reads. |
 | Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
 | Cuts, Centre % | Edge | Count and position for Loop Cut. |
-| UV scale, offset, rotation | Face, with **UV** open | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
-| Pixels / metre, Texture px | Face, with **UV** open | Physical density and normalization for Unwrap. |
-| Material palette | Face, with a solid selected | The active material slot and the control that appends a material. **Set Material** assigns the active slot to selected faces. |
+| UV scale, offset, rotation | Face, with **Materials & UV** expanded and faces selected | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
+| Pixels / metre, Texture px | Face, with **Materials & UV** expanded and faces selected | Physical density and normalization for Unwrap. |
+| Material palette | Face, with **Materials & UV** expanded and faces selected | The active material slot and the control that appends a material. **Set Material** assigns the active slot to selected faces. |
 
 There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting one of those commands replaces the idle settings with its preview controls.
 
@@ -115,18 +117,25 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | Inset | 1 face | Opens a preview with a draggable gold boundary-width marker for one face or a connected coplanar selection. |
 | Subdivide | Faces that do not share an edge | Builds one quad for every corner: four from a quad and three from a triangle. All result faces stay selected. |
 | Merge | A connected coplanar face region with one simple boundary | Joins the region regardless of selection order, keeps the first selected face's material and UV values, and selects the merged face. |
-| Set Material | 1 face | Assigns the active material chip to the faces. |
-| Apply UV | 1 face | Writes the UV scale, offset, and rotation fields. |
-| UV Larger | 1 face | Doubles the UV scale and applies it. |
-| UV Smaller | 1 face | Halves the UV scale and applies it. |
-| UV Rotate | 1 face | Turns the UV by 90 degrees. |
-| UV Reset | 1 face | Returns the UV to scale one and no rotation. |
 | Align Face | 1 face | Previews a rigid transform that seats the selected face on a face clicked on another solid. |
-| Unwrap | 1 face | Unfolds the selected region at the requested density using marked and automatic seams. |
 
 Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
 
 See [Change topology](/guide/how-to/change-topology) for the selection rules and undo results of Connect, Dissolve, Subdivide, and Merge.
+
+## Materials & UV
+
+Shown as a collapsed heading in Face mode. Expand it to reveal these commands and the right-hand **Material & UV settings** for the selected faces.
+
+| Command | Needs | Result |
+| --- | --- | --- |
+| Set Material | 1 face | Assigns the active material chip to the faces. |
+| Apply UV | 1 face | Writes the UV scale, offset, and rotation settings. |
+| UV Larger | 1 face | Doubles the UV scale and applies it. |
+| UV Smaller | 1 face | Halves the UV scale and applies it. |
+| UV Rotate | 1 face | Turns the UV by 90 degrees. |
+| UV Reset | 1 face | Returns the UV to scale one and no rotation. |
+| Unwrap | 1 face | Unfolds the selected region at the requested density using marked and automatic seams. |
 
 ## Surface Paint
 
@@ -150,7 +159,7 @@ On the UV canvas, drag to move, Shift-drag to scale, and Ctrl-drag to rotate. Us
 
 ## Selection
 
-Shown in Vertex, Edge, and Face mode. Each command works on the current mode's elements.
+Shown as a collapsed heading in Vertex, Edge, and Face mode. Expand it to reveal the utility commands. Each command works on the current mode's elements.
 
 | Command | Result |
 | --- | --- |

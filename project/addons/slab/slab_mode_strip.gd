@@ -21,7 +21,7 @@ const MODE_KEYS: Dictionary = {
 const MODE_HINTS: Dictionary = {
 	SlabSelection.Mode.OBJECT: "Select whole solids. Create and combine them.",
 	SlabSelection.Mode.VERTEX: "Select corners. Weld, collapse and connect them.",
-	SlabSelection.Mode.EDGE: "Select edges. Bevel, bridge and loop them.",
+	SlabSelection.Mode.EDGE: "Select edges. Bevel, connect and insert loops.",
 	SlabSelection.Mode.FACE: "Select faces. Extrude, inset and texture them.",
 }
 
@@ -71,6 +71,17 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	lines.append("Shortcut %s." % OS.get_keycode_string(MODE_KEYS[mode]))
 	button.tooltip_text = "\n".join(lines)
 	button.toggle_mode = true
+	var active := StyleBoxFlat.new()
+	active.bg_color = Color(0.86, 0.72, 0.34)
+	active.set_corner_radius_all(3)
+	active.content_margin_left = _metrics.px(6)
+	active.content_margin_right = _metrics.px(6)
+	button.add_theme_stylebox_override("pressed", active)
+	button.add_theme_stylebox_override("hover_pressed", active)
+	button.add_theme_color_override("font_pressed_color", Color(0.12, 0.1, 0.06))
+	button.add_theme_color_override("font_hover_pressed_color", Color(0.12, 0.1, 0.06))
+	button.add_theme_color_override("icon_pressed_color", Color(0.12, 0.1, 0.06))
+	button.add_theme_color_override("icon_hover_pressed_color", Color(0.12, 0.1, 0.06))
 	button.button_group = group
 	button.focus_mode = Control.FOCUS_ALL
 	button.accessibility_name = SlabSelection.MODE_LABELS[mode] + " mode"

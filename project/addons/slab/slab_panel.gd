@@ -32,7 +32,7 @@ var _create_group: ButtonGroup
 var _create_focus: StringName = &"make_box"
 # Mode.OBJECT is 0, so -1 means the command column has never been built.
 var _built_mode: int = -1
-var _uv_open: bool = false
+var _expanded_sections: Dictionary = {}
 var _settings_title: Label
 var _uv_wrap: HFlowContainer
 var _undo_hook: Object = null
@@ -175,6 +175,11 @@ func _operation_controls() -> Control:
 
 
 func _show_settings() -> bool:
+	if _selection.mode == SlabSelection.Mode.FACE:
+		if _selection.ids.is_empty():
+			return false
+		if not _actions.snap_align_active and not _expanded_sections.get(SlabActions.SECTION_UV, false):
+			return false
 	return not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _selection.ids.size() >= 2 or _actions.snap_align_active)
 
 
@@ -257,8 +262,13 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 		_command_column.remove_child(child)
 		child.free()
 	for section in sections:
-		_command_column.add_child(_section_label(section["heading"]))
-		_command_column.add_child(_section_flow(section["rows"]))
+		var heading: String = section["heading"]
+		var flow := _section_flow(section["rows"])
+		if heading in [SlabActions.SECTION_UV, SlabActions.SECTION_SELECTION]:
+			_command_column.add_child(_section_toggle(heading, flow))
+		else:
+			_command_column.add_child(_section_label(heading))
+		_command_column.add_child(flow)
 	_sync_create_pressed()
 
 
@@ -334,17 +344,16 @@ func _refresh_settings() -> void:
 			create.name = "CreateShape"
 			_settings_fields.add_child(create)
 	elif mode == SlabSelection.Mode.FACE:
-		_settings_title.text = "Align Face" if _actions.snap_align_active else "Face settings"
+		_settings_title.text = "Align Face" if _actions.snap_align_active else "Material & UV settings"
 		_settings_title.visible = true
 		if _actions.snap_align_active:
 			_add_snap_align_settings()
 			_uv_wrap = null
 		else:
-			_settings_fields.add_child(_uv_toggle())
 			_uv_wrap = HFlowContainer.new()
 			_uv_wrap.name = "UvFields"
+			_uv_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			_uv_wrap.add_theme_constant_override("h_separation", 10)
-			_uv_wrap.visible = _uv_open
 			_uv_wrap.add_child(_spin("UV scale X", 0.05, 64.0, 0.05, _actions.uv_scale.x, func(v: float) -> void:
 				_actions.uv_scale = Vector2(v, _actions.uv_scale.y)
 			, "", &"uv_scale_x"))
@@ -553,22 +562,28 @@ func _clamped_amount() -> float:
 	return clampf(absf(_actions.amount), SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING)
 
 
-func _uv_toggle() -> Button:
+func _section_toggle(heading: String, flow: Control) -> Button:
 	var button := Button.new()
-	button.name = "uv_toggle"
-	button.text = "UV"
+	button.name = "Section" + heading
 	button.toggle_mode = true
-	button.button_pressed = _uv_open
-	button.tooltip_text = "Show UV scale, offset, and rotation."
+	button.flat = true
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.focus_mode = Control.FOCUS_ALL
-	button.accessibility_name = "Toggle UV settings"
-	button.accessibility_description = button.tooltip_text
-	button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
-	button.add_theme_font_size_override("font_size", _font(15))
-	button.pressed.connect(func() -> void:
-		_uv_open = button.button_pressed
-		if _uv_wrap != null:
-			_uv_wrap.visible = _uv_open
+	button.custom_minimum_size.y = _scaled(28.0)
+	button.add_theme_font_size_override("font_size", _font(16))
+	var caption := "Materials & UV" if heading == SlabActions.SECTION_UV else heading
+	button.accessibility_name = caption + " commands"
+	var sync := func(open: bool) -> void:
+		button.text = ("▾  " if open else "▸  ") + caption
+		button.accessibility_description = "Expanded. Activate to collapse." if open else "Collapsed. Activate to expand."
+		button.tooltip_text = "Hide %s controls." % caption if open else "Show %s controls. Keyboard shortcuts also work while collapsed." % caption
+		flow.visible = open
+	button.set_pressed_no_signal(_expanded_sections.get(heading, false))
+	sync.call(button.button_pressed)
+	button.toggled.connect(func(open: bool) -> void:
+		_expanded_sections[heading] = open
+		sync.call(open)
+		_settings.visible = _show_settings()
 	)
 	return button
 
@@ -684,6 +699,7 @@ func _settings_block() -> Control:
 	_settings_chips.name = "MaterialChips"
 	_settings_chips.add_theme_constant_override("h_separation", 6)
 	content.add_child(_settings_chips)
+	content.move_child(_settings_chips, 0)
 	return _settings
 
 
