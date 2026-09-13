@@ -38,6 +38,9 @@ func _run() -> void:
 		if solid.call("face_normal", id).y > 0.9:
 			selection.set_ids(PackedInt64Array([id]))
 	await _click(_button_named(panel, "Surface Paint"))
+	var workspace: Button = panel.find_child("SurfacePaint", true, false)
+	_check(workspace.button_pressed and workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
+		"paint_workspace_remains_highlighted_while_hovered")
 	await _click(_button_named(panel, "Make Unique"))
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
@@ -72,14 +75,15 @@ func _run() -> void:
 	await _uv_gesture(canvas, false)
 	var after: PackedByteArray = solid.get("data")
 	_check(after != before and not paint.uv_drag_active, "release_commits_uv")
-	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
-	var history := manager.get_history_undo_redo(manager.get_object_history_id(solid))
-	history.undo()
+	await _history_shortcut(panel, false)
 	_check(solid.get("data") == before, "editor_undo_restores_uv")
-	history.redo()
+	_check(panel.get("_status").text == selection.describe(), "undo_replaces_stale_tool_report_with_current_selection")
+	await _history_shortcut(panel, true)
 	_check(solid.get("data") == after, "editor_redo_restores_uv")
 	await _click(_mode(panel, 3))
 	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
+	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
+		"leaving_paint_clears_workspace_highlight")
 	await _click(_button_named(panel, "Surface Paint"))
 	await _click(_mode(panel, 2))
 	_check(not paint.active and selection.mode == 2 and panel.get("_model_body").visible, "edge_button_returns_to_modelling")
@@ -108,6 +112,21 @@ func _run() -> void:
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)
+
+func _history_shortcut(panel: Control, redo: bool) -> void:
+	var key := InputEventKey.new()
+	key.keycode = KEY_Z
+	key.physical_keycode = KEY_Z
+	key.meta_pressed = OS.get_name() == "macOS"
+	key.ctrl_pressed = OS.get_name() != "macOS"
+	key.shift_pressed = redo
+	key.pressed = true
+	panel.get_viewport().push_input(key)
+	key = key.duplicate()
+	key.pressed = false
+	panel.get_viewport().push_input(key)
+	await create_timer(0.2).timeout
+
 
 func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
 	var start: Vector2 = canvas.global_position + canvas.image_rect().get_center()

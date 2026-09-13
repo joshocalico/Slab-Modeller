@@ -217,6 +217,9 @@ func bind_undo(undo: Object) -> void:
 
 
 func _refresh_soon() -> void:
+	# Clear the previous result immediately. A newly committed command can
+	# report its result after this signal, before the deferred refresh runs.
+	_last_report = ""
 	call_deferred("refresh")
 
 
@@ -686,6 +689,7 @@ func _header() -> Control:
 	var strip := SlabModeStrip.new()
 	row.add_child(strip)
 	strip.setup(_selection, true, _metrics)
+	row.add_child(VSeparator.new())
 	_paint_toggle = Button.new()
 	_paint_toggle.name = "SurfacePaint"
 	_paint_toggle.text = "Surface Paint"
@@ -854,7 +858,7 @@ func _paint_block() -> Control:
 	body.name = "PaintBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.clip_contents = true
-	body.add_theme_constant_override("separation", 2)
+	body.add_theme_constant_override("separation", 3)
 	body.add_child(_paint_target_row())
 	body.add_child(_paint_action_row())
 	_paint_uv_controls = _paint_uv_control_row()
@@ -1193,11 +1197,13 @@ func _paint_caption(heading: String, text: String) -> Label:
 
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
+	add_theme_constant_override("separation", 3 if on else 6)
 	if _selection_controls != null: _selection_controls.visible = not on
 	if _operation_row != null:
 		_operation_row.visible = not on and _actions.operation_active
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(on)
+		_style_tool(_paint_toggle, on)
 	if _model_body != null:
 		_model_body.visible = not on
 	if _paint_body != null:
@@ -1337,9 +1343,11 @@ func _style_tool(button: Button, pressed: bool) -> void:
 	button.add_theme_stylebox_override("normal", box)
 	button.add_theme_stylebox_override("pressed", box)
 	button.add_theme_stylebox_override("hover", box)
+	button.add_theme_stylebox_override("hover_pressed", box)
 	button.add_theme_color_override("font_color", Color(0.12, 0.1, 0.06) if pressed else Color(0.86, 0.86, 0.82))
 	button.add_theme_color_override("font_pressed_color", Color(0.12, 0.1, 0.06))
 	button.add_theme_color_override("font_hover_color", Color(0.12, 0.1, 0.06) if pressed else Color(0.95, 0.95, 0.9))
+	button.add_theme_color_override("font_hover_pressed_color", Color(0.12, 0.1, 0.06))
 
 
 func _sync_create_pressed() -> void:

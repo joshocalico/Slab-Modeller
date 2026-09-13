@@ -372,12 +372,15 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	panel.bind_paint(paint)
+	root.add_child(panel)
 	var toggle: Button = panel.find_child("SurfacePaint", true, false)
 	expect(toggle != null and toggle.text == "Surface Paint", "the dock names Surface Paint")
 	expect(panel.find_child("PaintCanvas", true, false) != null, "the dock has a texture canvas")
 	expect(panel.find_child("PaintBody", true, false) != null, "the dock has a paint workspace")
 	expect(not panel.find_child("PaintBody", true, false).visible, "paint starts closed")
 	paint.enter()
+	await process_frame
+	await process_frame
 	expect(panel.find_child("PaintBody", true, false).visible, "Surface Paint shows the workspace")
 	expect(not panel.find_child("ModelBody", true, false).visible, "modeling commands hide while painting")
 	expect(panel.custom_minimum_size.y > SlabPanel.PANEL_HEIGHT, "the paint dock is taller than the model strip")

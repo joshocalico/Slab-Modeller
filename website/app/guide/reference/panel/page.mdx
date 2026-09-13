@@ -142,12 +142,21 @@ Shown as a collapsed heading in Face mode. Expand it to reveal these commands an
 
 **Surface Paint** in the header opens a separate workspace and switches to Face mode. Escape closes it. **Material / UV** assigns materials and places the selected face on the texture. **Pixel** paints the active material's albedo on the canvas or directly in the 3D view.
 
+The gold **Surface Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
+
+<Figure
+  src="/img/panel-surface-paint.png"
+  alt="Surface Paint with Brick loaded, the active workspace highlighted, and the material preview fully visible."
+  caption="Surface Paint with an existing material loaded. Open the image to inspect the controls at full size."
+/>
+
 | Control | Result |
 | --- | --- |
+| Assign | Applies the active material to the selected faces. |
 | Make Unique | Copies the active material, assigns the copy to the selected face, and makes its albedo editable. |
 | Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. Save the scene afterward. |
 | Sample | Reads the selected face's material and UV. Alt-click a face in the 3D view does the same. |
-| Material picker | Adds or selects a `StandardMaterial3D` and assigns it to the selected face. |
+| Material picker | Adds or selects a `StandardMaterial3D` and immediately assigns it to the selected faces. Undo restores the previous assignment and material slots. |
 | Repeat U, Repeat V | Sets texture repeats from 0.05 to 64. |
 | Offset U, Offset V | Moves the texture from -64 to 64. |
 | Rotation | Sets rotation from -360° to 360°. |
