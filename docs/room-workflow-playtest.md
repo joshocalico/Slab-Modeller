@@ -108,3 +108,12 @@ Repeated the native jump approach with the roof visible. The player entered the 
 The interior view exposed vertical brick courses on both side walls. Hid the roof through the Inspector, selected each inner side face in Surface Paint, and rotated its UVs by 90 degrees. Restored roof visibility and replayed from inside the room. Both side walls now have horizontal brick courses. Restored Player to (3, 0.4, 3.5), Y rotation -90 degrees, and saved through Godot.
 
 Read-only scene verification confirms that only faces 219043332097 and 261993005057 have the new 90-degree rotations. Room geometry and material counts, step geometry and materials, roof visibility, lighting, and the normal player spawn remain correct. No source code changed in this pass.
+
+
+## Stable Paint tool switching
+
+At the compact dock size in the 1225 × 768 native editor, switching Material/UV to Pixel moved the divider from approximately Y=409 to Y=466. The view and selected geometry shifted with it. Enlarging the dock manually prevented the jump, identifying different minimum heights as the cause.
+
+Paint now derives a shared minimum from the larger tool layout. Hidden Material/UV controls still contribute to that minimum, while Pixel uses the extra space for the canvas. After restarting Godot, Material/UV and Pixel kept the divider at Y=409. Reopening directly into Pixel retained that minimum. Selected a Teal Steel roof face and switched both tools with the texture loaded; the viewport remained stationary. Exiting Paint returned the compact modelling layout. No scene changes were made.
+
+The focused chrome regression checks both tool directions, Pixel-first entry at 1.5× scale, and restoration of the modelling minimum. Paint smoke and the full slab-verify passed. Entering and leaving the Paint workspace can still resize the viewport; this change addresses switching tools inside it.

@@ -202,18 +202,37 @@ func _show_settings() -> bool:
 func _get_minimum_size() -> Vector2:
 	var min_size := Vector2(0.0, _scaled(PANEL_HEIGHT))
 	if _paint != null and _paint.active:
-		min_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _visible_stack_minimum_height())
+		min_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
 	return min_size
 
 
-func _visible_stack_minimum_height() -> float:
+func _paint_workspace_minimum_height() -> float:
 	var height := 0.0
 	var count := 0
 	for child in get_children():
 		if child is Control and (child as Control).visible:
-			height += (child as Control).get_combined_minimum_size().y
+			height += _paint_body_maximum_tool_minimum_height() if child == _paint_body else (child as Control).get_combined_minimum_size().y
 			count += 1
 	return height + maxf(0, count - 1) * get_theme_constant("separation")
+
+
+func _paint_body_maximum_tool_minimum_height() -> float:
+	var height := 0.0
+	var count := 0
+	for child in _paint_body.get_children():
+		if child is Control:
+			var child_height := (child as Control).get_combined_minimum_size().y
+			# Hidden controls report no combined minimum. Keep the Material/UV rows in
+			# the Paint workspace envelope so switching tools cannot move the splitter.
+			if child == _paint_actions:
+				child_height = maxf(child_height, _scaled(PAINT_PICKER_HEIGHT))
+			elif child == _paint_uv_controls:
+				child_height = maxf(child_height, _scaled(PAINT_UV_ROW_HEIGHT))
+			elif child == _paint_palette:
+				child_height = maxf(child_height, _scaled(PAINT_PALETTE_HEIGHT))
+			height += child_height
+			count += 1
+	return height + maxf(0, count - 1) * _paint_body.get_theme_constant("separation")
 
 
 func bind_paint(paint: RefCounted) -> void:
@@ -1402,6 +1421,8 @@ func _refresh_paint_chrome() -> void:
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
 	_refresh_paint_palette()
+	if _paint != null and _paint.active:
+		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
 	update_minimum_size()
 
 

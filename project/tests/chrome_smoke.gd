@@ -406,8 +406,9 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	expect(_button_for(panel, "Apply UV") != null and _button_for(panel, "Reset UV") != null,
 		"precise placement has clear Apply UV and Reset UV actions")
 	expect(panel.find_child("BrushColor", true, false) != null, "brush color sits next to the canvas")
-	expect(is_equal_approx(panel.custom_minimum_size.y, preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT),
-		"the paint dock stays bounded so the 3D viewport keeps height")
+	expect(panel.custom_minimum_size.y >= preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT
+		and is_equal_approx(panel.custom_minimum_size.y, panel.get_combined_minimum_size().y),
+		"the paint dock minimum matches its bounded workspace")
 	expect(panel.find_child("PaintPalette", true, false) is ScrollContainer,
 		"the material palette scrolls in one strip")
 	expect(panel.find_child("PaintPalette", true, false).custom_minimum_size.y <= 40.5,
@@ -417,6 +418,7 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and panel.get_combined_minimum_size().y >= canvas.custom_minimum_size.y,
 		"the paint dock derives enough height for a usable canvas, got canvas=%s dock=%s" % [
 			canvas.custom_minimum_size.y, panel.get_combined_minimum_size().y])
+	var material_minimum := panel.get_combined_minimum_size().y
 	expect(panel.find_child("PaintUvHint", true, false) != null
 		and String(panel.find_child("PaintUvHint", true, false).text).contains("rotates"),
 		"UV modifiers have a compact hint")
@@ -432,13 +434,24 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	var unique_off: Button = _button_for(panel, "Make Unique")
 	expect(unique_off != null and unique_off.disabled, "Make Unique stays off until a face is selected")
 	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	await process_frame
+	await process_frame
 	var pixel: Button = _button_for(panel, "Pixel")
 	var uv: Button = _button_for(panel, "Material / UV")
 	expect(pixel != null and pixel.button_pressed and uv != null and not uv.button_pressed,
 		"Pixel vs Material/UV shows which tool is selected")
 	expect(not uv_controls.visible, "Pixel painting hides UV placement fields and keeps the canvas workspace")
+	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
+		"Material/UV and Pixel keep one paint workspace minimum, got %s after %s" % [panel.get_combined_minimum_size().y, material_minimum])
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	await process_frame
+	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
+		"returning to Material/UV keeps the paint workspace minimum")
 	paint.exit()
+	await process_frame
 	expect(panel.find_child("ModelBody", true, false).visible, "closing paint restores modeling")
+	expect(is_equal_approx(panel.get_combined_minimum_size().y, SlabPanel.PANEL_HEIGHT),
+		"closing paint restores the modelling minimum")
 	panel.free()
 	var scaled_selection := SlabSelection.new()
 	var scaled_actions := SlabActions.new(scaled_selection)
@@ -448,12 +461,20 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	scaled_panel.setup(scaled_selection, scaled_actions, SlabMetrics.at_scale(1.5))
 	scaled_panel.bind_paint(scaled_paint)
 	root.add_child(scaled_panel)
+	scaled_paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
 	scaled_paint.enter()
 	await process_frame
+	await process_frame
 	var scaled_canvas: Control = scaled_panel.find_child("PaintCanvas", true, false)
+	var scaled_pixel_minimum := scaled_panel.get_combined_minimum_size().y
 	expect(is_equal_approx(scaled_canvas.custom_minimum_size.y, SlabPanel.PAINT_CANVAS_MIN_HEIGHT * 1.5)
 		and scaled_panel.get_combined_minimum_size().y >= scaled_canvas.custom_minimum_size.y,
 		"paint canvas and derived dock minimum follow 1.5x editor scale")
+	scaled_paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	await process_frame
+	await process_frame
+	expect(is_equal_approx(scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum),
+		"Pixel-first entry reserves the Material/UV workspace minimum at 1.5x scale, got %s after %s" % [scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum])
 	scaled_panel.free()
 
 

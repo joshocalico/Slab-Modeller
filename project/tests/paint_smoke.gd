@@ -929,8 +929,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(palette is ScrollContainer, "the palette scrolls instead of wrapping")
 	_expect(palette.custom_minimum_size.y <= SlabPanel.PAINT_PALETTE_HEIGHT + 0.5,
 		"the named palette is ~40px, got %s" % palette.custom_minimum_size.y)
-	_expect(is_equal_approx(panel.custom_minimum_size.y, SlabPaint.PAINT_HEIGHT),
-		"the paint dock custom min stays %s, got %s" % [SlabPaint.PAINT_HEIGHT, panel.custom_minimum_size.y])
+	_expect(panel.custom_minimum_size.y >= SlabPaint.PAINT_HEIGHT
+		and is_equal_approx(panel.custom_minimum_size.y, panel.get_combined_minimum_size().y),
+		"the paint dock custom min matches its bounded workspace, got %s" % panel.custom_minimum_size.y)
 	_expect(canvas.custom_minimum_size.y >= SlabPanel.PAINT_CANVAS_MIN_HEIGHT
 		and canvas.size.y >= SlabPanel.PAINT_CANVAS_MIN_HEIGHT,
 		"paint mode reserves a usable canvas, got min=%s size=%s" % [canvas.custom_minimum_size.y, canvas.size.y])
