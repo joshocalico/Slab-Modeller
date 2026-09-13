@@ -33,7 +33,7 @@ Chrome smoke passed 41 cases, including visibility and restoration checks. The f
 - The generic transform gizmo overlaps the operation handle. Clearing Slab's subgizmo selection merely moves the native gizmo back to the object pivot. That attempted fix failed a native replay and was reverted. No supported visibility hook was found in the exposed editor API.
 - Fixed in the rendered-preview pass below: the proposed surface now replaces the source display during a valid operation.
 - Fixed in the follow-up pass: Slab's status and boolean operand labels now follow selected-node renames immediately. Native rename to MaintenanceBayRenameCheck updated the status without reselection; Undo restored MaintenanceBay in both the tree and Slab. The test rename was undone and the scene saved without a scene diff. Smoke coverage also checks that renaming an unselected solid preserves current feedback.
-- The native doorway authoring replay is complete. The bay still has no final materials, roof, gameplay interaction, or tested approach route. It remains an authoring checkpoint.
+- The native doorway authoring replay and local entrance playtest are complete. The bay still has no final materials, roof, or gameplay interaction. The full route from the level's normal spawn remains untested.
 
 The room tutorial now covers installed-addon prerequisites and exact cutter placement using the Inspector, instead of relying on an unspecified wall and drag direction.
 
@@ -62,3 +62,9 @@ This reproduces a picking defect, not merely an ambiguous click on overlapping v
 After the fix, replayed the same hide-and-click sequence in a restarted editor. The former rim location selected nothing; clicking the visible floor behind the hidden room selected ExteriorCourtyard. Face selection also selected the courtyard with X-ray both off and on. Restored the room's visibility, saved with no scene diff, and selected its visible slanted rim edge successfully.
 
 The picking pass also corrects perspective interpolation: the world point tested for occlusion now projects onto the nearest point along the screen-space edge. Edges crossing the camera near plane are clipped before projection. The focused smoke covers perspective, orthographic, near-plane, hidden-solid, and hidden-ancestor cases. Full slab-verify passed all gates, including the editor-hosted gizmo regression. The docs verifier passed 28 MDX pages and 72 local references; website lint and its 32-page build passed.
+
+## Local entrance gameplay replay
+
+Temporarily moved Player through the Inspector to (28, 0.4, 16.2), facing +Z with Y rotation 180 degrees. Ran the current scene from Godot's toolbar. Enabled F3 diagnostics, started autorun with T, and jumped with Space. The player crossed the hazard strip and entered the bay. Diagnostics reported feet (28.00, 0.77, 22.25), floor YES, and floor body MaintenanceBay/__body. Stopped autorun and turned around to inspect the doorway from inside.
+
+This demonstrates a jump approach through the entrance and standing on the room's collision floor. It does not prove every tread is walkable without jumping, an exit crossing, or the complete gameplay route. Closed the running game and restored Player to (3, 0.4, 3.5), Y rotation -90 degrees, through the Inspector. Saved and verified the scene file matches HEAD exactly.
