@@ -10,7 +10,7 @@ This pass was authored in the Godot editor using Slab creation, Plane Cut, face 
 - `PowerHouseRearGable`: native duplicate of the front gable at Z 26.7. Both end panels use Timber, with Repeat V 0.5 to account for the node scale.
 - `PowerHouse/OmniLight3D`: authored Godot light at local `(5, 3.5, 4)`, energy 1.5, range 8, shadows enabled. The saved light is visible.
 
-The existing limestone doorway wall and timber floor remain. Interior walls and ceiling still need a coordinated finish.
+The existing limestone doorway wall and timber floor remain. A follow-up editor pass assigned Limestone to the room's base material slot, finishing the remaining walls. All six ceiling faces now use Timber, assigned through Surface Paint's native Quick Load. Native Undo restored the empty ceiling material and clean scene state; Redo restored Timber, then the scene was saved. The front perspective view showed the limestone interior through the doorway and the timber floor. The running-game check below predates these material-only changes.
 
 ## Running-game check
 
