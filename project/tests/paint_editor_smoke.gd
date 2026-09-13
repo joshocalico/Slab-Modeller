@@ -45,6 +45,33 @@ func _run() -> void:
 	_check(solid.get("data") == before, "editor_undo_restores_uv")
 	history.redo()
 	_check(solid.get("data") == after, "editor_redo_restores_uv")
+	await _click(_mode(panel, 3))
+	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
+	await _click(_button_named(panel, "Surface Paint"))
+	await _click(_mode(panel, 2))
+	_check(not paint.active and selection.mode == 2 and panel.get("_model_body").visible, "edge_button_returns_to_modelling")
+	await _click(_mode(panel, 3))
+	for id in solid.call("get_faces"):
+		if solid.call("face_normal", id).y > 0.9:
+			selection.set_ids(PackedInt64Array([id]))
+	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
+	_check(plugin.get("_actions").operation_active, "mode_transition_fixture_has_preview")
+	await _click(_mode(panel, 3))
+	_check(not plugin.get("_actions").operation_active and solid.get("data") == after, "same_mode_cancels_preview_without_edit")
+	await _click(_button_named(panel, "Surface Paint"))
+	var viewport: SubViewport = editor.get_editor_viewport_3d(0)
+	solid.position += Vector3(15, 0, 0)
+	var camera_before: Transform3D = viewport.get_camera_3d().global_transform
+	var frame := InputEventKey.new()
+	frame.keycode = KEY_F
+	frame.physical_keycode = KEY_F
+	frame.unicode = 102
+	frame.pressed = true
+	var surface: Control = _surface(viewport.get_parent().get_parent())
+	surface.grab_focus()
+	surface.get_viewport().push_input(frame)
+	await create_timer(0.5).timeout
+	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_painting")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)

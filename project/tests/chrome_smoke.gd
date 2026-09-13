@@ -713,8 +713,12 @@ func case_object_settings_are_for_the_next_shape() -> void:
 	var panel := _build_panel(1.0)
 	var title: Label = panel.find_child("SettingsTitle", true, false)
 	expect(title != null and title.text == "New Box", "Object mode labels Box fields as New Box, got %s" % (title.text if title else "missing"))
-	panel.focus_create(&"make_cylinder")
+	var cylinder: Button = panel.find_child("make_cylinder", true, false)
+	cylinder.mouse_entered.emit()
+	expect(title.text == "New Box", "hovering a shape does not replace creation fields")
+	cylinder.pressed.emit()
 	expect(title.text == "New Cylinder", "Cylinder focus relabels the strip, got %s" % title.text)
+	expect(panel.find_child("CreateShape", true, false) != null, "shape settings have an explicit Create action")
 	panel.free()
 
 

@@ -4,6 +4,7 @@ extends RefCounted
 signal changed
 signal hover_changed
 signal settings_changed
+signal mode_requested
 
 enum Mode { OBJECT, VERTEX, EDGE, FACE }
 enum Pivot { SELECTION, ACTIVE, CUSTOM }
@@ -88,6 +89,14 @@ var solid: Node3D:
 		return objects[0] if not objects.is_empty() else null
 	set(value):
 		set_objects([value] if value != null else [])
+
+
+func request_mode(value: int) -> void:
+	if not MODE_LABELS.has(value):
+		return
+	# An explicit mode choice also leaves a tool when the mode is unchanged.
+	mode_requested.emit()
+	mode = value
 
 
 static func is_solid(node: Object) -> bool:

@@ -84,6 +84,7 @@ func _init(host: RefCounted) -> void:
 	_host = host
 	_selection = SlabSelection.new()
 	_selection.settings_changed.connect(_clear_candidates)
+	_selection.mode_requested.connect(_on_mode_requested)
 	_metrics = SlabMetrics.of(host)
 
 
@@ -164,10 +165,17 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 	if _loop != null and _loop.active:
 		return _loop.handle(camera, event)
 	if _paint != null and _paint.active:
+		if event is InputEventKey and event.pressed and not event.echo and not event.ctrl_pressed and not event.meta_pressed and not event.alt_pressed:
+			var mode := SlabModeStrip.mode_for_keycode(event.keycode)
+			if mode != -1:
+				_selection.request_mode(mode)
+				return Verdict.STOP
 		var verdict: int = _paint.handle_3d(camera, event, _host.scene_root() if _host != null else null)
 		if verdict == Verdict.STOP:
 			return verdict
 		if event is InputEventKey:
+			if event.keycode == KEY_F:
+				return Verdict.PASS
 			return Verdict.STOP
 		return verdict
 	if event is InputEventMouseMotion:
@@ -194,6 +202,18 @@ func adopt_host_selection() -> void:
 	if _grab.dragging():
 		_cancel()
 	_selection.set_objects(_host.selected_nodes())
+
+
+func _on_mode_requested() -> void:
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation()
+	if _grab.active():
+		_cancel()
 
 
 func gizmo_targets() -> Array[Node3D]:
@@ -490,7 +510,7 @@ func _on_key(event: InputEventKey) -> int:
 		return Verdict.STOP
 	var mode: int = SlabModeStrip.mode_for_keycode(event.keycode)
 	if mode != -1:
-		_selection.mode = mode
+		_selection.request_mode(mode)
 		return Verdict.STOP
 	if event.alt_pressed:
 		return Verdict.PASS

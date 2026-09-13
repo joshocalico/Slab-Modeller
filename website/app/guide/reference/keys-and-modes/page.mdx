@@ -16,6 +16,8 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 
 <kbd>W</kbd>, <kbd>E</kbd>, and <kbd>R</kbd> are Godot's Move, Rotate, and Scale tools. Slab claims <kbd>E</kbd> in Face mode for Extrude when a face is selected.
 
+Clicking a mode button closes the active modelling tool before changing mode, even when you click the current mode again. The number-key shortcuts keep their normal selection-mode role and do not replace a tool's own Apply or Cancel input. In Surface Paint, <kbd>1</kbd> through <kbd>4</kbd> close the paint workspace and return to modelling in the chosen mode.
+
 ## View
 
 | Input | Result |
@@ -25,6 +27,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | Hover with no buttons | Pass. Orbit still works. |
 | Miss in element mode with a solid selected | Clear element ids. Keep the solid. |
 | <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Cycle forward or backward through candidates under the pointer when X-ray selection is enabled. |
+| <kbd>F</kbd> | Frame the current selection with Godot's standard 3D view command. |
 
 ## Panel shortcuts
 
@@ -48,7 +51,7 @@ These run only when the current mode and selection count match the command. They
 | <kbd>N</kbd> | Flip Normals | Face |
 | <kbd>Delete</kbd> | Delete | Face |
 
-Select Ring, the Create icons, and the Object boolean icons have no keys.
+Select Ring, the shape buttons, **Create**, and the Object boolean icons have no keys.
 
 <kbd>A</kbd> through those keys are ignored when Ctrl or Cmd is held, so editor chords still pass through.
 

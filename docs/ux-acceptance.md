@@ -14,6 +14,10 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 - Surface Paint has explicit Assign and Add Material controls, a selection count, and brush controls only in Pixel mode. UV Escape cancellation, release, Undo, and Redo pass in a rendered editor using real GUI events.
 - Pixel strokes bind the clicked face material and stay on that resource while dragging; crossing a different material breaks interpolation. The verifier includes the dedicated hit-scope regression suite.
 
+- Creation now uses an explicit shape choice, parameters, and Create action. Hover leaves the fields unchanged. The rendered editor verifies a typed height of 5.25 m, repeated identical cylinders, one Undo per creation, and the full room tutorial through the new flow. Settings expand into available dock height; the chosen shape is highlighted.
+- Mode buttons leave active tools even when choosing the current mode. Surface Paint accepts 1–4 to return to modelling, and Godot framing with F passes through real viewport keyboard input.
+- The guide contents column has been checked in Chrome at 1151, 1440, and 800 px. The narrow desktop outline wraps without clipping; the smaller layout uses collapsible contents.
+
 ## Remaining acceptance work
 
 | Area | Evidence still required |
@@ -24,7 +28,7 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 | Topology tools | Document and test selection constraints, resulting selection, undo units, and refusals for Connect, Bridge, Dissolve, Delete, Flip Normals, Merge, and Subdivide. |
 | Materials and UVs | Author a scene with several materials, seams, unwrap, precise UV placement, pixel strokes, texture persistence, and reversible edits. Resolve overlapping legacy UV controls and the Surface Paint workspace. |
 | Complex modelling | Build and play a substantial level in the editor with enclosed rooms, curved geometry, thin details, booleans, loops, bevels, platforms, and interaction. Diagnose z-fighting rather than hiding it. |
-| Documentation | Replace outdated captures, cross-check every command contract, validate links, and inspect desktop and narrow-screen layouts. The right-hand contents column needs a responsive-layout check. |
+| Documentation | Replace outdated captures, cross-check every command contract, validate links, and inspect desktop and narrow-screen layouts. Verify small phone widths and every long reference page; the right-hand contents column is checked at 1151 and 1440 px. |
 | Release readiness | Reopen saved examples, verify editable source and generated output, run all gates, and record limitations honestly. No claim of parity until the full workflow is verified. |
 
 ## Repeatable evidence

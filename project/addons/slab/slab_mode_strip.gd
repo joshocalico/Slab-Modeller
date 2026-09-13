@@ -78,6 +78,6 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.set_meta("slab_mode", mode)
 	button.custom_minimum_size = Vector2(_metrics.px(100.0 if with_label else 40.0), _metrics.px(36.0))
 	button.add_theme_font_size_override("font_size", _metrics.font(15))
-	button.pressed.connect(func() -> void: _selection.mode = mode)
+	button.pressed.connect(func() -> void: _selection.request_mode(mode))
 	_buttons[mode] = button
 	return button

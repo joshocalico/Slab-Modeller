@@ -431,6 +431,8 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	key.pressed = true
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.STOP, "E is swallowed while painting")
 	_expect(solid.call("face_count") == faces, "E does not extrude in Surface Paint")
+	key.keycode = KEY_F
+	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active, "F remains available to frame the painted object")
 	var hit: Dictionary = SlabPick.pick_face_hit(solid, cam, screen)
 	_expect(not hit.is_empty() and int(hit["id"]) == top, "3D hit lands on the selected face")
 	if not hit.is_empty():
@@ -440,6 +442,12 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	session.handle(cam, motion)
 	var preview: MeshInstance3D = paint.brush_preview()
 	_expect(preview != null and preview.visible, "Pixel mode shows a 3D brush hover")
+	key.keycode = KEY_3
+	_expect(session.handle(cam, key) == SlabViewport.Verdict.STOP, "mode shortcut is claimed while painting")
+	_expect(not paint.active and selection.mode == SlabSelection.Mode.EDGE, "mode shortcut leaves painting for modelling")
+	paint.enter()
+	selection.request_mode(SlabSelection.Mode.FACE)
+	_expect(not paint.active, "explicit same-mode choice leaves painting")
 	paint.exit()
 	_expect(paint.brush_preview() == null, "closing Paint frees the 3D brush")
 	world.free()

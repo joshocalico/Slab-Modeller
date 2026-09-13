@@ -9,28 +9,29 @@ Use this when the scene has no `SlabSolid` yet, or when you want a second volume
 ## Make a box
 
 1. Press <kbd>1</kbd> for Object mode.
-2. Hover the Create icons until you see **Box**. Width, Height, and Depth appear under the icons. Leave them at 2 m, or set them first.
-3. Click **Box**.
+2. Click **Box** in **Create**.
+3. Leave **Width**, **Height**, and **Depth** at 2 m, or set the dimensions you need.
+4. Click **Create**.
 
-A `SlabSolid` appears at the origin. The fields only shape that click. Changing them later does not resize the box.
+A `SlabSolid` appears at the origin. The selected shape and values remain ready for another **Create**. Changing them does not resize an existing solid.
 
 <Figure
   src="/img/panel-object.png"
-  alt="The Slab panel in Object mode, with Create and Object icon rows."
-  caption="Object mode. Create is the first icon row. Stair is the third icon. Hover it to see Steps."
+  alt="The Slab panel in Object mode with Cylinder selected, its dimensions and side count visible, and a separate Create button."
+  caption="Choose a shape, set its values, then click Create. The selected shape is gold."
 />
 
 <Figure
   src="/img/solid-box.png"
   alt="A closed blue box solid in a 3D view."
-  caption="A default box. The other Create icons use the same 2 m size."
+  caption="A default box. The selected shape and its parameter values remain ready for another Create."
 />
 
-## Other Create icons
+## Other shapes
 
-Each icon adds a closed `SlabSolid` at the origin. None of them need a selection. Hover the icon, set its fields, then click.
+Choose a shape to show its fields. Set the fields, then click **Create**. The shape and its values remain selected, so another click on **Create** makes another solid with the same parameters. No selection is required.
 
-| Command | What you get |
+| Shape | What you get |
 | --- | --- |
 | **Plane** | A Width × Depth slab. Thickness is one grid step. |
 | **Stair** | A straight run of Steps steps. Default 8. |

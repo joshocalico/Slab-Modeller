@@ -330,6 +330,9 @@ func _refresh_settings() -> void:
 		else:
 			for field in _actions.shapes.fields_for(_create_focus):
 				_settings_fields.add_child(_shape_spin(field))
+			var create := _named_action("Create", "Add", "Create the selected shape with these settings. Click again to create another.", _create_shape)
+			create.name = "CreateShape"
+			_settings_fields.add_child(create)
 	elif mode == SlabSelection.Mode.FACE:
 		_settings_title.text = "Align Face" if _actions.snap_align_active else "Face settings"
 		_settings_title.visible = true
@@ -654,6 +657,7 @@ func _header() -> Control:
 func _settings_block() -> Control:
 	_settings = VBoxContainer.new()
 	_settings.name = "Settings"
+	_settings.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_settings.add_theme_constant_override("separation", 6)
 	_settings_title = Label.new()
 	_settings_title.name = "SettingsTitle"
@@ -665,7 +669,7 @@ func _settings_block() -> Control:
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.custom_minimum_size.y = _scaled(96.0)
-	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_settings_fields = HFlowContainer.new()
 	_settings_fields.name = "SettingsFields"
 	_settings_fields.add_theme_constant_override("h_separation", 10)
@@ -765,7 +769,7 @@ func _action_button(row: Dictionary) -> Button:
 	button.mouse_filter = Control.MOUSE_FILTER_STOP
 	button.focus_mode = Control.FOCUS_ALL
 	button.accessibility_name = row["label"]
-	button.accessibility_description = _actions.tooltip_of(row)
+	button.accessibility_description = _tooltip_of(row)
 	button.add_theme_font_size_override("font_size", _font(15))
 	button.custom_minimum_size = Vector2(0.0, _scaled(BUTTON_HEIGHT))
 	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -774,14 +778,20 @@ func _action_button(row: Dictionary) -> Button:
 	if _actions.section_of(row) == _actions.SECTION_CREATE:
 		button.toggle_mode = true
 		button.button_group = _create_group
-		button.mouse_entered.connect(func() -> void: focus_create(StringName(id)))
 	button.pressed.connect(func() -> void:
 		if _actions.section_of(row) == _actions.SECTION_CREATE:
 			focus_create(StringName(id))
-		_actions.run(id)
+		else:
+			_actions.run(id)
 	)
 	_buttons[id] = button
 	return button
+
+
+func _create_shape() -> void:
+	for spin in _spins_under(_settings_fields):
+		spin.apply()
+	_actions.run(String(_create_focus))
 
 
 func _paint_block() -> Control:
@@ -1323,9 +1333,16 @@ func _sync_create_pressed() -> void:
 		if row.is_empty() or _actions.section_of(row) != _actions.SECTION_CREATE:
 			continue
 		_buttons[id].set_pressed_no_signal(StringName(id) == _create_focus)
+		var selected_style := _buttons[id].get_theme_stylebox("normal").duplicate() as StyleBoxFlat
+		if selected_style != null:
+			selected_style.bg_color = ACCENT
+			_buttons[id].add_theme_stylebox_override("pressed", selected_style)
+			_buttons[id].add_theme_color_override("font_pressed_color", Color(0.12, 0.1, 0.06))
 
 
 func _tooltip_of(row: Dictionary) -> String:
+	if _actions.section_of(row) == _actions.SECTION_CREATE:
+		return "%s\nChoose this shape and set its dimensions, then click Create.\n%s" % [row["label"], _actions.shapes.describe(row["id"])]
 	var lines := PackedStringArray([row["label"]])
 	var body: String = _actions.tooltip_of(row)
 	if body != "":

@@ -18,12 +18,12 @@ On a wide panel, settings sit beside the command groups. On a narrow panel, sett
 
 ## Settings
 
-The settings change with the current mode and active command. In Object mode, the idle settings follow the Create command you point at.
+The settings change with the current mode and active command. In Object mode, choose a shape to show its creation fields.
 
 | Field | When it shows | Role |
 | --- | --- | --- |
-| Width, Height, Depth | Object, on the focused Create icon | Size for that click. |
-| Steps, Sides, Segments, Thickness, Arc | Object, when Stair, Cylinder, or Arch is focused | Only the params that shape reads. |
+| Width, Height, Depth | Object, after choosing a shape | Size for the next **Create**. |
+| Steps, Sides, Segments, Thickness, Arc | Object, after choosing Stair, Cylinder, or Arch | Only the parameters that shape reads. |
 | Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
 | Cuts, Centre % | Edge | Count and position for Loop Cut. |
 | UV scale, offset, rotation | Face, with **UV** open | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
@@ -40,7 +40,7 @@ There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting
 
 ## Create fields
 
-Object mode. Hover a Create icon to see its fields. Changing a field never rewrites a solid that already exists.
+Object mode. Choose a shape to see its fields. Changing a field never rewrites a solid that already exists. The selected shape and its values stay in the panel after creation.
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
@@ -57,9 +57,9 @@ Object mode. Hover a Create icon to see its fields. Changing a field never rewri
 
 ## Create
 
-Object mode. No selection required. Hover a Create icon, set its fields, then click.
+Object mode. No selection required. Choose a shape, set its fields, then click **Create**. Click **Create** again to repeat the same shape and values.
 
-| Command | Result |
+| Shape | Result |
 | --- | --- |
 | Box | A box of Width × Height × Depth at the origin. |
 | Plane | A Width × Depth slab one grid step thick. |

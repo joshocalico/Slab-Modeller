@@ -79,6 +79,8 @@ func bind(selection: RefCounted, actions: RefCounted, undo: Object) -> void:
 	if _selection != null and _selection.has_signal("changed"):
 		if not _selection.changed.is_connected(_on_selection_changed):
 			_selection.changed.connect(_on_selection_changed)
+		if not _selection.mode_requested.is_connected(_on_mode_requested):
+			_selection.mode_requested.connect(_on_mode_requested)
 	if _undo != null and _undo.has_signal("version_changed"):
 		if not _undo.version_changed.is_connected(_on_undo_version):
 			_undo.version_changed.connect(_on_undo_version)
@@ -753,9 +755,17 @@ func _filled(size: int, color: Color) -> Image:
 func _on_selection_changed() -> void:
 	if not active:
 		return
+	if _selection.mode != 3:
+		exit()
+		return
 	cancel_stroke()
 	cancel_uv_drag()
 	_bind_from_selection()
+
+
+func _on_mode_requested() -> void:
+	if active:
+		exit()
 
 
 func _on_undo_version() -> void:

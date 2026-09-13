@@ -86,17 +86,19 @@ func _run() -> void:
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
 	_check(solid.get("data") == before, "bevel_undo_restores_original_mesh")
 	await _room_tutorial(editor, panel, selection, manager)
+	await _create_repeated(editor, panel, manager)
 	print("PANEL_EDITOR_RESULT failures=", failures)
 	quit(1 if failures else 0)
 
 func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manager: EditorUndoRedoManager) -> void:
 	await _click(_mode(panel, 0))
-	panel.focus_create(&"make_box")
+	await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
 	for entry in [["size_x", 4.0], ["size_y", 3.0], ["size_z", 4.0]]:
 		var box: Node = panel.find_child(entry[0], true, false)
 		var field: SpinBox = box.find_children("*", "SpinBox", true, false)[0]
 		field.value = entry[1]
-	await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
+	await process_frame
+	await _click(panel.find_child("CreateShape", true, false))
 	var room: Node3D = editor.get_selection().get_selected_nodes()[0]
 	_check(room.call("get_local_aabb").size.is_equal_approx(Vector3(4, 3, 4)), "tutorial_creates_4_by_3_by_4_box")
 	await _click(_mode(panel, 3))
@@ -125,6 +127,34 @@ func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manag
 	_check(room.get("data") == original, "tutorial_second_undo_restores_box")
 	history.undo()
 	_check(not room.is_inside_tree(), "tutorial_third_undo_removes_created_box")
+
+func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoManager) -> void:
+	await _click(_mode(panel, 0))
+	var scene: Node = editor.get_edited_scene_root()
+	var count := scene.get_child_count()
+	await _click(_button_named(panel.find_child("Commands", true, false), "Cylinder"))
+	_check(scene.get_child_count() == count, "choosing_shape_does_not_create")
+	var height: SpinBox = panel.find_child("size_y", true, false).find_children("*", "SpinBox", true, false)[0]
+	height.get_line_edit().grab_focus()
+	height.get_line_edit().text = "5.25"
+	await _click(panel.find_child("CreateShape", true, false))
+	var first: Node3D = editor.get_selection().get_selected_nodes()[0]
+	var bounds: AABB = first.call("get_local_aabb")
+	_check(scene.get_child_count() == count + 1 and is_equal_approx(bounds.size.y, 5.25), "create_commits_focused_typed_dimensions")
+	await _click(panel.find_child("CreateShape", true, false))
+	var second: Node3D = editor.get_selection().get_selected_nodes()[0]
+	_check(second != first and scene.get_child_count() == count + 2 and second.call("get_local_aabb") == bounds, "repeat_create_retains_shape_and_dimensions")
+	var settings_scroll: Control = panel.find_child("SettingsScroll", true, false)
+	var create: Control = panel.find_child("CreateShape", true, false)
+	_check(settings_scroll.get_global_rect().encloses(create.get_global_rect()), "create_action_fits_available_settings_height")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-create-editor"}, "after")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-create-panel", "capture_rect": panel.get_global_rect()}, "after")
+	var history := manager.get_history_undo_redo(manager.get_object_history_id(second))
+	history.undo()
+	_check(scene.get_child_count() == count + 1, "one_undo_removes_one_created_shape")
+	history.undo()
+	_check(scene.get_child_count() == count, "second_undo_restores_scene_before_creation")
+
 
 func _click(button: Button) -> void:
 	if button == null or button.disabled or not button.is_visible_in_tree():
