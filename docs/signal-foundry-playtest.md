@@ -78,6 +78,16 @@ Scale and rotation now measure editor-scaled screen distance from the initial pr
 
 The rendered checks send held modifiers, mouse motion and release, verify exact Escape cancellation and native Undo/Redo, and retain stable framing. Ordinary Move still follows the UV point under the pointer. `/tmp/slab-uv-modifier-after.log` reports zero rendered failures; the focused headless paint suite also passes. No saved level data changed.
 
+## Courtyard ring materials, 14 September
+
+Authored the ring's materials through Godot. In Front view, selected all 96 faces and assigned Limestone through Surface Paint Quick Load. Selected one front-band face, used Select Coplanar to obtain its 24-face band, and assigned Brick. Repeated from Rear view for the opposite 24-face band, reusing Brick from the loaded material palette. Saved through Godot.
+
+The saved ring has 48 Limestone faces on its inner and outer curves and 48 Brick faces across both side bands. A read-only comparison against the preceding committed scene verified identical face IDs, vertex IDs, face vertices/corners, all UV attributes except material slot, transform, and volume of 27.5499954223633. Only the CourtyardRing scene block changed.
+
+A fresh native run walked from START through the turbine hall to COURTYARD. At feet approximately `(25.33, 0.45, 2.88)`, grounded on ExteriorCourtyard, the brick band and limestone interior were visible beside the boarding pad. The material distinction was readable in the running game. This pass does not establish continuous texture flow around the curved band; its existing per-face planar UVs remain unchanged.
+
+Select Coplanar avoided picking 24 side faces individually. Reusing the Brick palette required scrolling down to the palette, then back up to Assign. This is usable but adds travel during repeated material work in the compact dock. The normal camera Focus Selection centred the node's origin without fitting its whole extent, so framing the ring required zoom adjustment and an orthographic view.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.
