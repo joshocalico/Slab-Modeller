@@ -55,6 +55,7 @@ func _run() -> void:
 	actions.run("merge_faces")
 	check(solid.get("data") == merged and selection.ids == refused_ids and undo.actions.size() == history_size, "folded Merge refusal preserves data, selection and history")
 	_check_connect_dissolve()
+	_check_select_boundary()
 	print("topology_actions_smoke: %d failures" % failures)
 	quit(1 if failures else 0)
 
@@ -98,3 +99,35 @@ func _check_connect_dissolve() -> void:
 	selection.set_ids(other_ids)
 	undo.redo()
 	check(solid.get("data") == cut and selection.solid == other and selection.ids == other_ids, "redo does not assign topology handles to another selected solid")
+
+
+func _check_select_boundary() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(4, 3, 4))
+	var selection := Selection.new()
+	selection.set_objects([solid])
+	selection.mode = Selection.Mode.FACE
+	var actions := Actions.new(selection, null)
+	var reports: Array[String] = []
+	actions.reported.connect(func(message: String) -> void: reports.append(message))
+	var face: int = solid.call("get_faces")[0]
+	selection.set_ids(PackedInt64Array([face]))
+	actions.run("select_boundary")
+	check(selection.solid == solid and selection.mode == Selection.Mode.EDGE and selection.ids.size() == 4,
+		"one face selects its four boundary edges and preserves the target")
+
+	var shared: int = selection.ids[0]
+	var incident := PackedInt64Array(solid.call("edge_faces", shared))
+	selection.mode = Selection.Mode.FACE
+	selection.set_ids(incident)
+	actions.run("select_boundary")
+	check(selection.mode == Selection.Mode.EDGE and selection.ids.size() == 6 and not selection.ids.has(shared),
+		"two adjacent faces select their union boundary without the shared edge")
+
+	selection.mode = Selection.Mode.FACE
+	selection.set_ids(PackedInt64Array(solid.call("get_faces")))
+	actions.run("select_boundary")
+	check(selection.mode == Selection.Mode.EDGE and selection.ids.is_empty(), "all faces produce an empty boundary selection")
+	check(not reports.is_empty() and reports[-1].contains("no boundary edges"), "empty face boundary reports a clear refusal")
+	solid.free()

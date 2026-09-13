@@ -146,3 +146,15 @@ Selected all 12 roof edges and started Bevel. The editor refused before opening 
 The handle now falls back to the last selected edge when the aggregate direction cancels, while the kernel still validates the complete selection. Native replay of all 12 edges opened the preview controls and displayed the kernel's collapsed-face refusal with Apply disabled, including at width 0.03 and three segments. Cancel and Save left the scene unchanged. The full slab-verify passed.
 
 A disposable kernel probe also refused the four top perimeter edges of a 4.4 × 0.2 × 4.4 box at width 0.03 and three segments. The operation fails before embedding validation. The current bevel implementation edits edge rails sequentially, with special handling for exactly three edges meeting at one corner. Connected perimeter and complete-box bevels require planning and rebuilding their shared corner geometry together. The roof refinement remains unfinished; no partial bevel was saved.
+
+## Connected perimeter bevel and boundary selection
+
+Added Select Boundary in Face mode after the roof workflow exposed the lack of a direct face-to-perimeter selection command. Native replay selected the roof top and used the new button. The panel switched to Edge mode, retained MaintenanceBayRoof, and reported four selected boundary edges.
+
+The connected bevel path now assembles retained faces and bands from the original geometry in a validated candidate. In Godot, set width 0.03 and three segments, then applied and saved. Read-only reload found 18 teal-steel roof faces, volume 3.87238744273782, unchanged bounds and transform, and the original shadow-casting child light. Room and step geometry, wall UV rotations, materials, and player spawn remained correct. One native Undo and Save restored the entire scene to SHA256 5f27773ca06c6fa691925454046b6ab44208ea80d94d1d4596460ef0c7c216b2. Redo and Save restored the rounded roof.
+
+Kernel coverage includes all 24 perimeter selection orders with oriented face geometry and attributes, exact requested inset width, a connected open chain, atomic unsupported-selection refusal, and an untouched UV seam. The kernel passes 143 tests and 4288 checks. All twelve box edges remain unsupported. Shortened or replaced edges still lose their previous seam marks; geometrically unchanged edges retain them.
+
+The default 0.5 m preview on this thin roof also exposed a remaining feedback issue: the displayed requested width can exceed the geometry's clamped width. The saved 0.03 m case uses the measured requested width. Investigate reporting effective width before claiming exact numeric feedback for oversized amounts.
+
+The full slab-verify passed after updating the panel command inventory and the old bevel-refusal expectations. The rendered panel editor test reported zero failures. Refreshed and inspected the Face and Materials & UV captures with Select Boundary visible. Documentation links passed, and the website build passed.

@@ -6,13 +6,13 @@ The current editor has a usable visual base. The next pass should make the activ
 
 Surface Paint now has an active gold highlight and a separator from the selection modes. Keep that distinction: the editing workspace and the vertex, edge, or face selection mode answer different questions.
 
-Keep the selected object and element count beside the active tool, even while an operation reports success. Surface Paint now keeps both in its target row when the main status reports messages such as "Using Timber." Preserve the specific opening-related Merge explanation.
+Keep the selected object and element count beside the active tool, even while an operation reports success. The panel header now preserves this context in modelling and painting. Preserve the specific opening-related Merge explanation.
 
 ## Give each workflow a clear order
 
 Creation should read as shape, dimensions, placement, then confirmation. The room-authoring pass exposed different Box and Cylinder origins and offscreen creation. The design review compared explicit Origin/Selection/View choices, click-to-place preview, and immediate view placement with Move active. Click-to-place now shows the destination before insertion and works without a selected solid. Each shape uses the bottom centre of its built bounds, preserving the kernel's existing shape origins. Cancellation leaves no owned node or Undo entry; confirmation creates one Undo action. The [native editor check](creation-placement-playtest.md) covers click, Enter, Escape, repeated creation, Undo/Redo, and restored object appearance.
 
-Surface editing should read as selected faces, material, then UV or pixel tools. A material thumbnail and name must remain readable when loaded. Clarify that choosing a material currently assigns it immediately to selected faces, while Assign repeats the active material assignment.
+Surface editing should read as selected faces, material, then UV or pixel tools. A material thumbnail and name must remain readable when loaded. Choosing a palette brush and assigning it are separate steps. The canvas now labels a brush preview when it differs from the selected faces' material. Keep that distinction visible before the author edits UVs or pixels.
 
 Keep tool options adjacent to the tool that owns them. Preserve separate remembered Inset, Extrude, and Bevel values and the existing Apply/Cancel boundary.
 
@@ -22,7 +22,9 @@ Surface Paint currently leaves the dock enlarged when returning to modelling. Go
 
 ## Keep the first design pass focused
 
-Prioritize placement, persistent target context, and the material-to-UV-to-pixel workflow. Edge loops and richer modelling operations remain useful future work, but they do not resolve these interruptions. Judge each change by building another part of Signal Foundry with it.
+Placement and persistent target context now have native editor evidence. The remaining layout work should give active operation settings and Apply/Cancel a consistent location, reduce duplicate material and UV controls, and preserve enough viewport space for picking. Compare compact layouts using a selected face with a loaded material before choosing one.
+
+Selection conversion also matters during authoring. Rounding a roof requires its perimeter edges; selecting the top face should provide a direct route to that set. Judge this and other modelling additions by building another part of Signal Foundry with them.
 
 ## Acceptance
 

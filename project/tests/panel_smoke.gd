@@ -42,7 +42,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 	},
 	SlabSelection.Mode.FACE: {
 		"Face": [
-			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "align_face",
+			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "align_face",
 		],
 		"UV": [
 			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset", "uv_unwrap",

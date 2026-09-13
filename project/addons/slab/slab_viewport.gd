@@ -827,7 +827,8 @@ func _publish_operation() -> void:
 	_actions.remember_operation_amount(_operation.kind, _operation.amount)
 	_actions.operation_state_changed.emit()
 	_selection.hover_changed.emit()
-	_actions.reported.emit(shape["label"] + (". Drag the handle or enter an amount; Apply confirms, Escape cancels." if _operation.error == OK else ". " + _actions.describe_error(_operation.error, "extrude_faces" if _operation.kind == 0 else "")))
+	var action_id := "extrude_faces" if _operation.kind == 0 else ("bevel_edges" if _operation.kind == 2 else "")
+	_actions.reported.emit(shape["label"] + (". Drag the handle or enter an amount; Apply confirms, Escape cancels." if _operation.error == OK else ". " + _actions.describe_error(_operation.error, action_id)))
 
 
 func _change_operation_segments(value: int) -> void:

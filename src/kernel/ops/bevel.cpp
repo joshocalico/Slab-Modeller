@@ -144,6 +144,23 @@ struct FaceLoop {
 	FaceAttrs attrs;
 };
 
+struct ConnectedCorner {
+	VertexId vertex;
+	FaceId shared_face;
+	IVec3 inset;
+	IVec3 rail;
+	std::vector<IVec3> profile;
+};
+
+struct ConnectedPlan {
+	std::vector<BevelPlan> edges;
+	std::vector<ConnectedCorner> corners;
+	std::vector<int> corner_u;
+	std::vector<int> corner_v;
+};
+
+bool _same_points(const std::vector<IVec3> &p_a, const std::vector<IVec3> &p_b);
+
 bool _rounded_point(const IVec3 &p_a, const IVec3 &p_control, const IVec3 &p_b, double p_t, IVec3 &r_out) {
 	const godot::Vector3 a = dequantize(p_a);
 	const godot::Vector3 control = dequantize(p_control);
@@ -307,6 +324,219 @@ MeshFault _plan_bevel(const Mesh &p_mesh, EdgeId p_edge, int32_t p_dist, BevelPl
 		return _bad(MeshError::DEGENERATE_FACE, p_edge.slot);
 	}
 	return MeshFault{};
+}
+
+int _selected_plan_at(const ConnectedPlan &p_plan, EdgeId p_edge) {
+	for (size_t i = 0; i < p_plan.edges.size(); i++) {
+		if (p_plan.edges[i].edge.slot == p_edge.slot) return int(i);
+	}
+	return -1;
+}
+
+bool _line_intersection(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c, const IVec3 &p_d, IVec3 &r_out) {
+	const godot::Vector3 a = dequantize(p_a);
+	const godot::Vector3 b = dequantize(p_b);
+	const godot::Vector3 c = dequantize(p_c);
+	const godot::Vector3 d = dequantize(p_d);
+	const godot::Vector3 u = b - a;
+	const godot::Vector3 v = d - c;
+	const godot::Vector3 w = a - c;
+	const double uu = u.dot(u);
+	const double uv = u.dot(v);
+	const double vv = v.dot(v);
+	const double uw = u.dot(w);
+	const double vw = v.dot(w);
+	const double denominator = uu * vv - uv * uv;
+	if (std::abs(denominator) < 1e-12) return false;
+	const double t = (uv * vw - vv * uw) / denominator;
+	const double s = (uu * vw - uv * uw) / denominator;
+	const godot::Vector3 on_u = a + u * float(t);
+	const godot::Vector3 on_v = c + v * float(s);
+	if ((on_u - on_v).length() > 1.5f / float(LATTICE)) return false;
+	return quantize((on_u + on_v) * 0.5f, r_out);
+}
+
+FaceId _shared_face(const BevelPlan &p_a, const BevelPlan &p_b) {
+	for (const SidePlan &a : p_a.side) {
+		for (const SidePlan &b : p_b.side) if (a.face.slot == b.face.slot) return a.face;
+	}
+	return FaceId{};
+}
+
+const SidePlan *_side_on(const BevelPlan &p_plan, FaceId p_face) {
+	for (const SidePlan &side : p_plan.side) if (side.face.slot == p_face.slot) return &side;
+	return nullptr;
+}
+
+IVec3 _endpoint_cut(const BevelPlan &p_plan, const SidePlan &p_side, VertexId p_vertex) {
+	return p_vertex.slot == p_plan.u.slot ? p_side.cut_u : p_side.cut_v;
+}
+
+MeshFault _plan_connected(const Mesh &p_mesh, const std::vector<EdgeId> &p_edges, int32_t p_dist,
+		int p_segments, ConnectedPlan &r_plan) {
+	r_plan.edges.resize(p_edges.size());
+	r_plan.corner_u.assign(p_edges.size(), -1);
+	r_plan.corner_v.assign(p_edges.size(), -1);
+	for (size_t i = 0; i < p_edges.size(); i++) {
+		const MeshFault fault = _plan_bevel(p_mesh, p_edges[i], p_dist, r_plan.edges[i]);
+		if (!fault.ok()) return fault;
+		if (!_plan_profiles(r_plan.edges[i], p_segments)) return _bad(MeshError::SNAP_COLLAPSED_TOPOLOGY, p_edges[i].slot);
+	}
+	std::vector<VertexId> vertices;
+	p_mesh.all_vertices(vertices);
+	for (const VertexId vertex : vertices) {
+		std::vector<EdgeId> ring;
+		p_mesh.vertex_edges(vertex, ring);
+		std::vector<int> selected;
+		for (const EdgeId edge : ring) {
+			const int at = _selected_plan_at(r_plan, edge);
+			if (at >= 0) selected.push_back(at);
+		}
+		if (selected.size() < 2) continue;
+		if (selected.size() != 2 || ring.size() != 3) return _bad(MeshError::NON_MANIFOLD_VERTEX, vertex.slot);
+		BevelPlan &a = r_plan.edges[size_t(selected[0])];
+		BevelPlan &b = r_plan.edges[size_t(selected[1])];
+		const FaceId shared = _shared_face(a, b);
+		if (!p_mesh.alive(shared)) return _bad(MeshError::INVALID_SELECTION, vertex.slot);
+		const SidePlan *side_a = _side_on(a, shared);
+		const SidePlan *side_b = _side_on(b, shared);
+		if (side_a == nullptr || side_b == nullptr) return _bad(MeshError::INVALID_SELECTION, vertex.slot);
+		IVec3 inset;
+		if (!_line_intersection(side_a->cut_u, side_a->cut_v, side_b->cut_u, side_b->cut_v, inset)) {
+			return _bad(MeshError::DEGENERATE_FACE, vertex.slot);
+		}
+		const SidePlan *other_a = side_a == &a.side[0] ? &a.side[1] : &a.side[0];
+		const SidePlan *other_b = side_b == &b.side[0] ? &b.side[1] : &b.side[0];
+		const IVec3 rail_a = _endpoint_cut(a, *other_a, vertex);
+		const IVec3 rail_b = _endpoint_cut(b, *other_b, vertex);
+		if (rail_a != rail_b) return _bad(MeshError::DEGENERATE_FACE, vertex.slot);
+		ConnectedCorner corner;
+		corner.vertex = vertex;
+		corner.shared_face = shared;
+		corner.inset = inset;
+		corner.rail = rail_a;
+		corner.profile.resize(size_t(p_segments + 1));
+		corner.profile.front() = inset;
+		corner.profile.back() = rail_a;
+		for (int segment = 1; segment < p_segments; segment++) {
+			if (!_rounded_point(inset, p_mesh.position_i(vertex), rail_a,
+					double(segment) / double(p_segments), corner.profile[size_t(segment)])) {
+				return _bad(MeshError::SNAP_COLLAPSED_TOPOLOGY, vertex.slot);
+			}
+		}
+		const int corner_at = int(r_plan.corners.size());
+		r_plan.corners.push_back(corner);
+		for (const int edge_at : selected) {
+			BevelPlan &edge = r_plan.edges[size_t(edge_at)];
+			if (edge.u.slot == vertex.slot) r_plan.corner_u[size_t(edge_at)] = corner_at;
+			else r_plan.corner_v[size_t(edge_at)] = corner_at;
+		}
+	}
+	return MeshFault{};
+}
+
+std::vector<IVec3> _edge_profile(const ConnectedPlan &p_plan, size_t p_edge_at, bool p_u) {
+	const int corner_at = p_u ? p_plan.corner_u[p_edge_at] : p_plan.corner_v[p_edge_at];
+	const BevelPlan &edge = p_plan.edges[p_edge_at];
+	if (corner_at < 0) return p_u ? edge.profile_u : edge.profile_v;
+	std::vector<IVec3> profile = p_plan.corners[size_t(corner_at)].profile;
+	const FaceId first_face = edge.side[0].face;
+	if (first_face.slot != p_plan.corners[size_t(corner_at)].shared_face.slot) std::reverse(profile.begin(), profile.end());
+	return profile;
+}
+
+const ConnectedCorner *_corner_at(const ConnectedPlan &p_plan, VertexId p_vertex) {
+	for (const ConnectedCorner &corner : p_plan.corners) if (corner.vertex.slot == p_vertex.slot) return &corner;
+	return nullptr;
+}
+
+int _selected_endpoint_at(const ConnectedPlan &p_plan, VertexId p_vertex) {
+	for (size_t i = 0; i < p_plan.edges.size(); i++) {
+		if (p_plan.edges[i].u.slot == p_vertex.slot || p_plan.edges[i].v.slot == p_vertex.slot) return int(i);
+	}
+	return -1;
+}
+
+MeshFault _assemble_connected(MeshEdit &p_edit, const ConnectedPlan &p_plan, int p_segments) {
+	const Mesh &source_mesh = p_edit.scratch();
+	std::vector<FaceLoop> emitted;
+	std::vector<FaceId> faces;
+	source_mesh.all_faces(faces);
+	for (const FaceId face : faces) {
+		std::vector<VertexId> corners;
+		std::vector<EdgeId> edges;
+		source_mesh.face_corners(face, corners);
+		source_mesh.face_edges(face, edges);
+		FaceLoop retained;
+		retained.attrs = source_mesh.attrs(face);
+		for (size_t i = 0; i < corners.size(); i++) {
+			const size_t prev = (i + corners.size() - 1) % corners.size();
+			const int incoming = _selected_plan_at(p_plan, edges[prev]);
+			const int outgoing = _selected_plan_at(p_plan, edges[i]);
+			const ConnectedCorner *joint = _corner_at(p_plan, corners[i]);
+			if (incoming >= 0 && outgoing >= 0 && joint != nullptr && joint->shared_face.slot == face.slot) {
+				retained.points.push_back(joint->inset);
+			} else if (incoming >= 0 || outgoing >= 0) {
+				const int edge_at = outgoing >= 0 ? outgoing : incoming;
+				const BevelPlan &edge = p_plan.edges[size_t(edge_at)];
+				const SidePlan *side = _side_on(edge, face);
+				if (side == nullptr) return _bad(MeshError::INVALID_SELECTION, face.slot);
+				retained.points.push_back(_endpoint_cut(edge, *side, corners[i]));
+			} else {
+				const int endpoint = _selected_endpoint_at(p_plan, corners[i]);
+				if (endpoint >= 0) {
+					const BevelPlan &edge = p_plan.edges[size_t(endpoint)];
+					std::vector<IVec3> profile = _edge_profile(p_plan, size_t(endpoint), edge.u.slot == corners[i].slot);
+					const IVec3 previous = source_mesh.position_i(corners[prev]);
+					const IVec3 origin = source_mesh.position_i(corners[i]);
+					if (!_collinear(previous, origin, profile.front())) std::reverse(profile.begin(), profile.end());
+					if (!_collinear(previous, origin, profile.front())) return _bad(MeshError::DEGENERATE_FACE, corners[i].slot);
+					retained.points.insert(retained.points.end(), profile.begin(), profile.end());
+					continue;
+				}
+				retained.points.push_back(source_mesh.position_i(corners[i]));
+			}
+		}
+		emitted.push_back(retained);
+	}
+	for (size_t edge_at = 0; edge_at < p_plan.edges.size(); edge_at++) {
+		const BevelPlan &edge = p_plan.edges[edge_at];
+		const std::vector<IVec3> u = _edge_profile(p_plan, edge_at, true);
+		const std::vector<IVec3> v = _edge_profile(p_plan, edge_at, false);
+		for (int segment = 0; segment < p_segments; segment++) {
+			FaceLoop band;
+			band.attrs = source_mesh.attrs(edge.side[0].face);
+			band.points = { u[size_t(segment)], u[size_t(segment + 1)], v[size_t(segment + 1)], v[size_t(segment)] };
+			emitted.push_back(band);
+		}
+	}
+	std::vector<std::vector<IVec3>> loops;
+	for (const FaceLoop &face : emitted) loops.push_back(face.points);
+	// assemble() carries seam flags by unchanged geometric edge pairs from its current mesh.
+	MeshEdit candidate(source_mesh);
+	const MeshFault assembled = candidate.assemble(loops);
+	if (!assembled.ok()) return assembled;
+	std::vector<FaceId> made_faces;
+	candidate.scratch().all_faces(made_faces);
+	for (const FaceId face : made_faces) {
+		std::vector<VertexId> corners;
+		candidate.scratch().face_corners(face, corners);
+		std::vector<IVec3> points;
+		for (const VertexId corner : corners) points.push_back(candidate.scratch().position_i(corner));
+		bool matched = false;
+		for (const FaceLoop &item : emitted) {
+			if (_same_points(points, item.points)) {
+				candidate.set_attrs(face, item.attrs);
+				matched = true;
+				break;
+			}
+		}
+		if (!matched) return _bad(MeshError::CORRUPT_DATA, face.slot);
+	}
+	Mesh result;
+	const MeshFault committed = std::move(candidate).commit(result);
+	if (!committed.ok()) return committed;
+	return p_edit.replace_with(result);
 }
 
 MeshFault _retire_seat(MeshEdit &p_edit, VertexId p_seat) {
@@ -622,6 +852,20 @@ MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_am
 		p_edit.scratch().edge_vertices(edge, a, b);
 		seeds.push_back({ edge, p_edit.scratch().position_i(a), p_edit.scratch().position_i(b) });
 	}
+	const int segments = std::max(BEVEL_SEGMENTS_MIN, std::min(BEVEL_SEGMENTS_MAX, p_segments));
+	bool connected = false;
+	for (size_t i = 0; i < seeds.size(); i++) {
+		for (size_t j = i + 1; j < seeds.size(); j++) {
+			connected = connected || seeds[i].a == seeds[j].a || seeds[i].a == seeds[j].b ||
+					seeds[i].b == seeds[j].a || seeds[i].b == seeds[j].b;
+		}
+	}
+	if (connected && !_joint_corner(seeds)) {
+		ConnectedPlan plan;
+		const MeshFault planned = _plan_connected(p_edit.scratch(), p_edges, dist, segments, plan);
+		if (!planned.ok()) return planned;
+		return _assemble_connected(p_edit, plan, segments);
+	}
 	const MeshFault joint = _truncate_joint_corner(p_edit, seeds, dist);
 	if (!joint.ok()) {
 		return joint;
@@ -646,7 +890,6 @@ MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_am
 			}
 			return planned;
 		}
-		const int segments = std::max(BEVEL_SEGMENTS_MIN, std::min(BEVEL_SEGMENTS_MAX, p_segments));
 		if (segments > 1 && !_plan_profiles(plan, segments)) {
 			if (i > 0) {
 				_poison(p_edit);

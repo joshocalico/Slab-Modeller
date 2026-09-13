@@ -72,7 +72,7 @@ func _run() -> void:
 
 	var all_edges: PackedInt64Array = solid.call("get_edges")
 	var all_preview: Dictionary = solid.call("preview_bevel", all_edges, 0.05, 1)
-	check(int(all_preview.get("error", -1)) == 5,
+	check(int(all_preview.get("error", -1)) == 4,
 		"kernel retains its all-edge box validation, error=%s" % all_preview.get("error", -1))
 	check(handles.begin(Handles.Kind.BEVEL, solid, all_edges, 0.05, 1),
 		"symmetric all-edge bevel gets an editor handle frame")

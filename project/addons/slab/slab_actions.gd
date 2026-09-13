@@ -458,6 +458,8 @@ func clamp_material_slot() -> void:
 
 
 static func describe_error(code: int, action_id: String = "") -> String:
+	if action_id == "bevel_edges" and code == ERR_NON_MANIFOLD_VERTEX:
+		return "This edge arrangement is not supported by Bevel. Try one edge, a simple perimeter, or three edges meeting at one corner."
 	if action_id == "merge_faces" and code == ERR_MULTIPLE_BOUNDARY_LOOPS:
 		return "These faces surround an opening. Merge a smaller region that does not surround the opening."
 	if action_id == "subdivide_faces" and code == ERR_ADJACENT_SELECTION:
@@ -600,6 +602,21 @@ func _pick_coplanar(target: Node3D) -> String:
 	return _selection.describe()
 
 
+func _select_face_boundary(target: Node3D) -> String:
+	var selected_faces := PackedInt64Array(_selection.ids)
+	var boundary := PackedInt64Array()
+	for edge in PackedInt64Array(target.call("get_edges")):
+		var selected_incidents := 0
+		for face in PackedInt64Array(target.call("edge_faces", edge)):
+			if selected_faces.has(face): selected_incidents += 1
+		if selected_incidents == 1: boundary.append(edge)
+	_selection.mode = SlabSelection.Mode.EDGE
+	_selection.set_ids(boundary)
+	if boundary.is_empty():
+		return "The selected faces have no boundary edges."
+	return "Selected %d boundary %s." % [boundary.size(), "edge" if boundary.size() == 1 else "edges"]
+
+
 func _pick_loop(target: Node3D) -> String:
 	_selection.set_ids(SlabTopology.edge_loop(target, _selection.ids[0]))
 	return _selection.describe()
@@ -681,6 +698,7 @@ func _build() -> Array[Dictionary]:
 		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each selected face into one quad per corner. Selected faces cannot share an edge.", KEY_U, _ids_op.bind("subdivide_faces")),
 		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins one connected coplanar face region into a single face.", KEY_M, _ids_op.bind("merge_faces")),
 		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
+		_row("select_boundary", "Select Boundary", "Path3D", face, 1, "Switches to Edge mode and selects the outside boundary of the selected faces.", 0, _select_op.bind(_select_face_boundary)),
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),

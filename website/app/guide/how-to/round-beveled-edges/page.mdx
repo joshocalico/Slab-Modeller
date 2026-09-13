@@ -2,7 +2,7 @@ export const metadata = { title: "Round beveled edges" };
 
 # Round beveled edges
 
-Use a segmented bevel to soften a blockout edge or round the three edges that meet at a corner.
+Use a segmented bevel to soften a blockout edge, round a face perimeter, or round the three edges that meet at a corner.
 
 ## Preview a bevel
 
@@ -11,9 +11,11 @@ Use a segmented bevel to soften a blockout edge or round the three edges that me
 3. Drag the purple width arc, or set **Bevel width** to the exact distance removed from each adjoining face.
 4. Set **Segments** from 1 to 16. One segment is a straight chamfer; additional segments follow a rounded profile.
 
+For a face perimeter, start in Face mode, select the face, and choose **Select Boundary**. Then choose **Bevel**. For example, a 4.4 × 0.2 × 4.4 roof accepts width 0.03 and three segments around its top face.
+
 The rendered preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built. If a value is invalid, Slab restores the original display and disables **Apply**.
 
-A complete box-edge selection or a connected four-edge perimeter can currently fail even at small widths. Cancel that preview; reducing the width does not resolve this connected-edge limitation.
+A simple connected perimeter is supported where each corner has three incident edges and two selected edges. A complete box-edge selection is still unsupported. Cancel that preview and choose a smaller edge set; reducing the width does not resolve an unsupported arrangement.
 
 ## Apply or cancel
 
@@ -22,3 +24,5 @@ Press Enter or click **Apply** to commit the preview as one undo action. Click *
 Bevel remembers its last width for the editor session, including a width from a cancelled preview. Undo restores geometry and does not change that preference. Extrude and Inset keep separate remembered distances.
 
 Very small amounts with many segments can collapse several samples onto the same lattice point. Slab refuses that result; increase the amount or reduce the segment count.
+
+After beveling a connected selection, recheck UV seams on shortened or replaced edges. Unchanged edges retain their seam marks; modified edges do not currently inherit them.
