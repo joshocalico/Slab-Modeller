@@ -14,6 +14,10 @@ func _initialize() -> void:
 	controls.get_node("CustomPivot/PivotX").value_changed.emit(2.125)
 	passed = passed and selection.pivot_mode == Selection.Pivot.CUSTOM
 	passed = passed and is_equal_approx(selection.custom_pivot_world.x, 2.125)
+	selection.configure_pivot(Selection.Pivot.CUSTOM, Vector3(3.5, -1.25, 8.0))
+	passed = passed and is_equal_approx(controls.get_node("CustomPivot/PivotX").value, 3.5)
+	passed = passed and is_equal_approx(controls.get_node("CustomPivot/PivotY").value, -1.25)
+	passed = passed and is_equal_approx(controls.get_node("CustomPivot/PivotZ").value, 8.0)
 	controls.get_node("AxesChoice").item_selected.emit(2)
 	passed = passed and selection.orientation == Selection.Orientation.FACE
 	controls.get_node("XRaySelection").toggled.emit(true)

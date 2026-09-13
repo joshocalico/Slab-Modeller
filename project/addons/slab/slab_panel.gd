@@ -37,7 +37,7 @@ var _settings_title: Label
 var _uv_wrap: HFlowContainer
 var _undo_hook: Object = null
 var _paint: RefCounted
-var _model_body: VBoxContainer
+var _model_body: BoxContainer
 var _paint_body: Control
 var _paint_toggle: Button
 var _paint_canvas: Control
@@ -81,12 +81,13 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_operation_row = _operation_controls()
 	add_child(_operation_row)
 	add_child(_status)
-	_model_body = VBoxContainer.new()
+	_model_body = BoxContainer.new()
 	_model_body.name = "ModelBody"
 	_model_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_model_body.add_theme_constant_override("separation", 8)
 	_model_body.add_child(_command_scroll())
 	_model_body.add_child(_settings_block())
+	_model_body.resized.connect(_layout_model)
 	add_child(_model_body)
 	_paint_body = _paint_block()
 	_paint_body.visible = false
@@ -96,14 +97,29 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_actions.reported.connect(_on_reported)
 	_actions.status_reset_requested.connect(_reset_status)
 	refresh()
+	_layout_model()
+
+
+func _layout_model() -> void:
+	var stacked := _model_body.size.x < _scaled(850.0)
+	_model_body.vertical = stacked
+	_settings.custom_minimum_size.x = 0.0 if stacked else _scaled(300.0)
+	_settings.size_flags_horizontal = Control.SIZE_FILL
 
 
 func _operation_controls() -> Control:
 	var row := HFlowContainer.new()
 	row.name = "OperationHandles"
+	var caption := Label.new()
+	caption.text = "Preview"
+	caption.add_theme_font_size_override("font_size", _font(14))
+	row.add_child(caption)
+	var starters: Array[Button] = []
 	for kind in 3:
 		var button := Button.new()
-		button.text = ["Extrude handle", "Inset handle", "Bevel handle"][kind]
+		button.text = ["Extrude", "Inset", "Bevel"][kind]
+		button.tooltip_text = "Preview %s with a viewport handle. Apply commits; Escape cancels." % button.text.to_lower()
+		starters.append(button)
 		button.add_theme_font_size_override("font_size", _font(14))
 		button.pressed.connect(func() -> void:
 			button.release_focus()
@@ -130,10 +146,17 @@ func _operation_controls() -> Control:
 			else: _actions.operation_cancel_requested.emit())
 		row.add_child(button)
 	var sync := func() -> void:
+		var active: bool = _actions.operation_active
+		row.visible = (_paint == null or not _paint.active) and (_selection.mode in [2, 3] or active)
+		var kind: int = _selection.operation_preview.get("kind", 0)
+		caption.text = (["Extrude", "Inset", "Bevel"][kind] + " preview") if active else "Preview"
 		for i in 3:
-			row.get_child(i).disabled = _selection.ids.is_empty() or _selection.mode != (2 if i == 2 else 3)
-		for i in range(3, row.get_child_count()):
-			row.get_child(i).visible = _actions.operation_active
+			starters[i].visible = not active and _selection.mode == (2 if i == 2 else 3)
+			starters[i].disabled = _selection.ids.is_empty()
+		for i in range(4, row.get_child_count()):
+			row.get_child(i).visible = active
+		if _settings != null:
+			_settings.visible = not active and (_selection.mode != SlabSelection.Mode.VERTEX or _actions.snap_align_active)
 		amount.set_value_no_signal(_actions.operation_amount)
 	_selection.changed.connect(sync)
 	_actions.operation_state_changed.connect(sync)
@@ -234,6 +257,7 @@ func _refresh_buttons() -> void:
 
 
 func _refresh_settings() -> void:
+	_settings.visible = not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _actions.snap_align_active)
 	for spin in _spins_under(_settings_fields):
 		spin.apply()
 		if not spin.is_inside_tree():
@@ -292,7 +316,7 @@ func _refresh_settings() -> void:
 			for field in _actions.shapes.fields_for(_create_focus):
 				_settings_fields.add_child(_shape_spin(field))
 	elif mode == SlabSelection.Mode.FACE:
-		_settings_title.text = "Align Face" if _actions.snap_align_active else "Distance"
+		_settings_title.text = "Align Face" if _actions.snap_align_active else "Face settings"
 		_settings_title.visible = true
 		if _actions.snap_align_active:
 			_add_snap_align_settings()
@@ -329,7 +353,7 @@ func _refresh_settings() -> void:
 			, "Texture resolution used to convert density into normalized UV scale.", &"uv_texture_resolution"))
 			_settings_fields.add_child(_uv_wrap)
 	else:
-		_settings_title.text = "Bevel" if _actions.bevel_active else ("Snap to Vertex" if _actions.snap_align_active else "Amount")
+		_settings_title.text = "Bevel" if _actions.bevel_active else ("Snap to Vertex" if _actions.snap_align_active else "Edge settings")
 		_settings_title.visible = true
 		if _actions.bevel_active:
 			_add_bevel_settings()
@@ -705,6 +729,7 @@ func _status_label() -> Label:
 
 func _command_scroll() -> Control:
 	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_command_column = VBoxContainer.new()
@@ -717,9 +742,9 @@ func _command_scroll() -> Control:
 
 func _section_label(text: String) -> Label:
 	var label := Label.new()
-	label.text = text.to_upper()
+	label.text = "UV" if text.to_upper() == "UV" else text.capitalize()
 	label.add_theme_font_size_override("font_size", _font(16))
-	label.add_theme_color_override("font_color", ACCENT)
+	label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78))
 	return label
 
 
@@ -1142,7 +1167,8 @@ func _paint_caption(heading: String, text: String) -> Label:
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
 	if _selection_controls != null: _selection_controls.visible = not on
-	if _operation_row != null: _operation_row.visible = not on
+	if _operation_row != null:
+		_operation_row.visible = not on and (_selection.mode in [2, 3] or _actions.operation_active)
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(on)
 	if _model_body != null:

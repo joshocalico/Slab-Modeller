@@ -61,6 +61,10 @@ func _sync() -> void:
 	get_node("PivotChoice").select(_selection.pivot_mode)
 	get_node("XRaySelection").set_pressed_no_signal(_selection.xray)
 	_custom.visible = _selection.pivot_mode == 2
+	for axis in 3:
+		var field: SpinBox = _custom.get_node("Pivot" + "XYZ"[axis])
+		if not is_equal_approx(field.value, _selection.custom_pivot_world[axis]):
+			field.set_value_no_signal(_selection.custom_pivot_world[axis])
 
 func _choice(label_text: String, choices: Array, selected: int, callback: Callable) -> void:
 	var label := Label.new()

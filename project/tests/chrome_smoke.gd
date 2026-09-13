@@ -338,7 +338,7 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	expect(_spins(panel.find_child("Settings", true, false)).size() == 8, "Face mode keeps Distance, five transform spins, and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
-	expect(_label_for(panel, "FACE") != null and _label_for(panel, "SELECTION") != null,
+	expect(_label_for(panel, "Face") != null and _label_for(panel, "Selection") != null,
 		"Face mode renders the Face and Selection headings")
 	expect(_label_for(panel, "UV") != null, "Face mode renders a UV heading")
 	var uv_wrap: Node = panel.find_child("UvFields", true, false)
@@ -665,6 +665,47 @@ func case_shortcut_gate_queries_the_viewport_and_stays_in_3d() -> void:
 	screen.free()
 	typing.free()
 	dock.free()
+
+
+func case_preview_controls_follow_the_modelling_context() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	var previews: Control = panel.find_child("OperationHandles", true, false)
+	var settings: Control = panel.find_child("Settings", true, false)
+	expect(not previews.visible, "Object mode has no element previews")
+	selection.mode = SlabSelection.Mode.VERTEX
+	expect(not previews.visible and not settings.visible, "Vertex mode has no unused amount or preview controls")
+	selection.mode = SlabSelection.Mode.FACE
+	expect(previews.visible and settings.visible, "Face mode restores previews and settings")
+	selection.operation_preview = {"kind": 1}
+	actions.operation_active = true
+	actions.operation_state_changed.emit()
+	expect(not settings.visible and panel.find_child("HandleAmount", true, false).visible,
+		"an active preview exposes one amount field")
+	actions.operation_active = false
+	actions.operation_state_changed.emit()
+	expect(settings.visible, "leaving preview restores regular settings")
+	panel.free()
+
+
+func case_settings_follow_available_dock_width() -> void:
+	root.size = Vector2i(1400, 800)
+	var panel := _build_panel(1.0)
+	root.add_child(panel)
+	panel.size = Vector2(1200, 360)
+	for i in 3: await process_frame
+	var body: BoxContainer = panel.find_child("ModelBody", true, false)
+	var commands: Control = panel.find_child("Commands", true, false).get_parent()
+	var settings: Control = panel.find_child("Settings", true, false)
+	expect(not body.vertical and settings.position.x >= commands.size.x,
+		"wide docks place settings beside commands")
+	panel.size.x = 760
+	for i in 3: await process_frame
+	expect(body.vertical and settings.position.y >= commands.position.y + commands.size.y,
+		"narrow docks stack settings below commands")
+	panel.free()
 
 
 func case_object_settings_are_for_the_next_shape() -> void:
