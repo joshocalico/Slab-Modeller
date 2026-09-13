@@ -33,7 +33,7 @@ Chrome smoke passed 41 cases, including visibility and restoration checks. The f
 - The generic transform gizmo overlaps the operation handle. Clearing Slab's subgizmo selection merely moves the native gizmo back to the object pivot. That attempted fix failed a native replay and was reverted. No supported visibility hook was found in the exposed editor API.
 - Fixed in the rendered-preview pass below: the proposed surface now replaces the source display during a valid operation.
 - Fixed in the follow-up pass: Slab's status and boolean operand labels now follow selected-node renames immediately. Native rename to MaintenanceBayRenameCheck updated the status without reselection; Undo restored MaintenanceBay in both the tree and Slab. The test rename was undone and the scene saved without a scene diff. Smoke coverage also checks that renaming an unselected solid preserves current feedback.
-- The native doorway authoring replay and local entrance playtest are complete. The bay now has a first material pass, but still needs a roof and gameplay interaction. The full route from the level's normal spawn remains untested.
+- The native doorway authoring replay and local entrance playtest are complete. The bay now has a first material pass, roof, and interior light, but still needs a gameplay interaction and an enclosed-room playtest. The full route from the level's normal spawn remains untested.
 
 The room tutorial now covers installed-addon prerequisites and exact cutter placement using the Inspector, instead of relying on an unspecified wall and drag direction.
 
@@ -92,3 +92,11 @@ Added a canvas caption when the current Brush differs from the selected faces' m
 Also selected all ten MaintenanceBaySteps faces in Godot and loaded the existing limestone material through the material picker. The saved scene reload confirms ten limestone step faces, the original step transform and volume, and the bay's unchanged 23 brick faces and one limestone floor face.
 
 The full slab-verify passed all gates. Regression coverage includes distinct material resources with identical names, mixed/default/empty selections, Assign and Undo, and Pixel mode. The docs verifier passed 28 MDX pages and 72 references; website lint and the 32-page build passed.
+
+## Roof and interior light authoring
+
+Created a Box in Godot with Width 4.4, Height 0.2, and Depth 4.4. Placed it through the viewport, renamed it MaintenanceBayRoof, and set its position through the Inspector to (25.8, 3.17, 18.8). This provides a 0.2 m overhang around the bay. Selected its six faces and loaded the existing teal_steel material through Surface Paint.
+
+Added an OmniLight3D under the roof using Godot's Create Node dialog. Set local position to (2.2, -0.6, 2.2) and enabled shadows. The saved scene reload confirms roof bounds approximately (4.400391, 0.200195, 4.400391), positive volume 3.8764694519341, six teal-steel faces, and the light's intended transform with range 5 and shadows enabled. Room and step geometry and material counts remain as before.
+
+Switching between modelling and painting resized the viewport and moved the target under the cursor during this pass. Rechecked the selected node and face count before applying materials; no unintended material assignments remain. This is evidence for reviewing layout stability, not proof of a picking defect. Gameplay clearance and lighting with the roof in place still need a native playtest.
