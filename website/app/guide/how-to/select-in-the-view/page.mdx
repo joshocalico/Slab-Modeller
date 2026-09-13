@@ -56,7 +56,9 @@ Shift-drag remains a direct gesture: Shift-drag a face to extrude it, or Shift-d
 
 ## Pick through the solid
 
-Enable **X-ray selection** to include occluded vertices, edges, and faces. The candidates and wire display remain visible through the solid. Press <kbd>Tab</kbd> to cycle candidates under the pointer and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle backward, then click to select the highlighted candidate. Turn X-ray off to restrict picking and highlights to visible geometry.
+Enable **X-ray selection** to include occluded vertices, edges, and faces on visible solids. The candidates and wire display remain visible through the solid. Press <kbd>Tab</kbd> to cycle candidates under the pointer and <kbd>Shift</kbd>+<kbd>Tab</kbd> to cycle backward, then click to select the highlighted candidate. Turn X-ray off to restrict picking and highlights to visible geometry.
+
+X-ray does not include a node hidden in Godot or a node under a hidden ancestor. Hide an obstructing `SlabSolid` to pick the visible geometry behind it. To show the solid again, select it in the Scene tree and enable **Visibility > Visible** in the Inspector.
 
 ## Keep a multi-selection when you move
 

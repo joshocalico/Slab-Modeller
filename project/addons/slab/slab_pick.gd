@@ -80,7 +80,7 @@ static func all_solids(root: Node) -> Array[Node3D]:
 
 
 static func _collect_solids(node: Node, out: Array[Node3D]) -> void:
-	if node is Node3D and SlabSelection.is_solid(node):
+	if node is Node3D and SlabSelection.is_solid(node) and (node as Node3D).is_visible_in_tree():
 		out.append(node)
 	for child in node.get_children():
 		_collect_solids(child, out)
@@ -148,8 +148,11 @@ static func _edge_candidates(solid: Node3D, camera: Camera3D, screen: Vector2, r
 			continue
 		var a_world: Vector3 = solid.to_global(ends[0])
 		var b_world: Vector3 = solid.to_global(ends[1])
-		if camera.is_position_behind(a_world) and camera.is_position_behind(b_world):
+		var clipped := clip_edge_to_camera(camera, a_world, b_world)
+		if clipped.is_empty():
 			continue
+		a_world = clipped[0]
+		b_world = clipped[1]
 		var a_screen := camera.unproject_position(a_world)
 		var b_screen := camera.unproject_position(b_world)
 		var t := _screen_segment_t(screen, a_screen, b_screen)
@@ -157,7 +160,7 @@ static func _edge_candidates(solid: Node3D, camera: Camera3D, screen: Vector2, r
 		var distance: float = nearest_screen.distance_to(screen)
 		if distance > radius:
 			continue
-		var world := a_world.lerp(b_world, t)
+		var world := projected_edge_world(camera, a_world, b_world, t)
 		var depth := camera.project_ray_origin(nearest_screen).distance_to(world)
 		var visible := _point_visible(solid, camera, nearest_screen, world)
 		if visible_only and not visible:
@@ -165,6 +168,34 @@ static func _edge_candidates(solid: Node3D, camera: Camera3D, screen: Vector2, r
 		out.append({ "id": id, "distance": distance, "depth": depth, "visible": visible, "world": world })
 	_sort_candidates(out)
 	return out
+
+
+static func clip_edge_to_camera(camera: Camera3D, a_world: Vector3, b_world: Vector3) -> PackedVector3Array:
+	var forward := -camera.global_basis.z
+	var a_depth := forward.dot(a_world - camera.global_position)
+	var b_depth := forward.dot(b_world - camera.global_position)
+	var minimum_depth := maxf(camera.near, 0.0001) + 0.0001
+	if a_depth < minimum_depth and b_depth < minimum_depth:
+		return PackedVector3Array()
+	if a_depth < minimum_depth:
+		a_world = a_world.lerp(b_world, (minimum_depth - a_depth) / (b_depth - a_depth))
+	elif b_depth < minimum_depth:
+		b_world = b_world.lerp(a_world, (minimum_depth - b_depth) / (a_depth - b_depth))
+	return PackedVector3Array([a_world, b_world])
+
+
+static func projected_edge_world(camera: Camera3D, a_world: Vector3, b_world: Vector3,
+		screen_t: float) -> Vector3:
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		return a_world.lerp(b_world, screen_t)
+	var forward := -camera.global_basis.z
+	var a_depth := forward.dot(a_world - camera.global_position)
+	var b_depth := forward.dot(b_world - camera.global_position)
+	var denominator := (1.0 - screen_t) * b_depth + screen_t * a_depth
+	if absf(denominator) <= 0.000001:
+		return a_world.lerp(b_world, screen_t)
+	var world_t := screen_t * a_depth / denominator
+	return a_world.lerp(b_world, clampf(world_t, 0.0, 1.0))
 
 
 static func pick_face_hit(solid: Node3D, camera: Camera3D, screen: Vector2) -> Dictionary:

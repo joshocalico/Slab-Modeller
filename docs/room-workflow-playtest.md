@@ -43,3 +43,13 @@ Undo exposed a separate issue: geometry returned to the inset cap but the native
 Fixed by subscribing to the selected solid's topology changes and invalidating the native gizmo frame. Native replay used an isolated cutter side face: Apply Extrude 0.5 moved the gizmo with the face, Undo restored both, and Redo moved both again. Undid the test edit, restored the cutter's position, and saved with no scene diff.
 
 The full verifier passed all gates. The separate editor-hosted regression passed nine checks, including disconnecting the previously selected solid and preserving pending native drag state while invalidating its cached frame. It now runs in slab-verify. The runtime chrome smoke retains its 41 cases; editor-plugin construction belongs in the editor-hosted test.
+
+## Hidden geometry picking replay
+
+Selected MaintenanceBay, expanded the Inspector's Visibility section, and turned Visible off. Its surface disappeared. Clicked away, then clicked its former location at the left rim. Slab selected the invisible MaintenanceBay again, confirmed by the status label and the Inspector's unchecked Visible property. Restored visibility and saved with no scene diff.
+
+This reproduces a picking defect, not merely an ambiguous click on overlapping visible geometry. Hidden solids must be excluded from both viewport candidates and occlusion checks. X-ray should expose occluded elements of visible solids without making hidden nodes selectable.
+
+After the fix, replayed the same hide-and-click sequence in a restarted editor. The former rim location selected nothing; clicking the visible floor behind the hidden room selected ExteriorCourtyard. Face selection also selected the courtyard with X-ray both off and on. Restored the room's visibility, saved with no scene diff, and selected its visible slanted rim edge successfully.
+
+The picking pass also corrects perspective interpolation: the world point tested for occlusion now projects onto the nearest point along the screen-space edge. Edges crossing the camera near plane are clipped before projection. The focused smoke covers perspective, orthographic, near-plane, hidden-solid, and hidden-ancestor cases. Full slab-verify passed all gates, including the editor-hosted gizmo regression. The docs verifier passed 28 MDX pages and 72 local references; website lint and its 32-page build passed.

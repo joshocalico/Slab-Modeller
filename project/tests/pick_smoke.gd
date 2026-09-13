@@ -77,10 +77,51 @@ func _run() -> void:
 	var along_picked: int = SlabPick.pick(_solid, SlabSelection.Mode.EDGE, _camera, along_screen)
 	_expect(along_picked != 0, "generous tolerance picks along an edge, not only at its midpoint")
 
+	var perspective_a := _camera.to_global(Vector3(-1.0, 0.0, -2.0))
+	var perspective_b := _camera.to_global(Vector3(2.0, 0.0, -10.0))
+	var perspective_t := 0.35
+	var projected_screen := _camera.unproject_position(perspective_a).lerp(
+		_camera.unproject_position(perspective_b), perspective_t)
+	var projected_world := SlabPick.projected_edge_world(_camera, perspective_a, perspective_b, perspective_t)
+	var linear_world := perspective_a.lerp(perspective_b, perspective_t)
+	_expect(_camera.unproject_position(projected_world).distance_to(projected_screen) < 0.001,
+		"perspective edge point lies on the cursor ray used for visibility")
+	_expect(_camera.unproject_position(linear_world).distance_to(projected_screen) > 1.0,
+		"perspective fixture distinguishes projected interpolation from world-linear interpolation")
+	var crossing := SlabPick.clip_edge_to_camera(_camera,
+		_camera.to_global(Vector3(-1.0, 0.0, 1.0)), perspective_b)
+	_expect(crossing.size() == 2 and not _camera.is_position_behind(crossing[0])
+		and not _camera.is_position_behind(crossing[1]),
+		"an edge crossing the camera plane is clipped before perspective interpolation")
+	var crossing_world := SlabPick.projected_edge_world(_camera, crossing[0], crossing[1], 0.5)
+	_expect(crossing_world.is_finite() and _camera.unproject_position(crossing_world).is_finite(),
+		"a clipped perspective edge produces finite visibility coordinates")
+	var ortho := Camera3D.new()
+	_solid.get_parent().add_child(ortho)
+	ortho.projection = Camera3D.PROJECTION_ORTHOGONAL
+	ortho.global_transform = _camera.global_transform
+	_expect(SlabPick.projected_edge_world(ortho, perspective_a, perspective_b, perspective_t).is_equal_approx(linear_world),
+		"orthographic edge interpolation remains world-linear")
+	ortho.free()
+
 	var other_top: int = _top_face(_other)
 	var other_screen: Vector2 = _camera.unproject_position(_other.to_global(_other.call("face_centroid", other_top)))
 	var picked_other: Node3D = SlabPick.pick_solid(_solid.get_parent(), _camera, other_screen)
 	_expect(picked_other == _other, "viewport pick hits a solid that was never selected")
+	_other.visible = false
+	_expect(SlabPick.pick_solid(_solid.get_parent(), _camera, other_screen) != _other
+		and not SlabPick.all_solids(_solid.get_parent()).has(_other),
+		"a hidden solid is absent from viewport picking and occlusion")
+	_other.visible = true
+	var hidden_parent := Node3D.new()
+	_solid.get_parent().add_child(hidden_parent)
+	var hidden_child: Node3D = ClassDB.instantiate("SlabSolid")
+	hidden_parent.add_child(hidden_child)
+	hidden_child.position = Vector3(-10, 0, 0)
+	hidden_parent.visible = false
+	_expect(not SlabPick.all_solids(_solid.get_parent()).has(hidden_child),
+		"a solid beneath a hidden ancestor is absent from viewport picking")
+	hidden_parent.free()
 	var origin_screen: Vector2 = _camera.unproject_position(_solid.to_global(_solid.call("face_centroid", top)))
 	var picked_origin: Node3D = SlabPick.pick_solid(_solid.get_parent(), _camera, origin_screen)
 	_expect(picked_origin == _solid, "viewport pick hits the nearer box without a hierarchy selection")
