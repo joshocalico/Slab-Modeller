@@ -164,3 +164,9 @@ The full slab-verify passed after updating the panel command inventory and the o
 In Surface Paint, selected the roof top face, typed Rotation 15 without pressing Enter, and clicked Apply UV. The field displayed 15 but the texture remained unchanged; the status reported no change. Apply UV now commits pending text in its UV fields before running the operation.
 
 The rendered paint editor regression failed on the original code and passed after the fix, including one Undo and exact Redo. Updated its two stale target-label expectations to include the current material summary. Native replay rotated the roof texture immediately after the same typed-input sequence. One Undo and Save restored the scene with no diff. The complete paint editor replay and full slab-verify passed.
+
+## Typed preview input
+
+The same interaction failed in Extrude: typing 0.05 without Enter and clicking Apply committed the previous 0.5 m value. The saved roof height increased from 0.200195 to 0.700195. Preview controls now retain pending keyboard input across panel refreshes and submit it before Apply. Programmatic value changes remain authoritative, including the room tutorial's -2.4 m extrusion.
+
+The rendered panel regression covers pending Inset distance, Bevel width and segments, and the existing programmatic room sequence. It reports zero failures. Native typing of 0.05 followed directly by Apply and Save produced a roof height of 0.25 m, within the lattice rounding of the requested extrusion. One native Undo and Save restored the scene with no diff.

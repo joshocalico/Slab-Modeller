@@ -125,7 +125,9 @@ func _run() -> void:
 	await _click(_button_named(preview, "Cancel"))
 	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
 	_check(is_equal_approx(amount.value, 0.45), "cancelled_inset_remembers_its_distance")
+	await _type_spin_text(amount, "0.25")
 	await _click(_button_named(preview, "Apply"))
+	_check(is_equal_approx(actions.inset_amount, 0.25), "inset_apply_uses_pending_distance")
 	_check(not actions.operation_active and solid.get("data") != before, "apply_commits_preview")
 	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
@@ -135,12 +137,13 @@ func _run() -> void:
 	await create_timer(0.2).timeout
 	await _click(_button_named(panel.find_child("Commands", true, false), "Bevel"))
 	_check(is_equal_approx(amount.value, 0.5), "bevel_keeps_an_independent_default_width")
-	amount.value = 0.1
 	var segments: SpinBox = panel.find_child("bevel_segments", true, false)
-	segments.value = 4
+	await _type_spin_text(amount, "0.1")
+	await _type_spin_text(segments, "4")
 	await create_timer(0.2).timeout
 	_check(actions.operation_active and segments.visible, "bevel_uses_shared_preview_with_segments")
 	await _click(_button_named(preview, "Apply"))
+	_check(is_equal_approx(actions.bevel_amount, 0.1), "bevel_apply_uses_pending_width")
 	_check(solid.call("face_count") == 10, "bevel_applies_four_segments")
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
 	_check(solid.get("data") == before, "bevel_undo_restores_original_mesh")
@@ -263,6 +266,24 @@ func _confirm_create(editor: Object, at: Vector3) -> void:
 	event.pressed = true
 	session.handle(editor.get_editor_viewport_3d(0).get_camera_3d(), event)
 	await create_timer(0.3).timeout
+
+
+func _type_spin_text(spin: SpinBox, value: String) -> void:
+	var line := spin.get_line_edit()
+	line.grab_focus()
+	await process_frame
+	line.select_all()
+	# The rendered harness cannot route text entry through the native window
+	# reliably. Emit the same focused keyboard receipt used to distinguish a
+	# pending user edit from a programmatic SpinBox value update.
+	var typed := InputEventKey.new()
+	typed.keycode = KEY_1
+	typed.unicode = 49
+	typed.pressed = true
+	line.gui_input.emit(typed)
+	line.text = value
+	await process_frame
+	_check(line.text == value, "pending numeric text is visible before Apply")
 
 
 func _click(button: Button) -> void:

@@ -141,6 +141,11 @@ func _operation_controls() -> Control:
 	amount.custom_minimum_size.x = _scaled(110)
 	amount.add_theme_font_size_override("font_size", _font(15))
 	amount.get_line_edit().add_theme_font_size_override("font_size", _font(15))
+	var pending_text := {"amount": false, "segments": false}
+	var synced := {"amount": NAN, "segments": -1, "kind": -1, "active": false}
+	amount.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventKey and event.pressed and amount.get_line_edit().has_focus():
+			pending_text["amount"] = true)
 	amount.value_changed.connect(func(value: float) -> void: _actions.operation_amount_changed.emit(value))
 	row.add_child(amount)
 	var segment_label := Label.new()
@@ -155,6 +160,9 @@ func _operation_controls() -> Control:
 	segments.custom_minimum_size.x = _scaled(80)
 	segments.add_theme_font_size_override("font_size", _font(15))
 	segments.get_line_edit().add_theme_font_size_override("font_size", _font(15))
+	segments.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventKey and event.pressed and segments.get_line_edit().has_focus():
+			pending_text["segments"] = true)
 	segments.value_changed.connect(func(value: float) -> void: _actions.operation_segments_changed.emit(int(value)))
 	row.add_child(segments)
 	var apply_button: Button
@@ -168,7 +176,24 @@ func _operation_controls() -> Control:
 		button.accessibility_description = button.tooltip_text
 		button.pressed.connect(func() -> void:
 			button.release_focus()
-			if apply: _actions.operation_apply_requested.emit()
+			if apply:
+				# SpinBox does not publish a focused LineEdit until it loses focus.
+				# Parse only text the user changed; a programmatic value remains
+				# authoritative even if the editor is still displaying stale text.
+				var amount_pending: bool = pending_text["amount"]
+				var segments_pending: bool = pending_text["segments"]
+				amount.set_block_signals(true)
+				segments.set_block_signals(true)
+				if amount_pending: amount.apply()
+				if segments_pending: segments.apply()
+				var wanted_amount: float = amount.value if amount_pending else _actions.operation_amount
+				var wanted_segments: int = int(segments.value) if segments_pending else _actions.bevel_segments
+				var bevel: bool = _selection.operation_preview.get("kind", 0) == 2
+				amount.set_block_signals(false)
+				segments.set_block_signals(false)
+				if amount_pending: _actions.operation_amount_changed.emit(wanted_amount)
+				if bevel and segments_pending: _actions.operation_segments_changed.emit(wanted_segments)
+				_actions.operation_apply_requested.emit()
 			else: _actions.operation_cancel_requested.emit())
 		row.add_child(button)
 		if apply: apply_button = button
@@ -176,14 +201,25 @@ func _operation_controls() -> Control:
 		var active: bool = _actions.operation_active
 		row.visible = (_paint == null or not _paint.active) and active
 		var kind: int = _selection.operation_preview.get("kind", 0)
+		var lifecycle_changed: bool = active != synced["active"] or kind != synced["kind"]
+		if lifecycle_changed or not is_equal_approx(float(synced["amount"]), _actions.operation_amount):
+			pending_text["amount"] = false
+		if lifecycle_changed or int(synced["segments"]) != _actions.bevel_segments:
+			pending_text["segments"] = false
 		caption.text = ["Extrude distance", "Inset distance", "Bevel width"][kind]
 		segment_label.visible = active and kind == 2
 		segments.visible = active and kind == 2
-		segments.set_value_no_signal(_actions.bevel_segments)
+		if not pending_text["segments"]:
+			segments.set_value_no_signal(_actions.bevel_segments)
 		amount.set_block_signals(true)
 		amount.min_value = -64.0 if kind == 0 else 0.001
-		amount.set_value_no_signal(_actions.operation_amount)
+		if not pending_text["amount"]:
+			amount.set_value_no_signal(_actions.operation_amount)
 		amount.set_block_signals(false)
+		synced["amount"] = _actions.operation_amount
+		synced["segments"] = _actions.bevel_segments
+		synced["kind"] = kind
+		synced["active"] = active
 		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
 		if _settings != null:
 			_settings.visible = _show_settings()
