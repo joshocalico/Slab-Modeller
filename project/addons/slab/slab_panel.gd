@@ -977,7 +977,7 @@ func _paint_block() -> Control:
 	_paint_uv_hint.add_theme_stylebox_override("normal", hint_bg)
 	_paint_uv_hint.clip_text = true
 	_paint_uv_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_PASS
 	_paint_canvas.add_child(_paint_uv_hint)
 	_paint_uv_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_paint_uv_hint.offset_left = 6
@@ -1378,7 +1378,9 @@ func _refresh_paint_chrome() -> void:
 		_paint_tool_pixel.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.PIXEL)
 		_style_tool(_paint_tool_pixel, _paint.tool == SlabPaint.Tool.PIXEL)
 	if _paint_uv_hint != null:
-		_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
+		var preview_caption: String = _paint.brush_preview_caption() if _paint != null else ""
+		_paint_uv_hint.text = preview_caption if preview_caption != "" else SlabPaint.uv_canvas_hint()
+		_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, SlabPaint.uv_canvas_hint()] if preview_caption != "" else ""
 		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
 	if _paint_fit_uv != null:
 		_paint_fit_uv.visible = _paint != null and not _paint.is_pixel()

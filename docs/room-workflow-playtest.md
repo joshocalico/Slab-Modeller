@@ -83,4 +83,12 @@ At the native editor's current scale and 1225 × 768 window, Material/UV left ap
 
 The paint panel now derives its minimum height from its visible controls and reserves 190 logical pixels for the canvas. After restarting, entering Material/UV expanded the panel automatically and provided approximately 135 screen pixels for the canvas at this editor scale. Dragging the divider downward respected the minimum. Replayed Fit UV, a UV drag, Undo, and Save without a scene diff. Pixel mode used the freed control-row space for its image. Exiting Paint allowed the divider to return to its previous modelling position. Automated layout coverage also checks 1.5× scaling. Full slab-verify passed all gates; the docs verifier passed 28 MDX pages and 72 references, and website lint and the 32-page build passed.
 
-One design ambiguity remains: selecting Limestone in the palette previews that brush texture beneath the selected Brick face's UV outline, before Assign changes the face. The Brush and face labels correctly differ, but the canvas can look like a committed material change. This needs clearer visual treatment in a later pass.
+One design ambiguity remains: selecting Limestone in the palette previews that brush texture beneath the selected Brick face's UV outline, before Assign changes the face. The Brush and face labels correctly differ, but the canvas can look like a committed material change. The follow-up pass below adds an explicit preview caption.
+
+## Brush preview feedback and step materials
+
+Added a canvas caption when the current Brush differs from the selected faces' material. Native replay selected a Brick face, chose the Limestone palette chip, and saw “Brush preview: Limestone” with an instruction to Assign. The face stayed Brick. Assign changed the rendered face and restored the regular gesture hint. Undo restored Brick and the preview caption. Restored the Brick brush and saved after the test.
+
+Also selected all ten MaintenanceBaySteps faces in Godot and loaded the existing limestone material through the material picker. The saved scene reload confirms ten limestone step faces, the original step transform and volume, and the bay's unchanged 23 brick faces and one limestone floor face.
+
+The full slab-verify passed all gates. Regression coverage includes distinct material resources with identical names, mixed/default/empty selections, Assign and Undo, and Pixel mode. The docs verifier passed 28 MDX pages and 72 references; website lint and the 32-page build passed.

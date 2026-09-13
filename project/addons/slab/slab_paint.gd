@@ -142,6 +142,20 @@ func selected_material_summary() -> String:
 	return material_label(mat, int(common.get("slot", 0))) if mat is StandardMaterial3D else "Default"
 
 
+func brush_preview_caption() -> String:
+	if tool != Tool.MATERIAL_UV or _selection == null:
+		return ""
+	if _brush_material == null:
+		return "Selected: Mixed · Choose or sample a brush" if not _selection.ids.is_empty() and _common_selected_material().is_empty() else ""
+	var brush_name := material_label(_brush_material, _actions.material_slot if _actions != null else -1)
+	if _selection.ids.is_empty():
+		return "Brush preview: %s · Click a face to paint" % brush_name
+	var common := _common_selected_material()
+	if not common.is_empty() and common.get("material") == _brush_material:
+		return ""
+	return "Brush preview: %s · Assign to apply to selection" % brush_name
+
+
 func select_material_slot(slot: int) -> bool:
 	if _selection == null or _selection.solid == null:
 		return false

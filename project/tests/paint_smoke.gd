@@ -26,6 +26,7 @@ func _boot() -> void:
 	_check_uv_matches_emit()
 	_check_texture_resolution_coherence()
 	_check_uv_modifier_dispatch()
+	_check_brush_preview_caption()
 	_check_uv_transform_and_wrap()
 	_check_numeric_uv_apply_and_selection_sync()
 	_check_uv_drag_transaction()
@@ -44,6 +45,67 @@ func _boot() -> void:
 	await process_frame
 	_check_viewport_paint_does_not_extrude()
 	_finish()
+
+
+func _check_brush_preview_caption() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var faces: PackedInt64Array = solid.call("get_faces")
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([faces[0]]))
+	var actions := SlabActions.new(selection)
+	var undo := SlabTestUndo.new()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	var assigned := StandardMaterial3D.new()
+	assigned.resource_name = "Limestone"
+	var preview := StandardMaterial3D.new()
+	preview.resource_name = "Limestone"
+	solid.set("materials", [assigned, preview])
+	paint.enter()
+	_expect(paint.brush_preview_caption().is_empty(), "matching selected material keeps the UV gesture hint")
+	paint.select_material_slot(1)
+	_expect(paint.brush_preview_caption().contains("Assign to apply"),
+		"same-label distinct material resources still show a brush preview warning")
+	selection.set_ids(PackedInt64Array())
+	_expect(paint.brush_preview_caption().contains("Click a face to paint"),
+		"chosen brush without selected faces gives a truthful next step")
+	selection.set_ids(PackedInt64Array([faces[0]]))
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, preload("res://addons/slab/slab_metrics.gd").at_scale(1.0))
+	panel.bind_paint(paint)
+	root.add_child(panel)
+	var hint: Label = panel.find_child("PaintUvHint", true, false)
+	_expect(hint.text.begins_with("Brush preview: Limestone") and hint.tooltip_text.begins_with(hint.text + "\n")
+		and hint.tooltip_text.ends_with(SlabPaint.uv_canvas_hint()) and hint.mouse_filter == Control.MOUSE_FILTER_PASS,
+		"canvas caption tooltip preserves its full context and UV gestures while events reach the canvas")
+	paint.assign_active_to_selection()
+	_expect(paint.brush_preview_caption().is_empty() and hint.text == SlabPaint.uv_canvas_hint(),
+		"Assign returns the canvas to its gesture hint")
+	undo.undo()
+	_expect(paint.brush_preview_caption().contains("Assign to apply") and hint.text.begins_with("Brush preview:"),
+		"Undo restores the unassigned brush preview caption")
+	paint.tool = SlabPaint.Tool.PIXEL
+	_expect(paint.brush_preview_caption().is_empty() and not hint.visible, "Pixel mode is unaffected by the UV brush caption")
+	paint.tool = SlabPaint.Tool.MATERIAL_UV
+	solid.call("set_face_material", PackedInt64Array([faces[1]]), 1)
+	selection.set_ids(PackedInt64Array([faces[0], faces[1]]))
+	var mixed_paint := SlabPaint.new()
+	mixed_paint.bind(selection, actions, SlabTestUndo.new())
+	mixed_paint.enter()
+	_expect(mixed_paint.brush_preview_caption().begins_with("Selected: Mixed"),
+		"mixed selection without a brush gives truthful recovery guidance")
+	solid.call("set_face_material", PackedInt64Array([faces[0], faces[1]]), 2)
+	mixed_paint.enter()
+	_expect(mixed_paint.selected_material_summary() == "Default" and mixed_paint.brush_preview_caption().is_empty(),
+		"uniform default faces keep the normal gesture hint instead of claiming a brush mismatch")
+	panel.free()
+	paint.exit()
+	mixed_paint.exit()
+	solid.free()
 
 
 func _check_uv_drag_transaction() -> void:
