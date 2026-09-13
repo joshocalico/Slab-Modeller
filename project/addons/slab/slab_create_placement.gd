@@ -58,7 +58,7 @@ func begin(row: Dictionary, plan: Dictionary) -> bool:
 	_prototype_color = candidate.get("prototype_color")
 	candidate.set("collision_enabled", false)
 	candidate.set("prototype_color", Color(0.86, 0.72, 0.34))
-	root.add_child(candidate)
+	root.add_child(candidate, true)
 	_row = row.duplicate()
 	_solid = candidate
 	_has_anchor = false

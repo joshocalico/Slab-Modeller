@@ -16,7 +16,9 @@ Created MaintenanceBaySteps through the native Stair selector and placement prev
 
 The Stair button initially failed to switch away from Box in the running session. A GUI-event regression exposed a notification ordering defect: create_settings_changed fired before the new shape and controls were installed. The corrected order passes that regression. A fresh native editor then selected Stair, displayed its fields, and placed the requested solid. The earlier unresponsive session has not been conclusively attributed to that ordering defect alone.
 
-Two additional papercuts remain: the placed stair received an internal-looking @SlabSolid name before manual renaming, and the generic Width/Depth labels conceal that Width means stair run while Depth means width across the steps. Reading kernel code should not be necessary to orient a staircase.
+That placement exposed two further papercuts: an internal-looking @SlabSolid name and generic Width/Depth labels that concealed the stair's ascent axis. The follow-up pass uses readable names when inserting the preview and gives stairs Run, Rise, Width, and Steps controls. Tooltips and creation docs explain ascent along local +X.
+
+Native verification placed another stair in the saved scene and received Stair2. Undo removed it; Redo restored it with the same name. Undid the temporary placement and saved with no scene diff. The new controls were visible in the editor. Automated coverage exercises repeated placement and name stability through Undo/Redo, plus the shape-specific labels.
 
 ## Panel change and verification
 

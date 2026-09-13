@@ -6,8 +6,24 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabTestHost := preload("res://tests/slab_test_host.gd")
 const SlabTestWorld := preload("res://tests/slab_test_world.gd")
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
+const SlabTestUndo := preload("res://tests/slab_test_undo.gd")
 
 var failures := 0
+
+
+class PlacementActions:
+	extends RefCounted
+	var undo: RefCounted
+
+	func _init(recorder: RefCounted) -> void:
+		undo = recorder
+
+	func commit_placed_create(_row: Dictionary, target: Node3D, parent: Node, transform: Transform3D) -> void:
+		target.transform = transform
+		undo.create_action("Place", UndoRedo.MERGE_DISABLE, parent)
+		undo.add_do_method(parent, "add_child", target, true)
+		undo.add_undo_method(parent, "remove_child", target)
+		undo.commit_action()
 
 
 func _init() -> void:
@@ -59,6 +75,26 @@ func _run() -> void:
 		"surface placement preserves an off-grid support height and ignores its own preview")
 	placement.cancel(false)
 	world.box().position.y = 0.0
+
+	var name_undo := SlabTestUndo.new()
+	var name_actions := PlacementActions.new(name_undo)
+	var named_placement := SlabCreatePlacement.new(host, name_actions)
+	var stair_row := actions.find("make_stair")
+	for expected_name in ["Stair", "Stair2"]:
+		check(named_placement.begin(stair_row, actions.shapes.plan(&"make_stair")),
+			"repeated Stair placement begins")
+		named_placement.call("_place_at", Vector3.ZERO, false)
+		var named_preview := named_placement.preview()
+		check(named_preview.name == expected_name, "preview receives readable unique name %s" % expected_name)
+		check(named_placement.confirm(), "named Stair placement commits")
+	check(world.stage().get_node_or_null("Stair") != null and world.stage().get_node_or_null("Stair2") != null,
+		"repeated placed shapes keep readable unique names")
+	name_undo.undo()
+	check(world.stage().get_node_or_null("Stair2") == null, "undo removes the second readable shape")
+	name_undo.redo()
+	check(world.stage().get_node_or_null("Stair2") != null, "redo restores the same readable unique name")
+	world.stage().get_node("Stair").free()
+	world.stage().get_node("Stair2").free()
 
 	for entry in actions.shapes.entries():
 		var shape_row := actions.find(entry["id"])

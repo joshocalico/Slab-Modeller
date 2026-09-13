@@ -173,7 +173,7 @@ func _check_catalog(actions: RefCounted, rows: Array[Dictionary]) -> void:
 	for key in SlabShapes.PARAMS:
 		_expect(claimed.has(key), "parameter %s is read by at least one shape" % key)
 
-	_expect(actions.shapes.fields_for(&"make_stair").size() == 4, "Stair shows width, height, depth, and steps")
+	_expect(actions.shapes.fields_for(&"make_stair").map(func(field: Dictionary) -> String: return field["label"]) == ["Run", "Rise", "Width", "Steps"], "Stair labels describe run, rise, width, and steps")
 	_expect(actions.shapes.fields_for(&"make_box").size() == 3, "Box shows width, height, and depth")
 	var stair_keys: Array = actions.shapes.fields_for(&"make_stair").map(func(field: Dictionary) -> StringName: return field["key"])
 	_expect(stair_keys.has(&"stair_steps") and not stair_keys.has(&"arch_arc"), "Stair fields do not include Arc")

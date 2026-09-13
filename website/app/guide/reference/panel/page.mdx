@@ -24,7 +24,7 @@ The settings change with the current mode and active command. In Object mode, ch
 
 | Field | When it shows | Role |
 | --- | --- | --- |
-| Width, Height, Depth | Object, after choosing a shape | Size for the next **Create**. |
+| Width, Height, Depth | Object, after choosing most shapes | Size for the next **Create**. Stair shows **Run**, **Rise**, and **Width** instead. |
 | Steps, Sides, Segments, Thickness, Arc | Object, after choosing Stair, Cylinder, or Arch | Only the parameters that shape reads. |
 | Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
 | Cuts, Centre % | Edge | Count and position for Loop Cut. |
@@ -47,9 +47,12 @@ Object mode. Choose a shape to see its fields. Changing a field never rewrites a
 
 | Field | Default | Range | Read by |
 | --- | --- | --- | --- |
-| Width | 2 m | 0.05 to 64 | Every Create command. Cylinder reads it as diameter. Arch reads it as the outer sweep diameter. |
-| Height | 2 m | 0.05 to 64 | Box, Stair, Cylinder, Poly Shape, Curve Sweep. Plane and Arch ignore it. |
-| Depth | 2 m | 0.05 to 64 | Every Create command except Cylinder. Curve Sweep uses it as path length. |
+| Width | 2 m | 0.05 to 64 | Box, Plane, Cylinder, Arch, Poly Shape, and Curve Sweep. Cylinder reads it as diameter. Arch reads it as the outer sweep diameter. |
+| Height | 2 m | 0.05 to 64 | Box, Cylinder, Poly Shape, and Curve Sweep. Plane and Arch ignore it. |
+| Depth | 2 m | 0.05 to 64 | Box, Plane, Arch, Poly Shape, and Curve Sweep. Curve Sweep uses it as path length. |
+| Run | 2 m | 0.05 to 64 | Stair. Total horizontal length along local X. |
+| Rise | 2 m | 0.05 to 64 | Stair. Total height along local Y. |
+| Width (Stair) | 2 m | 0.05 to 64 | Stair. Width across the steps along local Z. |
 | Steps | 8 | 1 to 32 | Stair. |
 | Sides | 16 | 3 to 32 | Cylinder. |
 | Segments | 8 | 4 to 32 | Arch. |
@@ -66,7 +69,7 @@ Object mode. No selection required. Choose a shape, set its fields, then click *
 | --- | --- |
 | Box | A box of Width × Height × Depth. Its local origin is the minimum corner, and it extends along positive X, Y, and Z. |
 | Plane | A Width × Depth slab one grid step thick. |
-| Stair | A straight run of Steps steps. |
+| Stair | A straight run of Steps steps. Run follows local X, Rise follows local Y, and Width follows local Z. The stair ascends toward local +X. |
 | Cylinder | A cylinder with Sides sides. Width is the diameter. Its local origin is the base centre, and it extends along positive Y. |
 | Arch | A thick band swept through Arc. Width is the outer diameter. Depth is the extrusion. |
 | Poly Shape | A Width × Depth square extruded to Height. |

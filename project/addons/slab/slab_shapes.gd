@@ -26,7 +26,12 @@ const CATALOG: Dictionary = {
 	},
 	&"make_stair": {
 		"label": "Stair", "icon": "Stair", "tooltip": "Creates a straight run of steps.",
-		"params": [&"size_x", &"size_y", &"size_z", &"stair_steps"], "derives": "",
+		"params": [&"size_x", &"size_y", &"size_z", &"stair_steps"], "derives": "Steps rise along local +X. Rotate the solid to face the entrance.",
+		"field_overrides": {
+			&"size_x": { "label": "Run", "tooltip": "Total horizontal length along local X, in metres.", "phrase": "%s m run" },
+			&"size_y": { "label": "Rise", "tooltip": "Total height of the staircase along local Y, in metres.", "phrase": "%s m rise" },
+			&"size_z": { "label": "Width", "tooltip": "Width across the steps along local Z, in metres.", "phrase": "%s m wide" },
+		},
 	},
 	&"make_cylinder": {
 		"label": "Cylinder", "icon": "CylinderMesh", "tooltip": "Creates a cylinder with its base centre at the parent origin, extending along positive Y.",
@@ -94,7 +99,9 @@ func fields_for(id: StringName) -> Array[Dictionary]:
 	if not CATALOG.has(id):
 		return out
 	for key in CATALOG[id]["params"]:
-		out.append(_field(key))
+		var field := _field(key)
+		field.merge(CATALOG[id].get("field_overrides", {}).get(key, {}), true)
+		out.append(field)
 	return out
 
 
@@ -124,7 +131,8 @@ func describe(id: StringName) -> String:
 	var entry: Dictionary = CATALOG[id]
 	var bits := PackedStringArray()
 	for key in entry["params"]:
-		bits.append(PARAMS[key]["phrase"] % _number(value_of(key)))
+		var phrase: String = entry.get("field_overrides", {}).get(key, {}).get("phrase", PARAMS[key]["phrase"])
+		bits.append(phrase % _number(value_of(key)))
 	var text: String = ", ".join(bits) + "."
 	var derives: String = entry["derives"]
 	return text if derives == "" else "%s %s" % [text, derives]
