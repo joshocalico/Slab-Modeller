@@ -434,6 +434,46 @@ func reset_uv() -> void:
 		changed.emit()
 
 
+func can_resize_image() -> bool:
+	return (active and tool == Tool.PIXEL and _material != null and _is_unique(_material)
+		and _image != null and not _image.is_empty() and _solid != null and not stroke_active and not uv_drag_active)
+
+
+func resize_image(width: int, height: int, smooth: bool = true, expected_material: StandardMaterial3D = null) -> bool:
+	if expected_material != null and _material != expected_material:
+		_report("Resize target changed. Open Resize again for the current image.")
+		return false
+	if not can_resize_image():
+		_report("Make Unique before resizing this image.")
+		return false
+	width = clampi(width, 16, 16384)
+	height = clampi(height, 16, 16384)
+	if _image.get_width() == width and _image.get_height() == height:
+		_report("Image is already %d × %d px." % [width, height])
+		return false
+	var before_img: Image = _image.duplicate()
+	var after_img: Image = _image.duplicate()
+	after_img.resize(width, height, Image.INTERPOLATE_BILINEAR if smooth else Image.INTERPOLATE_NEAREST)
+	before_img.generate_mipmaps()
+	after_img.generate_mipmaps()
+	var before_tex := ImageTexture.create_from_image(before_img)
+	var after_tex := ImageTexture.create_from_image(after_img)
+	_material.albedo_texture = after_tex
+	_image = after_img
+	_texture = after_tex
+	if _undo != null:
+		_create_undo_action("Slab Resize Paint Image", _solid)
+		_undo.add_do_property(_material, "albedo_texture", after_tex)
+		_undo.add_undo_property(_material, "albedo_texture", before_tex)
+		_undo.commit_action(false)
+	_mark_dirty(_material, true)
+	_actions.uv_texture_resolution = width
+	_report("Resized paint image to %d × %d px." % [width, height])
+	image_changed.emit()
+	changed.emit()
+	return true
+
+
 func begin_uv_drag() -> void:
 	cancel_uv_drag()
 	if _selection == null or _selection.solid == null or _selection.ids.is_empty():

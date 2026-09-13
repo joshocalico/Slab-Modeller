@@ -225,6 +225,41 @@ func _run() -> void:
 	var help: Label = panel.find_child("PaintHelp", true, false)
 	_check(save.visible and actions_row.get_global_rect().grow(1.0).encloses(save.get_global_rect()), "pixel_save_fits_complete_action_wrapper")
 	_check(help.visible and actions_row.get_global_rect().grow(1.0).encloses(help.get_global_rect()), "pixel_help_fits_complete_action_wrapper")
+	await _click(_button_named(panel, "Make Unique"))
+	var resize_material: StandardMaterial3D = paint.material()
+	var resize_before_data: PackedByteArray = solid.get("data")
+	var resize_before_size: Vector2i = paint.image().get_size()
+	await _click(_button_named(panel, "Resize…"))
+	var resize_form: VBoxContainer = panel.find_child("PaintResizeForm", true, false)
+	_check(resize_form != null and resize_form.is_visible_in_tree(), "owned Pixel artwork reveals the inline Resize form")
+	var resize_width: SpinBox = resize_form.find_child("PaintResizeWidth", true, false)
+	var resize_height: SpinBox = resize_form.find_child("PaintResizeHeight", true, false)
+	var keep_aspect: CheckBox = resize_form.find_child("PaintResizeAspect", true, false)
+	var sampling: OptionButton = resize_form.find_child("PaintResizeSampling", true, false)
+	var resize_apply: Button = resize_form.find_child("PaintResizeConfirm", true, false)
+	var resize_cancel: Button = resize_form.find_child("PaintResizeCancel", true, false)
+	_check(panel.get("_paint_inspector").get_global_rect().grow(1.0).encloses(resize_apply.get_global_rect())
+		and panel.get("_paint_inspector").get_global_rect().grow(1.0).encloses(resize_cancel.get_global_rect()),
+		"first-open Resize actions scroll fully into the Pixel inspector: %s apply=%s cancel=%s scroll=%s/%s" % [panel.get("_paint_inspector").get_global_rect(), resize_apply.get_global_rect(), resize_cancel.get_global_rect(), panel.get("_paint_inspector").scroll_vertical, panel.get("_paint_inspector").get_v_scroll_bar().max_value])
+	await _click(resize_cancel)
+	_check(not resize_form.visible and paint.image().get_size() == resize_before_size
+		and paint.material() == resize_material and solid.get("data") == resize_before_data,
+		"inline Resize Cancel closes without editing")
+	await _click(_button_named(panel, "Resize…"))
+	keep_aspect.button_pressed = false
+	await _type_spin_text(resize_width, "512")
+	await _type_spin_text(resize_height, "128")
+	sampling.select(1)
+	await _click(resize_apply)
+	await create_timer(0.2).timeout
+	await create_timer(0.2).timeout
+	_check(paint.image().get_size() == Vector2i(512, 128) and paint.material() == resize_material
+		and solid.get("data") == resize_before_data and paint.dirty,
+		"Resize button commits pending 512 × 128 fields; got %s" % paint.image().get_size())
+	await _history_shortcut(panel, false)
+	_check(paint.image().get_size() == resize_before_size and paint.material() == resize_material
+		and solid.get("data") == resize_before_data,
+		"Resize Undo restores exact dimensions without changing UV geometry or material identity")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)

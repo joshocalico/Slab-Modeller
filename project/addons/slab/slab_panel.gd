@@ -54,6 +54,15 @@ var _paint_tool_pixel: Button
 var _unique_button: Button
 var _paint_assign: Button
 var _paint_save: Button
+var _paint_resize: Button
+var _paint_resize_form: VBoxContainer
+var _paint_resize_width: SpinBox
+var _paint_resize_height: SpinBox
+var _paint_resize_aspect: CheckBox
+var _paint_resize_sampling: OptionButton
+var _paint_resize_target: StandardMaterial3D
+var _paint_resize_ratio := 1.0
+var _paint_resize_sync := false
 var _paint_sample: Button
 var _paint_actions: VBoxContainer
 var _paint_action_tools: VBoxContainer
@@ -1079,6 +1088,9 @@ func _paint_action_row() -> Control:
 	)
 	_paint_save.name = "PaintSave"
 	buttons.add_child(_paint_save)
+	_paint_resize = _named_action("Resize…", "ImageTexture", "Resize the owned paint image while preserving normalized UV placement.", _open_paint_resize_form)
+	_paint_resize.name = "PaintResize"
+	buttons.add_child(_paint_resize)
 	_paint_sample = _named_action("Sample", "ListSelect", "Use the selected faces' common material as the brush. Alt-click a viewport face to sample it directly.", func() -> void:
 		if _paint:
 			_paint.sample_selection()
@@ -1086,6 +1098,8 @@ func _paint_action_row() -> Control:
 	_paint_sample.name = "PaintSample"
 	buttons.add_child(_paint_sample)
 	tools.add_child(buttons)
+	_paint_resize_form = _make_paint_resize_form()
+	tools.add_child(_paint_resize_form)
 	_paint_picker_wrap = _paint_picker_slot()
 	tools.add_child(_paint_picker_wrap)
 	_paint_help = Label.new()
@@ -1146,6 +1160,9 @@ func _paint_mapping_section() -> Control:
 
 func _paint_uv_control_row() -> Control:
 	var fields := VBoxContainer.new()
+	# Direct dialog children span the button bar. Let empty body space pass mouse
+	# releases through to the native OK/Cancel buttons; field children remain interactive.
+	fields.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fields.name = "PaintUvControls"
 	fields.custom_minimum_size.y = _scaled(PAINT_UV_ROW_HEIGHT)
 	fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1344,6 +1361,7 @@ func _paint_tool_button(text: String, tool: int, group: ButtonGroup) -> Button:
 	button.custom_minimum_size = Vector2(_scaled(110.0), _scaled(PAINT_ROW_HEIGHT))
 	button.set_meta("slab_label", text)
 	button.pressed.connect(func() -> void:
+		_close_paint_resize_form()
 		if _paint:
 			_paint.tool = tool
 	)
@@ -1396,6 +1414,8 @@ func _sync_model_chrome() -> void:
 
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
+	if not on:
+		_close_paint_resize_form()
 	add_theme_constant_override("separation", 3 if on else 6)
 	_sync_model_chrome()
 	if _operation_row != null:
@@ -1452,6 +1472,9 @@ func _refresh_paint_chrome() -> void:
 	_paint_palette.visible = not pixel
 	_paint_save.visible = pixel
 	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
+	_paint_resize.visible = pixel
+	_paint_resize.disabled = _paint == null or not _paint.can_resize_image()
+	_paint_resize.tooltip_text = "Choose Width, Height, and resampling for the owned paint image." if not _paint_resize.disabled else "Make Unique before resizing this image."
 	_paint_help.visible = pixel
 	_paint_help.text = _pixel_help_text()
 	_paint_help.tooltip_text = _paint_help.text
@@ -1706,6 +1729,117 @@ func _sync_paint_uv_input_text() -> void:
 			var spins := _spins_under(row)
 			if not spins.is_empty():
 				spins[0].get_line_edit().text = str(spins[0].value)
+
+
+func _make_paint_resize_form() -> VBoxContainer:
+	var form := VBoxContainer.new()
+	form.name = "PaintResizeForm"
+	form.visible = false
+	form.add_theme_constant_override("separation", 4)
+	_paint_resize_width = SpinBox.new()
+	_paint_resize_width.name = "PaintResizeWidth"
+	_paint_resize_width.min_value = 16
+	_paint_resize_width.max_value = 16384
+	_paint_resize_width.step = 1
+	_paint_resize_width.prefix = "Width  "
+	_paint_resize_width.add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_width.get_line_edit().add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_width.accessibility_name = "Resize image width"
+	_paint_resize_height = SpinBox.new()
+	_paint_resize_height.name = "PaintResizeHeight"
+	_paint_resize_height.min_value = 16
+	_paint_resize_height.max_value = 16384
+	_paint_resize_height.step = 1
+	_paint_resize_height.prefix = "Height  "
+	_paint_resize_height.add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_height.get_line_edit().add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_height.accessibility_name = "Resize image height"
+	_paint_resize_width.value_changed.connect(func(value: float) -> void:
+		if _paint_resize_aspect != null and _paint_resize_aspect.button_pressed and not _paint_resize_sync:
+			_paint_resize_sync = true
+			_paint_resize_height.set_value_no_signal(round(value / _paint_resize_ratio))
+			_paint_resize_height.get_line_edit().text = str(int(_paint_resize_height.value))
+			_paint_resize_sync = false
+	)
+	_paint_resize_height.value_changed.connect(func(value: float) -> void:
+		if _paint_resize_aspect != null and _paint_resize_aspect.button_pressed and not _paint_resize_sync:
+			_paint_resize_sync = true
+			_paint_resize_width.set_value_no_signal(round(value * _paint_resize_ratio))
+			_paint_resize_width.get_line_edit().text = str(int(_paint_resize_width.value))
+			_paint_resize_sync = false
+	)
+	_paint_resize_aspect = CheckBox.new()
+	_paint_resize_aspect.name = "PaintResizeAspect"
+	_paint_resize_aspect.text = "Keep aspect"
+	_paint_resize_aspect.button_pressed = true
+	_paint_resize_aspect.add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_aspect.accessibility_name = "Keep image aspect ratio"
+	_paint_resize_sampling = OptionButton.new()
+	_paint_resize_sampling.name = "PaintResizeSampling"
+	_paint_resize_sampling.add_item("Smooth")
+	_paint_resize_sampling.add_item("Nearest")
+	_paint_resize_sampling.add_theme_font_size_override("font_size", _font(13))
+	_paint_resize_sampling.accessibility_name = "Resize sampling"
+	form.add_child(_paint_resize_width)
+	form.add_child(_paint_resize_height)
+	form.add_child(_paint_resize_aspect)
+	form.add_child(_paint_resize_sampling)
+	var actions := HFlowContainer.new()
+	var apply := Button.new()
+	apply.name = "PaintResizeConfirm"
+	apply.text = "Apply Resize"
+	apply.add_theme_font_size_override("font_size", _font(13))
+	apply.accessibility_name = "Apply image resize"
+	apply.pressed.connect(_apply_paint_resize)
+	var cancel := Button.new()
+	cancel.name = "PaintResizeCancel"
+	cancel.text = "Cancel"
+	cancel.add_theme_font_size_override("font_size", _font(13))
+	cancel.accessibility_name = "Cancel image resize"
+	cancel.pressed.connect(_close_paint_resize_form)
+	actions.add_child(apply)
+	actions.add_child(cancel)
+	form.add_child(actions)
+	return form
+
+
+func _open_paint_resize_form() -> void:
+	if _paint == null or not _paint.can_resize_image():
+		set_status("Make Unique before resizing this image.")
+		return
+	_paint_resize_target = _paint.material()
+	_paint_resize_width.set_value_no_signal(_paint.image().get_width())
+	_paint_resize_height.set_value_no_signal(_paint.image().get_height())
+	_paint_resize_ratio = float(_paint_resize_width.value) / maxf(float(_paint_resize_height.value), 1.0)
+	_paint_resize_width.get_line_edit().text = str(int(_paint_resize_width.value))
+	_paint_resize_height.get_line_edit().text = str(int(_paint_resize_height.value))
+	_paint_resize_aspect.button_pressed = true
+	_paint_resize_sampling.select(0)
+	_paint_resize_form.visible = true
+	_paint_resize_form.update_minimum_size()
+	_reveal_paint_resize_form()
+
+
+func _reveal_paint_resize_form() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if _paint_resize_form != null and _paint_resize_form.is_visible_in_tree() and _paint_inspector != null:
+		_paint_inspector.ensure_control_visible(_paint_resize_form.get_child(_paint_resize_form.get_child_count() - 1))
+		_paint_inspector.scroll_horizontal = 0
+
+
+func _apply_paint_resize() -> void:
+	_paint_resize_width.apply()
+	_paint_resize_height.apply()
+	_paint.resize_image(int(_paint_resize_width.value), int(_paint_resize_height.value),
+		_paint_resize_sampling.selected == 0, _paint_resize_target)
+	_close_paint_resize_form()
+
+
+func _close_paint_resize_form() -> void:
+	if _paint_resize_form != null:
+		_paint_resize_form.visible = false
+	_paint_resize_target = null
 
 
 func _sync_loop_values() -> void:

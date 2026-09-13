@@ -22,6 +22,18 @@ In Pixel, Make Unique copies the selected faces' common material into a new slot
 
 For a material with no texture, **Make Unique** creates a square image at **New image px**. When a material already has artwork, Slab preserves its dimensions. **Texture px** then shows the image width and cannot resize it.
 
+## Resize the image
+
+1. In **Pixel**, click **Resize…**. Shared materials need **Make Unique** first.
+2. Set **Width** or **Height** in pixels. **Keep aspect** adjusts the other dimension. Turn it off to change both dimensions independently.
+3. Choose **Smooth** for blended resampling or **Nearest** to preserve hard pixel edges.
+4. Click **Apply Resize**, or **Cancel** to keep the current image.
+5. Click **Save Paint**, then save the scene.
+
+Resize keeps the artwork and its UV placement. A larger image gives subsequent strokes more pixels to work with; it cannot recover detail missing from the original. Brush radius remains measured in image pixels, so the same radius covers less of an enlarged texture.
+
+Undo restores the previous image dimensions and artwork. After undoing a saved resize, save the paint and scene again to persist that restored image.
+
 ## Place the texture
 
 Switch to **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.

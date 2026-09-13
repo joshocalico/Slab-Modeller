@@ -196,3 +196,21 @@ Pixel still showed its image and brush controls separately. Scrolling exposed Ra
 The Face panel reference image was replaced with the rendered editor capture. The house tutorial now uses New StandardMaterial3D, Inspector editing, and Assign for each region; it also explicitly removes or hides the Subtract cutter. The revised painting steps rendered cleanly in the browser.
 
 The final panel and Paint editor regressions reported zero failures. The final full verifier passed after the legacy-control cleanup and status-label correction. Documentation links and the website build passed. The saved Signal Foundry scene has no diff.
+
+## Painting the maintenance roof
+
+Unwrapped all 18 roof faces at 16 pixels/metre with a 256-pixel reference image, made the teal material unique, and painted a yellow inset border with four drags in the native 3D viewport. Saved Paint and the scene. The checkpoint is 331eb37. Read-only comparison found changes only to the roof's material and mapping data, with unchanged node structure, transforms, face count, and volume. The saved roof has 15 seams, 18 unwrapped faces, three material slots, and its own 256 by 256 PNG.
+
+The markings were too soft at this image resolution. This motivated an explicit Pixel image-resize command. Increasing resolution must preserve the existing UV placement and support exact image Undo; further native painting is needed to add detail after enlargement.
+
+Godot's transform widget remains visible over the painted face. These strokes worked, but the widget obscures the model. The public editor API audit found no supported way to hide that widget while retaining selection and Inspector context. Drags on an axis extending beyond the model still need a dedicated interaction check.
+
+The initial native Resize dialog accepted Width 1024 with Keep aspect enabled. Keyboard confirmation produced a 1024 by 1024 image; Cmd-Z restored 256 and Cmd-Shift-Z restored 1024. Save Paint and scene save wrote matching 1024 by 1024 PNG and embedded images. The roof retained 18 faces, 15 seams, 18 unwrapped faces, three materials, and volume 3.87238744273782. No node body changed; only the embedded image resource and PNG changed. This authoring checkpoint is e965b96.
+
+Pointer submission in the native popup could not be verified. Event tracing showed button GUI input reaching the correct controls without normal press signals; layout changes did not resolve it. The product design was changed to an inline Resize form so the image remains visible beside its size controls. The popup experiments are not mouse acceptance evidence.
+
+The inline form passed native mouse interaction. Typed Width 512, scrolled to Cancel, and clicked it; the 1024-pixel image and clean scene remained unchanged. Reopened Resize, typed Width 2048 without Enter, and clicked Apply Resize. The image and status reported 2048 by 2048. Native Undo restored 1024, Redo restored 2048, and a final Undo plus scene save restored the exact committed scene and PNG. The canvas stayed visible throughout. On first opening, the action row needed a short scroll; reopening framed it correctly, exposing a deferred-layout timing issue.
+
+Waiting for two layout frames before framing the action row resolved first entry. A fresh native editor showed Apply Resize and Cancel fully inside the compact inspector immediately after opening. The rendered test checks first-open containment and real mouse-button application and cancellation. Chrome checks passed 38 cases, the complete verifier passed, and documentation links and the website build passed.
+
+Used the resized roof texture to paint a gold landing marker with three native viewport drags at radius 4 and full opacity. The strokes crossed the visible transform widget while the roof remained stationary. Undo removed the crossbar and Redo restored it. Save Paint and scene save persisted the image. Read-only comparison found every node body identical and only the embedded Image resource changed, alongside the PNG. The roof retained the same topology, seams, UV mapping, material count, and volume. The older border remains softer than the new strokes because resizing cannot recreate missing detail.

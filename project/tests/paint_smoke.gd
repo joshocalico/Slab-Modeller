@@ -25,6 +25,7 @@ func _boot() -> void:
 		return
 	_check_uv_matches_emit()
 	_check_texture_resolution_coherence()
+	_check_resize_paint_image()
 	_check_material_labels()
 	_check_uv_modifier_dispatch()
 	_check_brush_preview_caption()
@@ -234,6 +235,67 @@ func _check_texture_resolution_coherence() -> void:
 		"Make Unique preserves existing artwork dimensions")
 	_expect(actions.uv_texture_resolution == 32,
 		"Texture px reflects the bound artwork width for coherent unwrap density")
+	paint.exit()
+	solid.free()
+
+
+func _check_resize_paint_image() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3.ONE)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([_top_face(solid)]))
+	var undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, undo)
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	paint.tool = SlabPaint.Tool.PIXEL
+	_expect(not paint.can_resize_image(), "shared or missing Pixel artwork requires Make Unique before Resize")
+	actions.uv_texture_resolution = 32
+	paint.make_unique()
+	var material: StandardMaterial3D = paint.material()
+	# A small asymmetric pattern proves the transaction restores artwork, not only dimensions.
+	paint.image().set_pixel(1, 2, Color(0.9, 0.1, 0.2, 1.0))
+	paint.image().set_pixel(25, 17, Color(0.1, 0.8, 0.35, 1.0))
+	var before_data: PackedByteArray = solid.get("data")
+	var before_materials: Array = (solid.get("materials") as Array).duplicate()
+	var before_color: Color = paint.image().get_pixel(10, 10)
+	var before_bytes: PackedByteArray = paint.image().save_png_to_buffer()
+	var save_path := "user://slab_paint_test/resize_source.png"
+	paint.save_png(save_path)
+	var undo_before: int = undo.actions.size()
+	_expect(paint.can_resize_image(), "owned Pixel artwork enables Resize")
+	_expect(paint.begin_stroke() and not paint.can_resize_image(), "Resize is unavailable during an active stroke")
+	paint.cancel_stroke()
+	var wrong_target := StandardMaterial3D.new()
+	_expect(not paint.resize_image(64, 48, false, wrong_target)
+		and undo.actions.size() == undo_before and paint.image().save_png_to_buffer() == before_bytes,
+		"a dialog bound to another material cannot resize the current image")
+	_expect(paint.resize_image(64, 48, false), "nearest Resize changes image dimensions")
+	_expect(paint.image().get_size() == Vector2i(64, 48) and material.albedo_texture.get_size() == Vector2(64, 48),
+		"Resize updates the live image and material texture")
+	var resized_color: Color = paint.image().get_pixel(20, 20)
+	_expect(absf(resized_color.r - before_color.r) < 0.01 and absf(resized_color.g - before_color.g) < 0.01
+		and absf(resized_color.b - before_color.b) < 0.01,
+		"Resize preserves existing artwork")
+	_expect(solid.get("data") == before_data and solid.get("materials") == before_materials and paint.material() == material,
+		"Resize preserves normalized UV geometry and material identity")
+	_expect(undo.actions.size() == undo_before + 1 and paint.dirty, "Resize records one dirty image edit")
+	var after_bytes: PackedByteArray = paint.image().save_png_to_buffer()
+	undo.undo()
+	_expect(material.albedo_texture.get_size() == Vector2(32, 32)
+		and material.albedo_texture.get_image().save_png_to_buffer() == before_bytes and not paint.dirty,
+		"Resize Undo restores exact saved dimensions, bytes, and clean state")
+	undo.redo()
+	_expect(material.albedo_texture.get_size() == Vector2(64, 48)
+		and material.albedo_texture.get_image().save_png_to_buffer() == after_bytes and paint.dirty,
+		"Resize Redo restores exact dimensions, bytes, and dirty state")
+	var undo_after: int = undo.actions.size()
+	_expect(not paint.resize_image(64, 48, false) and undo.actions.size() == undo_after and paint.dirty,
+		"same-size Resize leaves Undo history and dirty state unchanged")
 	paint.exit()
 	solid.free()
 

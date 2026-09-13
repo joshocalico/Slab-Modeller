@@ -32,6 +32,8 @@ Surface Paint owns material choice, Assign, UV placement, and Mapping. Face mode
 
 Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions.
 
+Resize expands beside the image with Width, Height, Keep aspect, resampling, Apply Resize, and Cancel. The canvas stays visible while the author chooses dimensions. Only Apply changes the image; UV placement remains unchanged. This uses the modelling tools' explicit Apply and Cancel controls. The form shows pending dimensions, not a preview of the resampled pixels.
+
 Preserve brush identity across solids. Surface Paint chooses a material resource, then Assign applies it to selected faces. A target-local numeric slot is not a transferable brush. The material picker and palette both choose the Brush without changing the solid. Assign or a viewport paint click applies it. Sample adopts the selected material and UV values.
 
 New StandardMaterial3D in the picker replaces adding anonymous blank slots. Click its preview to edit it in Godot's Inspector, then Assign. Repeat ×2 and Repeat ÷2 preserve the old doubling and halving shortcuts beside Placement. These commit pending typed fields before applying one undoable edit.
