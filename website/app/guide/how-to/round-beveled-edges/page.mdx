@@ -11,11 +11,11 @@ Use a segmented bevel to soften a blockout edge or round the three edges that me
 3. Drag the purple width arc, or set **Bevel width** to the exact distance removed from each adjoining face.
 4. Set **Segments** from 1 to 16. One segment is a straight chamfer; additional segments follow a rounded profile.
 
-The cyan preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built.
+The rendered preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built. If a value is invalid, Slab restores the original display and disables **Apply**.
 
 ## Apply or cancel
 
-Press Enter or click **Apply** to commit the preview as one undo action. Click **Cancel**, press Escape, or right-click to leave the solid unchanged. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.
+Press Enter or click **Apply** to commit the preview as one undo action. Click **Cancel**, press Escape, or right-click to restore the original display and leave the solid unchanged. Saving while the preview is open does not save the proposed bevel. Apply it, then save the scene to keep the result. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.
 
 Bevel remembers its last width for the editor session, including a width from a cancelled preview. Undo restores geometry and does not change that preference. Extrude and Inset keep separate remembered distances.
 

@@ -86,14 +86,35 @@ func case_operation_handle_exact_apply_and_cancel() -> void:
 	var actions := preload("res://addons/slab/slab_actions.gd").new(_session.state())
 	_session.bind_actions(actions)
 	var before: PackedByteArray = box.get("data")
+	var committed_mesh := box.call("build_mesh") as ArrayMesh
+	var committed_bounds: AABB = committed_mesh.get_aabb()
+	var shape_before: Shape3D = box.get_node("__body/__shape").shape
 	actions.operation_requested.emit(0)
 	actions.operation_amount_changed.emit(0.375)
 	expect(actions.operation_active and box.get("data") == before, "handle exact amount previews without mutating the solid")
+	expect(bool(box.call("has_display_preview")), "a valid operation displays its rendered result")
+	expect(not (box.get_node("Mesh").mesh as ArrayMesh).get_aabb().is_equal_approx(committed_bounds),
+		"rendered operation result differs from the opaque committed solid")
+	expect((box.call("build_mesh") as ArrayMesh).get_aabb().is_equal_approx(committed_bounds),
+		"public mesh export remains committed geometry during a display preview")
+	expect(box.call("build_mesh") == committed_mesh, "display preview preserves the cached committed mesh identity")
+	expect(box.get_node("__body/__shape").shape == shape_before,
+		"display preview leaves collision identity unchanged")
 	expect(_session.state().operation_preview.get("label", "").contains("0.375"), "handle label shows the exact amount")
 	actions.operation_cancel_requested.emit()
-	expect(not actions.operation_active and box.get("data") == before, "handle cancel preserves original data")
+	expect(not actions.operation_active and box.get("data") == before and not bool(box.call("has_display_preview")),
+		"handle cancel restores the committed display and preserves original data")
+	expect((box.get_node("Mesh").mesh as ArrayMesh).get_aabb().is_equal_approx(committed_bounds),
+		"cancel restores the committed rendered solid")
+	expect(box.get_node("Mesh").mesh == committed_mesh and box.call("build_mesh") == committed_mesh,
+		"cancel restores the original committed mesh resource")
 	actions.operation_requested.emit(0)
+	actions.operation_amount_changed.emit(-100.0)
+	expect(not bool(box.call("has_display_preview"))
+		and (box.get_node("Mesh").mesh as ArrayMesh).get_aabb().is_equal_approx(committed_bounds),
+		"an invalid result restores the committed rendered solid")
 	actions.operation_amount_changed.emit(0.375)
+	expect(bool(box.call("has_display_preview")), "a valid result redisplays after invalidation")
 	actions.operation_apply_requested.emit()
 	expect(not actions.operation_active and box.get("data") != before, "handle Apply commits preview and exits modal state")
 	expect(not _session.state().ids.is_empty(), "handle Apply retains cap selection")

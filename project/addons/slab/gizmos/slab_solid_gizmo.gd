@@ -119,6 +119,9 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	var solid := gizmo.get_node_3d()
 	if solid == null or not is_instance_valid(solid) or not solid.has_method("get_edges"):
 		return
+	if _selection != null and _selection.operation_preview.get("solid") == solid and solid.call("has_display_preview"):
+		_draw_operation_preview(gizmo, solid)
+		return
 	var wire := PackedVector3Array()
 	for edge in solid.get_edges():
 		wire.append_array(solid.edge_endpoints(edge))

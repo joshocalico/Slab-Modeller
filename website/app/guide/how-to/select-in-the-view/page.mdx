@@ -42,11 +42,13 @@ Each completed gizmo drag is one undo action. A transform that would collapse or
 
 ## Use operation handles
 
-Select faces and click **Extrude** or **Inset**, or select edges and click **Bevel**. Slab shows the proposed result and a separate coloured handle with its current measurement.
+Select faces and click **Extrude** or **Inset**, or select edges and click **Bevel**. Slab renders the proposed geometry and shows a separate coloured handle with its current measurement. The preview is temporary until you apply it.
 
 Drag the handle to change the value. For an exact value, type **Extrude distance**, **Inset distance**, or **Bevel width**. Bevel also exposes **Segments**. Click **Apply** or press Enter to commit one undo action. Click **Cancel**, press Escape, or right-click to leave the solid unchanged.
 
-Extrude uses an arrow along the face normal. Inset uses a width marker across the face boundary. Bevel uses an arc across the selected edge. If the proposed mesh is invalid, Slab shows the refused geometry and does not enable a bad commit.
+Extrude uses an arrow along the face normal. Inset uses a width marker across the face boundary. Bevel uses an arc across the selected edge. If the proposed mesh is invalid, Slab restores the original solid and disables **Apply**.
+
+Saving while an operation preview is open leaves the preview active but does not save its proposed geometry. Click **Apply**, then save the scene to keep the result.
 
 Extrude, Inset, and Bevel remember separate last-used distances for the editor session. Cancelling retains the adjusted setting even though it discards the preview. Undo restores committed geometry and does not rewind these preferences.
 

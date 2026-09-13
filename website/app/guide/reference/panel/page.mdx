@@ -201,6 +201,10 @@ In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the gr
 
 **Extrude** opens **Extrude distance**, **Apply**, and **Cancel**. **Inset** opens **Inset distance**, **Apply**, and **Cancel**. **Bevel** opens **Bevel width**, **Segments**, **Apply**, and **Cancel**. **Segments** ranges from 1 to 16.
 
-The coloured viewport handle changes the operation's numeric value. Extrude, Inset, and Bevel each remember their own last-used distance for the editor session. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** leaves the solid unchanged but retains that operation's setting for the next preview. Undo restores geometry; it does not change these session preferences. A refused preview disables **Apply**.
+The 3D view renders the proposed geometry while the original solid remains unchanged. The coloured viewport handle changes the operation's numeric value. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** restores the original display and leaves the solid unchanged. If a value would make invalid geometry, Slab restores the original solid and disables **Apply**.
+
+Saving the scene while a preview is open does not save the proposed geometry, and the preview stays active. Apply the operation, then save the scene to keep the result.
+
+Extrude, Inset, and Bevel each remember their own last-used distance for the editor session. Cancelling retains that operation's setting for the next preview. Undo restores geometry; it does not change these session preferences.
 
 **Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.

@@ -71,6 +71,9 @@ public:
 	double volume() const;
 	AABB get_local_aabb() const;
 	Ref<ArrayMesh> build_mesh() const;
+	bool set_display_preview(const PackedByteArray &p_data);
+	void clear_display_preview();
+	bool has_display_preview() const;
 
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
@@ -124,11 +127,18 @@ private:
 	Dictionary edit_diagnostic;
 
 	MeshInstance3D *mesh_instance = nullptr;
+	Ref<ArrayMesh> committed_mesh;
+	std::vector<uint32_t> committed_surface_slots;
 	StaticBody3D *body = nullptr;
 	CollisionShape3D *collider = nullptr;
+	bool display_preview_active = false;
 
 	void _ensure_children();
 	void _rebuild();
+	void _rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision);
+	void _assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots);
+	Ref<ArrayMesh> _build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
+			PackedVector3Array *r_verts = nullptr, PackedInt32Array *r_indices = nullptr) const;
 	int _reject(const slab::Mesh &p_mesh, slab::MeshFault p_fault,
 			slab::FaultElement p_fallback_element = slab::FaultElement::NONE,
 			uint32_t p_fallback_slot = slab::INVALID_IDX);

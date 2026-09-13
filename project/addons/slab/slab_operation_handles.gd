@@ -93,9 +93,12 @@ func refresh() -> void:
 	result_ids.clear()
 	error = ERR_INVALID_DATA
 	if not active or not is_instance_valid(solid) or solid.get("data") != _before:
+		if is_instance_valid(solid):
+			solid.call("clear_display_preview")
 		return
 	var scratch: Node3D = ClassDB.instantiate("SlabSolid")
 	if scratch == null:
+		solid.call("clear_display_preview")
 		return
 	scratch.set("data", _before)
 	if kind == Kind.EXTRUDE:
@@ -118,6 +121,11 @@ func refresh() -> void:
 	if error == OK and kind != Kind.BEVEL:
 		result_ids = scratch.call("get_last_edited_faces")
 	scratch.free()
+	if error == OK and not preview_data.is_empty() and is_instance_valid(solid):
+		if not bool(solid.call("set_display_preview", preview_data)):
+			error = ERR_INVALID_DATA
+	if error != OK and is_instance_valid(solid):
+		solid.call("clear_display_preview")
 
 
 func preview() -> Dictionary:
@@ -146,6 +154,7 @@ func confirm(undo: Object = null) -> Dictionary:
 
 
 func cancel() -> void:
+	var target := solid
 	active = false
 	solid = null
 	ids.clear()
@@ -155,6 +164,8 @@ func cancel() -> void:
 	result_ids.clear()
 	tangent = Vector3.ZERO
 	error = OK
+	if is_instance_valid(target):
+		target.call("clear_display_preview")
 
 
 func _make_frame() -> bool:

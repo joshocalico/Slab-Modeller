@@ -67,6 +67,9 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("volume"), &SlabSolid::volume);
 	ClassDB::bind_method(D_METHOD("get_local_aabb"), &SlabSolid::get_local_aabb);
 	ClassDB::bind_method(D_METHOD("build_mesh"), &SlabSolid::build_mesh);
+	ClassDB::bind_method(D_METHOD("set_display_preview", "data"), &SlabSolid::set_display_preview);
+	ClassDB::bind_method(D_METHOD("clear_display_preview"), &SlabSolid::clear_display_preview);
+	ClassDB::bind_method(D_METHOD("has_display_preview"), &SlabSolid::has_display_preview);
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
@@ -397,14 +400,34 @@ AABB SlabSolid::get_local_aabb() const {
 }
 
 Ref<ArrayMesh> SlabSolid::build_mesh() const {
-	Ref<ArrayMesh> out;
-	if (mesh_instance != nullptr) {
-		out = mesh_instance->get_mesh();
+	if (committed_mesh.is_valid()) return committed_mesh;
+	Ref<ArrayMesh> empty;
+	empty.instantiate();
+	return empty;
+}
+
+bool SlabSolid::set_display_preview(const PackedByteArray &p_data) {
+	std::vector<uint8_t> bytes(size_t(p_data.size()));
+	if (!bytes.empty()) std::memcpy(bytes.data(), p_data.ptr(), bytes.size());
+	slab::Mesh preview;
+	if (!slab::deserialize(bytes, preview).ok()) {
+		clear_display_preview();
+		return false;
 	}
-	if (out.is_null()) {
-		out.instantiate();
-	}
-	return out;
+	display_preview_active = true;
+	_rebuild_from(preview, false);
+	return true;
+}
+
+void SlabSolid::clear_display_preview() {
+	if (!display_preview_active) return;
+	display_preview_active = false;
+	_ensure_children();
+	_assign_display(committed_mesh, committed_surface_slots);
+}
+
+bool SlabSolid::has_display_preview() const {
+	return display_preview_active;
 }
 
 int SlabSolid::make_box(const Vector3 &p_size) {
@@ -1155,10 +1178,14 @@ void SlabSolid::_ensure_children() {
 }
 
 void SlabSolid::_rebuild() {
-	_ensure_children();
+	display_preview_active = false;
+	_rebuild_from(live_mesh, true);
+}
 
+Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
+		PackedVector3Array *r_verts, PackedInt32Array *r_indices) const {
 	slab::EmitOut emitted;
-	slab::emit_arrays(live_mesh, emitted);
+	slab::emit_arrays(p_mesh, emitted);
 
 	PackedVector3Array verts;
 	PackedVector3Array normals;
@@ -1183,7 +1210,7 @@ void SlabSolid::_rebuild() {
 
 	Ref<ArrayMesh> array_mesh;
 	array_mesh.instantiate();
-	std::vector<uint32_t> surface_slots;
+	r_surface_slots.clear();
 	if (emitted.provenance.size() > 0 && emitted.indices.size() >= 3) {
 		struct Bucket {
 			PackedVector3Array verts;
@@ -1220,27 +1247,26 @@ void SlabSolid::_rebuild() {
 			arrays[Mesh::ARRAY_TEX_UV] = bucket.uvs;
 			arrays[Mesh::ARRAY_INDEX] = bucket.indices;
 			array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
-			surface_slots.push_back(slot);
+			r_surface_slots.push_back(slot);
 		}
 	}
-	mesh_instance->set_mesh(array_mesh);
-	for (int i = 0; i < int(surface_slots.size()); i++) {
-		const uint32_t slot = surface_slots[size_t(i)];
-		Ref<Material> mat;
-		if (slot < uint32_t(materials.size())) {
-			mat = materials[slot];
-		}
-		if (mat.is_null()) {
-			if (prototype_material.is_null()) {
-				prototype_material.instantiate();
-				prototype_material->set_roughness(0.7f);
-				prototype_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
-			}
-			prototype_material->set_albedo(prototype_color);
-			mat = prototype_material;
-		}
-		mesh_instance->set_surface_override_material(i, mat);
+	if (r_verts != nullptr) *r_verts = verts;
+	if (r_indices != nullptr) *r_indices = indices;
+	return array_mesh;
+}
+
+void SlabSolid::_rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision) {
+	_ensure_children();
+	std::vector<uint32_t> surface_slots;
+	PackedVector3Array verts;
+	PackedInt32Array indices;
+	Ref<ArrayMesh> array_mesh = _build_mesh_from(p_mesh, surface_slots, &verts, &indices);
+	if (p_update_collision) {
+		committed_mesh = array_mesh;
+		committed_surface_slots = surface_slots;
 	}
+	_assign_display(array_mesh, surface_slots);
+	if (!p_update_collision) return;
 
 	if (collision_enabled && indices.size() >= 3) {
 		PackedVector3Array soup;
@@ -1257,4 +1283,25 @@ void SlabSolid::_rebuild() {
 	}
 	collider->set_disabled(!collision_enabled);
 	body->set_visible(collision_enabled);
+}
+
+void SlabSolid::_assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots) {
+	mesh_instance->set_mesh(p_mesh);
+	for (int i = 0; i < int(p_surface_slots.size()); i++) {
+		const uint32_t slot = p_surface_slots[size_t(i)];
+		Ref<Material> mat;
+		if (slot < uint32_t(materials.size())) {
+			mat = materials[slot];
+		}
+		if (mat.is_null()) {
+			if (prototype_material.is_null()) {
+				prototype_material.instantiate();
+				prototype_material->set_roughness(0.7f);
+				prototype_material->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
+			}
+			prototype_material->set_albedo(prototype_color);
+			mat = prototype_material;
+		}
+		mesh_instance->set_surface_override_material(i, mat);
+	}
 }
