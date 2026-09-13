@@ -188,7 +188,7 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 		if event is InputEventKey:
 			if event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
 				return Verdict.PASS
-			if event.keycode == KEY_F:
+			if is_native_view_navigation_key(event.keycode):
 				return Verdict.PASS
 			return Verdict.STOP
 		return verdict
@@ -203,6 +203,13 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 	if event is InputEventKey and event.pressed and not event.echo:
 		return _on_key(event)
 	return Verdict.STOP if _grab.active() else Verdict.PASS
+
+
+static func is_native_view_navigation_key(keycode: int) -> bool:
+	return keycode == KEY_F or keycode in [
+		KEY_KP_0, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_4,
+		KEY_KP_5, KEY_KP_6, KEY_KP_7, KEY_KP_8, KEY_KP_9,
+	]
 
 
 func adopt_host_selection() -> void:

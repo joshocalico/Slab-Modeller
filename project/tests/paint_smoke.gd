@@ -441,6 +441,10 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	_expect(solid.call("face_count") == faces, "E does not extrude in Surface Paint")
 	key.keycode = KEY_F
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active, "F remains available to frame the painted object")
+	for navigation_key in [KEY_KP_8, KEY_KP_2, KEY_KP_4, KEY_KP_6, KEY_KP_1, KEY_KP_3, KEY_KP_5, KEY_KP_7]:
+		key.keycode = navigation_key
+		_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active,
+			"native keypad view key %s passes through Surface Paint" % navigation_key)
 	key.keycode = KEY_Z
 	key.meta_pressed = true
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS, "Cmd-Z reaches editor Undo while painting")
