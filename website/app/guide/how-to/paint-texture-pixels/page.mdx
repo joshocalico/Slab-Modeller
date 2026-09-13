@@ -1,3 +1,5 @@
+import { Figure } from "@/components/Figure";
+
 export const metadata = { title: "Paint texture pixels" };
 
 # Paint texture pixels
@@ -6,21 +8,58 @@ Use this when you want to draw into a face material's albedo texture.
 
 ## Prepare one face
 
-1. Select a `SlabSolid` and press <kbd>4</kbd> for Face mode.
+1. Select a `SlabSolid` and click **Face** in the Slab header.
 2. Select the face.
 3. Click **Surface Paint** in the Slab header.
-4. Check that **Brush** names the material you want to copy. If needed, choose a material chip or use the material picker.
-5. Click **Assign** if the Brush differs from the material on the selected face.
-6. Click **Pixel**. If the material has no image, set **New image px** to the desired image size.
-7. Click **Make Unique**.
+4. To use another material, choose it with a material chip or the picker, then click **Assign**. For a blank image on a default-material face, leave Brush empty.
+5. Click **Pixel**. If the material has no image, set **New image px** to the desired image size.
+6. If the hint asks for **Make Unique**, click it to copy the shared material or create a blank image. An already editable Texture is ready to paint.
 
-Opening Surface Paint with faces that share one material adopts it as the Brush without changing the selection. Material chips and the material picker change the Brush preview only. Click **Assign** to apply it to the selected faces.
-
-You can also open Surface Paint with only the solid selected. In **Material / UV**, the first click on a face selects it and adopts its existing material and UV values without editing the solid. Once a Brush is chosen, further face clicks apply it. If the face uses the default material, choose a material before assigning or painting.
+You can also open Surface Paint with only the solid selected. In **Material / UV**, the first click on a face selects it and adopts its existing material and UV values without editing the solid. Once a Brush is chosen, further face clicks apply it. For a default-material face, switch to Pixel and use Make Unique to create its image.
 
 In Pixel, Make Unique copies the selected faces' common material into a new slot and assigns that slot to the selection. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
 
 For a material with no texture, **Make Unique** creates a square image at **New image px**. When a material already has artwork, Slab preserves its dimensions. **Texture px** then shows the image width and cannot resize it.
+
+## Paint and save
+
+1. Click **Pixel**.
+2. Scroll the left control column to **Color**, **Radius**, and **Opacity**, then set the brush.
+3. Drag on the canvas, or drag over a front-facing face in the 3D view.
+4. Click **Save Paint**.
+5. Save the scene.
+
+<Figure
+  src="/img/panel-pixel-paint.png"
+  alt="Surface Paint in Pixel mode, with the left column scrolled to Color, Radius, Opacity, and Show UV beside the saved roof texture."
+  caption="Pixel keeps the image visible while you scroll its controls. Save Paint and Resize are above the Brush settings. Click the image to view the controls at full size."
+/>
+
+Turn on **Show UV** to see the selected faces' outlines over the image. If the hint reports a mixed-material selection, click **Face** to leave Paint, select faces sharing one material, then reopen Surface Paint. This also lets you change the selected faces without painting them.
+
+**Texture** names the image you are painting. A mark appears at every repeat of that image on the model. A 3D stroke stays on the clicked face's material and skips other materials and backfaces. Faces sharing the same paintable material share its artwork, including faces on other solids.
+
+To clear the transform widget from the painting view, open the view-name menu at the upper left of Godot's 3D viewport, then turn off **View Transform Gizmo**. The menu may be named **Perspective** or **Front Orthogonal**, depending on the camera. This keeps the selected solid and Inspector available. Turn the option on again when you want the transform handles.
+
+**Save Paint** writes `res://slab_paint/<solid>_m<slot>.png` and reports the image path. Save the scene afterward to keep the material and mapping changes too.
+
+Undo and redo replace complete stroke images. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes Surface Paint.
+
+## Adjust texture placement
+
+Switch to **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
+
+The canvas background previews the Brush. The outlines and UV edits belong to the selected faces. If the canvas caption says **Assign to apply to selection**, click **Assign** to put that material on the faces before adjusting its placement.
+
+For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**, and **Rotation**, then click **Apply UV**. **UV 90°** turns the placement by 90 degrees. **Reset UV** returns repeats to one and offsets and rotation to zero.
+
+To use the selected faces' current material, click **Sample**. Alt-click a front-facing face in the 3D view to sample its material and UV values without assigning the previous Brush.
+
+The Brush stays active when you change the selection inside Surface Paint. A plain viewport click applies it to the hit face. The same Brush material is applied when you click a face on another solid.
+
+Press Escape or right-click during a canvas drag to restore the previous UV placement. Changing selection or switching tools also cancels the drag. Releasing the mouse commits one undoable change.
+
+For seam selection and new UV islands, follow [Unwrap UVs](/guide/how-to/unwrap-uvs). Placement adjusts the mapping already on the faces.
 
 ## Resize the image
 
@@ -33,43 +72,3 @@ For a material with no texture, **Make Unique** creates a square image at **New 
 Resize keeps the artwork and its UV placement. A larger image gives subsequent strokes more pixels to work with; it cannot recover detail missing from the original. Brush radius remains measured in image pixels, so the same radius covers less of an enlarged texture.
 
 Undo restores the previous image dimensions and artwork. After undoing a saved resize, save the paint and scene again to persist that restored image.
-
-## Place the texture
-
-Switch to **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
-
-The canvas background previews the Brush. The outlines and UV edits belong to the selected faces. If the canvas caption says **Assign to apply to selection**, click **Assign** to put that material on the faces before adjusting its placement.
-
-For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**, and **Rotation**, then click **Apply UV**. **UV 90°** turns the placement by 90 degrees. **Reset UV** returns repeats to one and offsets and rotation to zero.
-
-Choose a material chip and click **Assign** to apply it to the selected faces. **Sample** adopts the selected faces' common material as the Brush; it does not assign the previous Brush. Select faces using one material before sampling. Alt-click a face in the 3D view to sample that face and its UV values directly.
-
-The Brush stays active when you change the selection inside Surface Paint. A plain viewport click applies it to the hit face. The same Brush material is applied when you click a face on another solid.
-
-Press Escape or right-click during a canvas drag to restore the previous UV placement. Changing selection or switching tools also cancels the drag. Releasing the mouse commits one undoable change.
-
-## Paint
-
-1. Click **Pixel**.
-2. Set **Color**, **Radius**, and **Opacity**.
-3. Drag on the canvas, or drag over a front-facing face in the 3D view.
-4. Click **Save Paint**.
-5. Save the scene.
-
-Pixel mode hides Assign, Sample, the material picker, the palette, and the UV placement controls. **Make Unique**, **Save Paint**, and the pixel brush controls remain. Save Paint is disabled until the selected faces use an owned Texture. Turn on **Show UV** when you need the selected faces' outlines over the image; it starts off so the artwork stays clear.
-
-The hint explains what the current selection needs:
-
-- Select a face when nothing is selected.
-- Click **Make Unique** before painting a shared Texture.
-- Click **Make Unique** to create an image for default-material faces.
-- Select faces that share one material when the selection is mixed.
-- Paint on the image or model when the owned Texture is ready.
-
-Pixel labels the bound image as **Texture** and shows one copy of that actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
-
-To clear the transform widget from the painting view, open the view-name menu at the upper left of Godot's 3D viewport, then turn off **View Transform Gizmo**. The menu may be named **Perspective** or **Front Orthogonal**, depending on the camera. This keeps the selected solid and Inspector available. Turn the option on again when you want the transform handles.
-
-Save Paint writes `res://slab_paint/<solid>_m<slot>.png` and records that path on the material. It does not save the scene. The gold status reports the image path and reminds you to save the scene. That reminder clears after you save the scene.
-
-Undo and redo replace complete stroke images. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes Surface Paint.

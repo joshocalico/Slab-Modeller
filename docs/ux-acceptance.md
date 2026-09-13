@@ -54,7 +54,11 @@ The compact-dock audit distinguished the author-chosen splitter height from the 
 
 ## Repeatable evidence
 
-`scripts/slab-docs-verify` checks root-relative inline links and media attributes in MDX against local page routes and public files. The current manual passes with 28 MDX pages and 72 local references. A temporary broken-link and missing-image probe was rejected. This check does not establish heading-anchor validity, external-link availability, rendered layout, or screenshot accuracy.
+The first-use documentation audit corrected mode shortcuts that previously followed a bottom-dock click without restoring viewport focus. The orientation tutorial now starts with mode buttons, and the selection guide distinguishes modelling clicks from Material / UV assignment and Pixel strokes. It explains how to leave Paint to select another face set without editing it. The pixel guide reaches painting and saving before optional UV placement and resizing, includes the default-material path, and avoids copying an already editable texture again.
+
+`scripts/godot --editor --path project --script res://tools/paint_docs_capture.gd` captures the saved MaintenanceBayRoof artwork into temporary panel images. It checks unchanged mesh and UV data, material slots and identities, image bytes, and history. The reviewed Pixel crop is `website/public/img/panel-pixel-paint.png`. The guide was inspected at 1440 and 390 CSS pixels; its image loaded, the full-size link opened the original image, and the phone page width matched the viewport without horizontal overflow.
+
+`scripts/slab-docs-verify` checks root-relative inline links and media attributes in MDX against local page routes and public files. The current manual passes with 28 MDX pages and 75 local references. A temporary broken-link and missing-image probe was rejected. This check does not establish heading-anchor validity, external-link availability, rendered layout, or screenshot accuracy.
 
 `scripts/slab-install-verify` copies the addon to a disposable project and runs separate rendered creation/save and reopen passes. `project/tests/topology_editor_smoke.gd` exercises Subdivide/Merge and Connect/Dissolve through real panel clicks. Run it with `scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd`.
 

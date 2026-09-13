@@ -8,7 +8,7 @@ Use this when a solid is in the scene and you need to pick objects or mesh eleme
 
 ## Switch mode
 
-Press <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, or <kbd>4</kbd> for Object, Vertex, Edge, or Face. The strip in the spatial editor menu and the strip in the Slab panel stay in sync. Changing mode clears the element selection.
+Click **Object**, **Vertex**, **Edge**, or **Face** in the Slab header. With the 3D viewport focused, the corresponding shortcuts are <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, and <kbd>4</kbd>. After editing a panel field, use the mode buttons or click the viewport before using shortcuts. Both mode strips stay in sync. Changing mode clears the element selection.
 
 <Figure
   src="/img/panel.png"
@@ -18,7 +18,7 @@ Press <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, or <kbd>4</kbd> for Object, Vert
 
 ## Click to select
 
-Click a solid in the 3D view. In Object mode that focuses the node. In Vertex, Edge, or Face mode the click also picks the nearest element under the cursor.
+With Surface Paint closed, click a solid in the 3D view. In Object mode that focuses the node. In Vertex, Edge, or Face mode the click also picks the nearest element under the cursor.
 
 Shift, Ctrl, or Cmd click adds or removes that element. A double-click on an edge selects the edge loop.
 
@@ -69,3 +69,13 @@ A plain click replaces the element set with the item under the cursor. Shift-cli
 Shift-drag on edges bevels the set. To translate edges, use the Move gizmo.
 
 Element selection stays on one solid. Object mode can add solids to the editor selection with Shift click.
+
+## Select while painting
+
+To change the selected face set without painting, click **Face** to leave Surface Paint, select the faces, then reopen **Surface Paint**.
+
+In **Material / UV**, a plain face click applies the current Brush. To inspect another face without assigning that Brush, Alt-click the face to sample its material and UV values. With Brush empty, the first plain click selects and adopts the face's existing material without editing it. A default-material face is selected but leaves Brush empty.
+
+In **Pixel**, a face click starts a pixel stroke on that face's image. Select the intended faces before entering Pixel. See [Paint texture pixels](/guide/how-to/paint-texture-pixels) for shared-material preparation.
+
+Unmodified clicks and drags in empty space preserve the Paint target. To return to modelling, click a mode button. Escape cancels an active stroke or UV drag first; with no gesture active, it closes Surface Paint.
