@@ -1,5 +1,15 @@
 # Selection and gizmo uplift
 
+## Accepted checkpoint, 13 September 2026
+
+The native transform acceptance blocker is resolved. `scripts/slab-native-gizmo-verify` passes nine rendered-editor cases: Move, Rotate, and Scale across selection/world, active/local, and custom/face configurations. Fixtures include rotated, nonuniformly scaled solids. Every case changes mesh data, preserves the node transform, and passes exact Undo and Redo restoration. Gesture endpoints stay inside the viewport. Rendered Move, Rotate, and Scale captures were inspected.
+
+The new Escape test found and pinned a product bug: Slab consumed Escape during a native drag. Slab now passes that event to Godot and preserves selection through release. Native cancellation restores the original mesh without creating an undo action. The viewport suite passes 41 cases, and `scripts/slab-verify` passes all gates after the fix. The lab scene remains unchanged.
+
+The runner sends held-button mouse events through Godot's native viewport input handler. It does not invoke Slab transform callbacks directly. [Native gizmo verification](native-gizmo-verification.md) describes the command and evidence format. Final run logs: `/tmp/slab-native-matrix-final.log` and `/tmp/slab-native-fix-verify.log`.
+
+## Implementation and earlier acceptance record
+
 Implement, test, document and exercise all eight workflows in the real Godot editor. Preserve the existing closed-solid validation gate and reversible previews.
 
 | Requirement | Current work | Completion evidence required |
@@ -39,7 +49,7 @@ Live rotated/nonuniform axes check: temporarily set Box4 rotation Y=30 degrees a
 
 Native axes gate verified live: with Box2 rotated Y=30 degrees and Slab Object local selected, focusing the viewport then pressing Godot's T shortcut rotated the native red/blue axes to match the solid. T was toggled back, Inspector rotation undone, and original lab saved. This isolates the remaining orientation issue to synchronization with Godot's native local-space state.
 
-## Current acceptance boundary
+## Earlier input-tool blocker
 
 The apparent native-drag failure is now isolated to computer-use input, not a proven remaining Slab failure. Live trace on 13 Sep recorded native press PASS and commit, but its intervening motion had changing absolute position with `button_mask=0`, `relative=(0,0)` and `screen_relative=(0,0)`. Godot requires the LEFT button mask before applying native motion, so no `_set_subgizmo_transform` callback ran. Do not weaken product event handling to accommodate malformed synthetic input. Native move/rotate/scale acceptance still needs a real held-button gesture or corrected computer-use tool.
 

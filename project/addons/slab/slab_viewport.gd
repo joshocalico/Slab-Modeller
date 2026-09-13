@@ -529,6 +529,10 @@ func _on_release() -> int:
 
 
 func _on_key(event: InputEventKey) -> int:
+	if _pending_native_press and event.keycode == KEY_ESCAPE:
+		# Let Godot cancel its transform and keep release from selecting a face.
+		_pending_native_dragged = true
+		return Verdict.PASS
 	if _grab.active():
 		if event.keycode == KEY_ESCAPE:
 			return _cancel()

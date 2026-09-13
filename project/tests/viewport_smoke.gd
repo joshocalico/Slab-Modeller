@@ -21,6 +21,19 @@ var _ran := 0
 var _frames := 0
 
 
+func case_native_escape_preserves_selection_and_passes_to_godot() -> void:
+	var box: Node3D = _world.box()
+	_select(box, SlabSelection.Mode.FACE)
+	var ids := PackedInt64Array([_world.top_face(box)])
+	_session.state().set_ids(ids)
+	_session.handle(_world.camera(), _world.click(VOID))
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_ESCAPE))
+	expect(verdict == SlabViewport.Verdict.PASS, "native Escape reaches Godot")
+	expect(_session.state().mode == SlabSelection.Mode.FACE, "native Escape preserves element mode")
+	_session.handle(_world.camera(), _world.release(VOID))
+	expect(_session.state().ids == ids, "cancelled native release preserves selection")
+
+
 func case_xray_cycle_hover_matches_click() -> void:
 	var box: Node3D = _world.box()
 	_select(box, SlabSelection.Mode.FACE)

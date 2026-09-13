@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root"
+run_dir="$(mktemp -d "${TMPDIR:-/tmp}/slab-native-gizmo.XXXXXX")"
+echo "Native editor evidence: $run_dir"
+extra=(--editor)
+if [[ "${1:-}" == "--headless" ]]; then extra+=(--headless); fi
+failures=0
+for tool in W E R; do
+  for pivot in 0 1 2; do
+    config="$run_dir/$tool-$pivot.json"
+    printf '{"tool":"%s","pivot":%s,"orientation":%s,"custom_pivot":[1,0,0],"rotation_degrees":[0,30,0],"scale":[1.5,1,0.8],"delay":0.5,"capture_prefix":"%s/%s-%s"}\n' "$tool" "$pivot" "$pivot" "$run_dir" "$tool" "$pivot" > "$config"
+    if scripts/godot "${extra[@]}" --path project --script res://tests/native_gizmo_editor_smoke.gd -- "$config" > "$run_dir/$tool-$pivot.log" 2>&1; then
+      echo "PASS $tool pivot=$pivot orientation=$pivot"
+    else
+      echo "FAIL $tool pivot=$pivot orientation=$pivot (see $run_dir/$tool-$pivot.log)"
+      failures=$((failures + 1))
+    fi
+  done
+done
+printf '{"tool":"W","cancel":true,"delay":0.5}\n' > "$run_dir/cancel.json"
+if scripts/godot "${extra[@]}" --path project --script res://tests/native_gizmo_editor_smoke.gd -- "$run_dir/cancel.json" > "$run_dir/cancel.log" 2>&1; then
+  echo "PASS native cancellation"
+else
+  echo "FAIL native cancellation (see $run_dir/cancel.log)"
+  failures=$((failures + 1))
+fi
+exit "$failures"
