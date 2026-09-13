@@ -76,6 +76,13 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	expect(panel.find_child("HandleAmount", true, false) != null, "Bevel modal exposes exact Amount")
 	expect(panel.find_child("bevel_segments", true, false) != null, "Bevel modal exposes Segments")
 	expect(_button_for(panel, "Apply") != null and _button_for(panel, "Cancel") != null, "Bevel modal exposes Apply and Cancel")
+	expect(not panel.get_node("ModelBody").visible, "active operation hides unrelated modelling commands")
+	expect(not panel.get_node("SelectionControls").visible, "active operation hides unrelated pivot and axis controls")
+	actions.operation_active = false
+	selection.operation_preview = {}
+	actions.operation_state_changed.emit()
+	expect(panel.get_node("ModelBody").visible and panel.get_node("SelectionControls").visible,
+		"ending the operation restores modelling and selection controls")
 	panel.free()
 
 

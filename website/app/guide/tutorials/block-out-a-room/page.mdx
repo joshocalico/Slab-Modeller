@@ -12,15 +12,19 @@ We will hollow a 4 m by 3 m by 4 m box from the top. The box becomes walls, a fl
   caption="Object mode, one SlabSolid. The shots use a 4 m by 3 m by 4 m box."
 />
 
+## Prepare the editor
+
+If you opened the full Slab source checkout, open `project/` in Godot 4.7, then open or create a 3D scene. If you copied Slab into another project, enable the plugin and open or create a 3D scene with a `Node3D` root.
+
+Open the **Slab** bottom panel. With the 3D view focused, press <kbd>F</kbd> to frame the selected solid. The mouse wheel zooms, and Godot's numpad view shortcuts change the viewing direction.
+
 ## Create the first solid
 
-1. Open `project/` in Godot 4.7.
-2. Click the **Slab** bottom panel so it is visible.
-3. Press <kbd>1</kbd> for Object mode.
-4. Choose **Box** in **Create**.
-5. Set **Width** to 4, **Height** to 3, and **Depth** to 4.
-6. Click **Create**.
-7. Move the gold preview over the world ground plane, then click to place it. You can also press Enter.
+1. Press <kbd>1</kbd> for Object mode.
+2. Choose **Box** in **Create**.
+3. Set **Width** to 4, **Height** to 3, and **Depth** to 4.
+4. Click **Create**.
+5. Move the gold preview over the world ground plane, then click to place it. You can also press Enter.
 
 A 4 m by 3 m by 4 m `SlabSolid` appears where you placed it. Press Escape or right-click if you need to cancel and start again.
 
@@ -67,9 +71,10 @@ If a preview is wrong, click **Cancel**, press Escape, or right-click. Slab leav
 1. Press <kbd>1</kbd>.
 2. Choose **Box** in **Create**. Set **Width** to 1, **Height** to 2, and **Depth** to 1.
 3. Click **Create**, move the gold preview near the wall, then click to place it. That solid is the cutter.
-4. Move the cutter so it pokes through one wall. It should stick out on both sides of the wall thickness.
-5. Click the room solid, then Shift-click the cutter. Confirm the panel names the room **Target** and the cutter **Second solid**; use **Swap operands** if needed.
-6. In **Object**, click **Subtract**.
+4. Keep both nodes under the same parent. This exact placement assumes the room has no rotation or scale. In the cutter's Inspector, open **Transform > Position** and set it to the room's Position plus `(1.5, 0.6, -0.2)`.
+5. Inspect the negative-Z wall. The cutter should start on the room floor and project through both wall surfaces.
+6. Click the room solid, then Shift-click the cutter. Confirm the panel names the room **Target** and the cutter **Second solid**; use **Swap operands** if needed.
+7. In **Object**, click **Subtract**.
 
 Slab knifes both wall faces and joins the hole with the cutter's sides. Delete or hide the cutter node afterward.
 

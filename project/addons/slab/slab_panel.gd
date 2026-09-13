@@ -179,6 +179,7 @@ func _operation_controls() -> Control:
 		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
 		if _settings != null:
 			_settings.visible = _show_settings()
+		_sync_model_chrome()
 		_refresh_buttons()
 	_selection.changed.connect(sync)
 	_actions.operation_state_changed.connect(sync)
@@ -240,6 +241,7 @@ func _font(px: int) -> int:
 
 
 func refresh() -> void:
+	_sync_model_chrome()
 	var mode: int = _selection.mode
 	if _built_mode != mode:
 		_rebuild_commands(_actions.command_sections_for(mode))
@@ -1258,17 +1260,24 @@ func _paint_caption(heading: String, text: String) -> Label:
 	return label
 
 
+func _sync_model_chrome() -> void:
+	var painting: bool = _paint != null and _paint.active
+	var modelling: bool = not painting and not _actions.operation_active
+	if _selection_controls != null:
+		_selection_controls.visible = modelling
+	if _model_body != null:
+		_model_body.visible = modelling
+
+
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
 	add_theme_constant_override("separation", 3 if on else 6)
-	if _selection_controls != null: _selection_controls.visible = not on
+	_sync_model_chrome()
 	if _operation_row != null:
 		_operation_row.visible = not on and _actions.operation_active
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(on)
 		_style_tool(_paint_toggle, on)
-	if _model_body != null:
-		_model_body.visible = not on
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on
