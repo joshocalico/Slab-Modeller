@@ -60,6 +60,12 @@ Saved the temporary unwrapped state through Godot, then used native Cmd-Z and Sa
 
 Undo retains the canvas framing established by Unwrap, so the restored planar outlines extend outside the visible canvas. Fit UV remains available, but recovery framing deserves a further interaction pass. Native transform handles also remain visible during Paint; the design record documents the public API limitation and selection-ownership tradeoffs.
 
+## UV recovery follow-up
+
+The canvas now detects restored mapping bases as well as face selection changes. A rendered editor regression reproduces the prior failure: Unwrap Undo restored exact planar data but left its UV corners outside the canvas. With the fix, the restored corners are visible and centred. It also covers Undo/Redo after changing the density of an already unwrapped face. Repeat, rotation, UV movement, cancellation, and their history keep the view steady. Explicit Unwrap still frames the result when a repeat operation resets placement without changing the mapping basis. The final rendered run passed with zero failures in `/tmp/slab-uv-recovery-final.log`.
+
+The reviewed regression capture also exposes a separate limit: very small UV islands occupy little canvas space even after Fit UV because framing uses a minimum 0.25-unit span. This recovery fix makes restored layouts visible; closer framing and smooth wheel zoom for tiny islands remain to be assessed.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.

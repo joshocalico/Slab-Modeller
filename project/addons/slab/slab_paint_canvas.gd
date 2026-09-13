@@ -27,7 +27,7 @@ var _pan_origin := Vector2.ZERO
 var _uv_center := Vector2(0.5, 0.5)
 var _uv_pixels_per_unit: float = 100.0
 var _uv_pan := Vector2.ZERO
-var _uv_signature := ""
+var _uv_signature: Array = []
 var show_pixel_uv: bool = false:
 	set(value):
 		show_pixel_uv = value
@@ -55,7 +55,7 @@ func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
 func _paint_changed() -> void:
 	if not _paint.stroke_active and not _paint.uv_drag_active:
 		_dragging = false
-	var signature := _selection_signature()
+	var signature := _mapping_signature()
 	if signature != _uv_signature:
 		_uv_signature = signature
 		frame_uv.call_deferred()
@@ -322,13 +322,21 @@ func _zoom_at(pos: Vector2, factor: float) -> void:
 	queue_redraw()
 
 
-func _selection_signature() -> String:
+func _mapping_signature() -> Array:
 	if _paint == null or _paint.is_pixel():
-		return "pixel"
+		return ["pixel"]
 	var solid: Node3D = _paint.get("_solid")
 	var selection: RefCounted = _paint.get("_selection")
 	var ids: PackedInt64Array = selection.ids if selection != null else PackedInt64Array()
-	return "%s:%s" % [solid.get_instance_id() if solid != null else 0, ids]
+	var signature: Array = [solid.get_instance_id() if solid != null else 0, ids]
+	if solid != null:
+		for face in ids:
+			var attrs := SlabPaintUv.attrs_of(solid, face)
+			# Reframe when mapping is rebuilt or restored, including Undo/Redo.
+			# Placement stays excluded so editing it never moves the canvas view.
+			signature.append([attrs.get("unwrapped"), attrs.get("u"), attrs.get("v"),
+				attrs.get("origin"), attrs.get("axis")])
+	return signature
 
 
 static func _uv_bounds(uvs: PackedVector2Array) -> Rect2:

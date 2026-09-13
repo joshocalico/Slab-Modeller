@@ -139,6 +139,7 @@ func _run() -> void:
 	paint.set("_brush_material", distinct_brush)
 	var brush_before_unwrap: Material = paint.brush_material()
 	var loops_before_unwrap: Array = paint.selected_uv_loops().duplicate(true)
+	var data_before_unwrap: PackedByteArray = solid.get("data")
 	panel.get("_actions").uv_pixels_per_meter = 16.0
 	panel.get("_actions").uv_texture_resolution = 2048
 	var unwrap_button: Button = panel.find_child("PaintUnwrap", true, false) as Button
@@ -149,19 +150,34 @@ func _run() -> void:
 	await create_timer(0.2).timeout
 	var loops_after_unwrap: Array = paint.selected_uv_loops()
 	_check(loops_after_unwrap != loops_before_unwrap, "Unwrap refreshes the canvas from the new UV loops")
-	var canvas_lo := Vector2(INF, INF)
-	var canvas_hi := Vector2(-INF, -INF)
-	for loop: PackedVector2Array in loops_after_unwrap:
-		for uv: Vector2 in loop:
-			var mapped: Vector2 = canvas.call("_uv_to_canvas", uv)
-			canvas_lo = canvas_lo.min(mapped)
-			canvas_hi = canvas_hi.max(mapped)
-	_check(((canvas_lo + canvas_hi) * 0.5).distance_to(canvas.size * 0.5) <= 2.0,
-		"Unwrap reframes the new UV bounds at the canvas centre")
-	_check(panel.find_child("PaintMappingState", true, false).text == "Unwrapped mapping",
-		"Unwrap refreshes the visible Mapping state")
+	_check_uv_framed(canvas, loops_after_unwrap, "Unwrap")
 	_check(brush_before_unwrap != paint.material() and paint.brush_material() == brush_before_unwrap,
 		"Unwrap refresh preserves the chosen brush resource")
+	var data_after_unwrap: PackedByteArray = solid.get("data")
+	await _history_shortcut(panel, false)
+	_check(solid.get("data") == data_before_unwrap and paint.selected_uv_loops() == loops_before_unwrap,
+		"Unwrap Undo restores exact planar data and loops")
+	_check_uv_framed(canvas, paint.selected_uv_loops(), "Unwrap Undo")
+	await _history_shortcut(panel, true)
+	_check(solid.get("data") == data_after_unwrap and paint.selected_uv_loops() == loops_after_unwrap,
+		"Unwrap Redo restores exact unwrapped data and loops")
+	_check_uv_framed(canvas, paint.selected_uv_loops(), "Unwrap Redo")
+	var density: SpinBox = panel.find_child("paint_uv_pixels_per_meter", true, false).get_child(1) as SpinBox
+	var first_density := density.value
+	density.get_line_edit().text = "1024"
+	await _click(unwrap_button)
+	var dense_loops: Array = paint.selected_uv_loops().duplicate(true)
+	_check(dense_loops != loops_after_unwrap, "repeated Unwrap changes the existing unwrapped layout")
+	_check_uv_framed(canvas, dense_loops, "Repeated Unwrap")
+	await _history_shortcut(panel, false)
+	_check(solid.get("data") == data_after_unwrap, "repeated Unwrap Undo restores exact prior layout")
+	_check_uv_framed(canvas, paint.selected_uv_loops(), "Repeated Unwrap Undo")
+	await _history_shortcut(panel, true)
+	_check(paint.selected_uv_loops() == dense_loops, "repeated Unwrap Redo restores its layout")
+	_check_uv_framed(canvas, paint.selected_uv_loops(), "Repeated Unwrap Redo")
+	await _history_shortcut(panel, false)
+	_check(panel.find_child("PaintMappingState", true, false).text == "Unwrapped mapping",
+		"Unwrap refreshes the visible Mapping state")
 	paint_inspector_scroll.ensure_control_visible(panel.find_child("PaintMapping", true, false))
 	await process_frame
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-mapping", "capture_rect": panel.get_global_rect()}, "after")
@@ -169,6 +185,7 @@ func _run() -> void:
 	var repeat_v: SpinBox = panel.find_child("paint_uv_repeat_v", true, false).get_child(1) as SpinBox
 	repeat_u.get_line_edit().text = "2"
 	repeat_v.get_line_edit().text = "3"
+	var placement_frame := _uv_frame(canvas)
 	var before_quick_repeat: PackedByteArray = solid.get("data")
 	await _click(_button_named(panel, "Repeat ×2"))
 	_check(panel.get("_actions").uv_scale == Vector2(4.0, 6.0) and repeat_u.value == 4.0 and repeat_v.value == 6.0,
@@ -179,7 +196,9 @@ func _run() -> void:
 	await _history_shortcut(panel, false)
 	await _history_shortcut(panel, false)
 	_check(solid.get("data") == before_quick_repeat, "two quick-repeat Undos restore exact UV data")
+	_check(_uv_frame(canvas) == placement_frame, "repeat changes and their Undo preserve canvas framing")
 	await _pending_uv_value(panel, solid, selection)
+	_check(_uv_frame(canvas) == placement_frame, "rotation Apply, Undo and Redo preserve canvas framing")
 	var before: PackedByteArray = solid.get("data")
 	await _uv_gesture(canvas, true)
 	_check(solid.get("data") == before and not paint.uv_drag_active and paint.active, "escape_cancels_uv_without_closing_workspace")
@@ -191,6 +210,17 @@ func _run() -> void:
 	_check(panel.get("_status").text == selection.describe(), "undo_replaces_stale_tool_report_with_current_selection")
 	await _history_shortcut(panel, true)
 	_check(solid.get("data") == after, "editor_redo_restores_uv")
+	_check(_uv_frame(canvas) == placement_frame, "UV move, cancellation and history preserve canvas framing")
+	# Explicit Unwrap also fits when only placement changed and its basis is unchanged.
+	paint_inspector_scroll.ensure_control_visible(unwrap_button)
+	await process_frame
+	density.get_line_edit().text = str(first_density)
+	await _click(unwrap_button)
+	_check(paint.selected_uv_loops() == loops_after_unwrap,
+		"same-density Unwrap resets placement to the original unwrapped layout")
+	_check_uv_framed(canvas, paint.selected_uv_loops(), "Same-density Unwrap after placement")
+	await _history_shortcut(panel, false)
+	_check(solid.get("data") == after, "same-density Unwrap Undo restores exact placement data")
 	await _click(_mode(panel, 3))
 	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
 	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
@@ -299,6 +329,7 @@ func _history_shortcut(panel: Control, redo: bool) -> void:
 
 
 func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
+	var view_before := _uv_frame(canvas)
 	var start: Vector2 = canvas.global_position + canvas.image_rect().get_center()
 	var end := start + Vector2(25, 15)
 	var press := InputEventMouseButton.new()
@@ -317,6 +348,7 @@ func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
 	canvas.get_viewport().push_input(motion)
 	await process_frame
 	_check(canvas.get("_paint").uv_drag_active, "canvas_mouse_drag_started")
+	_check(_uv_frame(canvas) == view_before, "held UV move keeps a stable canvas frame")
 	if cancel_drag:
 		var escape := InputEventKey.new()
 		escape.keycode = KEY_ESCAPE
@@ -329,3 +361,21 @@ func _uv_gesture(canvas: Control, cancel_drag: bool) -> void:
 	press.global_position = end
 	canvas.get_viewport().push_input(press)
 	await create_timer(0.2).timeout
+
+
+func _check_uv_framed(canvas: Control, loops: Array, label: String) -> void:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for loop: PackedVector2Array in loops:
+		for uv: Vector2 in loop:
+			var mapped: Vector2 = canvas.call("_uv_to_canvas", uv)
+			lo = lo.min(mapped)
+			hi = hi.max(mapped)
+	_check(not loops.is_empty() and Rect2(Vector2.ZERO, canvas.size).encloses(Rect2(lo, hi - lo)),
+		"%s keeps every restored UV corner inside the canvas" % label)
+	_check(((lo + hi) * 0.5).distance_to(canvas.size * 0.5) <= 2.0,
+		"%s centres the UV bounds" % label)
+
+
+func _uv_frame(canvas: Control) -> Array:
+	return [canvas.get("_uv_center"), canvas.get("_uv_pixels_per_unit"), canvas.get("_uv_pan")]
