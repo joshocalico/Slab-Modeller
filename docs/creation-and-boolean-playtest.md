@@ -10,7 +10,9 @@ The first doorway cutter combines a 3 by 1.5 by 1.2 metre box at `(37.5, 0.4, 18
 
 The cutter was rebuilt in the editor using the corrected cylinder position. Union produced 38 faces. The new Swap control set PowerHouse as the target, and Subtract committed a 145-face room. Both source cutters were removed. The saved scene contains the room alone.
 
-Front orthographic inspection then exposed large triangular patches across the room walls. The saved PowerHouse is the reproduction fixture; legal commit and successful reload do not establish correct rendering. Investigate topology, emitted triangles, and normals before texturing or claiming the room is finished. Walking through the result still needs verification.
+Front orthographic inspection then exposed large triangular patches across the room walls. The saved PowerHouse is the reproduction fixture; legal commit and successful reload do not establish correct rendering. Display Unshaded removes the light/dark patches, narrowing the problem to shading rather than visible holes. Investigate topology, emitted triangles, and normals before texturing or claiming the room is finished.
+
+Collision traversal passes in the running game. Starting at the saved START, the author walked through the maintenance doorway and hall exit, reached the courtyard, jumped both hazard strips, passed through the arch, and walked onto the annex floor. F3 reported feet `(39.12, 0.47, 24.36)`, grounded, with floor collider `PowerHouse/__body`. The exit correctly reported three missing cells during this geometry-only route. This verifies entrance and floor collision; the room remains visually unfinished and its shading defect is also visible in-game.
 
 ## Observed friction
 
