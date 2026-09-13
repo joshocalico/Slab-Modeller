@@ -408,10 +408,10 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and String(panel.find_child("PaintUvHint", true, false).text).contains("rotates"),
 		"UV modifiers have a compact hint")
 	expect(panel.find_child("PaintMaterialPickerWrap", true, false) != null,
-		"the material picker is clipped to the action row")
+		"the material picker has a dedicated action-row slot")
 	expect(panel.find_child("PaintActions", true, false) != null
-		and panel.find_child("PaintActions", true, false).custom_minimum_size.y <= 28.5,
-		"paint actions are a 28px row")
+		and panel.find_child("PaintActions", true, false).custom_minimum_size.y <= SlabPanel.PAINT_PICKER_HEIGHT + 0.5,
+		"paint actions fit the native resource picker")
 	expect(_source_of("slab_solid_gizmo.gd").contains("_paint_hides_albedo"),
 		"Surface Paint drops the opaque face fill")
 	expect(_source_of("slab_solid_gizmo.gd").contains("PAINT_EDGE"),

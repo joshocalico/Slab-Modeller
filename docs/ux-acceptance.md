@@ -2,6 +2,8 @@
 
 The goal is ProBuilder or UModeler quality in the editor workflow and manual. A green kernel suite alone does not establish that quality. This record keeps the outstanding work visible across iterations.
 
+The next visual and interaction priorities are recorded in [Modeller design direction](modeller-design-direction.md): active workspace and selection state, material assignment order, and viewport space after leaving paint.
+
 ## Verified improvements
 
 - Native Move, Rotate, and Scale pass the rendered-editor pivot and axis matrix, including exact Undo and Redo.
@@ -31,7 +33,7 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 
 ## Remaining acceptance work
 
-The latest editor authoring pass verified separate Inset, Extrude, and Bevel session values and explicit Boolean target/second-solid controls with Swap. Rendered tests cover native selection order, actual swapped subtraction, tool-value transitions, and existing room/Undo workflows. The PowerHouse shading defect is resolved in both the lit editor and a running-game traversal. Shared whole-loop normals and valid dissolve boundaries pass the full verifier. Merge now explains an opening-specific refusal in the live editor. Surface Paint still needs a readable loaded-material picker and undoable material loading that marks the scene dirty. See [Creation and boolean authoring playtest](creation-and-boolean-playtest.md).
+The latest editor authoring pass verified separate Inset, Extrude, and Bevel session values and explicit Boolean target/second-solid controls with Swap. Rendered tests cover native selection order, actual swapped subtraction, tool-value transitions, and existing room/Undo workflows. The PowerHouse shading defect is resolved in both the lit editor and a running-game traversal. Shared whole-loop normals and valid dissolve boundaries pass the full verifier. Merge now explains an opening-specific refusal in the live editor. Surface Paint's loaded-material picker is readable, Quick Load discovers the sample materials, and native material loading now marks the scene dirty and supports Undo/Redo. The live check restored the original scene after verification. The status sentence can remain stale after Undo. See [Creation and boolean authoring playtest](creation-and-boolean-playtest.md).
 
 The compact-dock audit found that Godot retains the enlarged splitter height after Surface Paint, whose minimum is 360 logical pixels. Modelling already permits 240 pixels. A trial reduction to 200 hid the Materials & UV and Selection disclosures inside the scroller, so it was reverted. A future automatic restore must distinguish the paint-forced height from an intentional user resize. Do not shrink the panel unconditionally on mode changes.
 

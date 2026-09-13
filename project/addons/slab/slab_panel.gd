@@ -16,6 +16,8 @@ const ACCENT := Color(0.86, 0.72, 0.34)
 const CHIP_SIZE := Vector2(28.0, 28.0)
 const PAINT_PALETTE_HEIGHT := 40.0
 const PAINT_ROW_HEIGHT := 28.0
+const PAINT_PICKER_HEIGHT := 64.0
+const PAINT_PICKER_WIDTH := 220.0
 const PAINT_UV_ROW_HEIGHT := 44.0
 
 var _selection: RefCounted
@@ -852,7 +854,7 @@ func _paint_block() -> Control:
 	body.name = "PaintBody"
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.clip_contents = true
-	body.add_theme_constant_override("separation", 4)
+	body.add_theme_constant_override("separation", 2)
 	body.add_child(_paint_target_row())
 	body.add_child(_paint_action_row())
 	_paint_uv_controls = _paint_uv_control_row()
@@ -948,14 +950,14 @@ func _paint_target_row() -> Control:
 func _paint_action_row() -> Control:
 	var scroll := ScrollContainer.new()
 	scroll.name = "PaintActions"
-	scroll.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	scroll.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
 	scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	scroll.clip_contents = true
 	var tools := HBoxContainer.new()
-	tools.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	tools.custom_minimum_size.y = _scaled(PAINT_PICKER_HEIGHT)
 	tools.clip_contents = true
 	tools.add_theme_constant_override("separation", 8)
 	tools.add_child(_named_action("Assign", "MaterialPreviewCube", "Assign the active material to the selected faces.", func() -> void:
@@ -1026,22 +1028,14 @@ func _paint_uv_control_row() -> Control:
 
 
 func _paint_picker_slot() -> Control:
-	var wrap := Control.new()
+	var wrap := MarginContainer.new()
 	wrap.name = "PaintMaterialPickerWrap"
-	wrap.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
+	wrap.custom_minimum_size = Vector2(_scaled(PAINT_PICKER_WIDTH), _scaled(PAINT_PICKER_HEIGHT))
 	wrap.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wrap.clip_contents = true
 	wrap.mouse_filter = Control.MOUSE_FILTER_STOP
 	var picker: Node = _make_paint_picker()
 	wrap.add_child(picker)
-	wrap.resized.connect(func() -> void:
-		if picker is Control and is_instance_valid(picker):
-			picker.position = Vector2.ZERO
-			picker.size = wrap.size
-			_compact_resource_preview(picker)
-	)
-	_compact_resource_preview(picker)
 	return wrap
 
 
@@ -1054,16 +1048,11 @@ func _make_paint_picker() -> Node:
 			picker.set("base_type", "StandardMaterial3D")
 			picker.set("toggle_mode", false)
 			if picker is Control:
-				picker.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
-				picker.clip_contents = true
+				picker.custom_minimum_size = Vector2(_scaled(PAINT_PICKER_WIDTH), _scaled(PAINT_PICKER_HEIGHT))
 			if picker.has_signal("resource_changed"):
 				picker.resource_changed.connect(func(res: Resource) -> void:
 					if _paint != null and res is StandardMaterial3D:
 						_paint.pick_material(res)
-				)
-			if picker.has_signal("child_entered_tree"):
-				picker.child_entered_tree.connect(func(_n: Node) -> void:
-					_compact_resource_preview(picker)
 				)
 			_apply_picker_fonts(picker)
 			return picker
@@ -1072,36 +1061,10 @@ func _make_paint_picker() -> Node:
 	fake.text = "Assign"
 	fake.clip_text = true
 	fake.focus_mode = Control.FOCUS_NONE
-	fake.custom_minimum_size = Vector2(_scaled(168.0), _scaled(PAINT_ROW_HEIGHT))
+	fake.custom_minimum_size = Vector2(_scaled(PAINT_PICKER_WIDTH), _scaled(PAINT_PICKER_HEIGHT))
 	fake.add_theme_font_size_override("font_size", _font(13))
-	var preview := TextureRect.new()
-	preview.name = "Preview"
-	preview.custom_minimum_size = Vector2(64, 64)
-	preview.mouse_filter = Control.MOUSE_FILTER_STOP
-	fake.add_child(preview)
 	_paint_picker = fake
 	return fake
-
-
-func _compact_resource_preview(node: Node) -> void:
-	if node == null or not is_instance_valid(node):
-		return
-	if node is TextureRect:
-		node.visible = false
-		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		node.custom_minimum_size = Vector2.ZERO
-		node.size = Vector2.ZERO
-	if node is Button:
-		node.add_theme_constant_override("icon_max_width", int(_scaled(16.0)))
-		node.expand_icon = false
-		node.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
-		node.clip_contents = true
-	if node is Control:
-		node.clip_contents = true
-		if node.custom_minimum_size.y > _scaled(PAINT_ROW_HEIGHT):
-			node.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
-	for child in node.get_children():
-		_compact_resource_preview(child)
 
 
 func _apply_picker_fonts(node: Node) -> void:
@@ -1286,7 +1249,6 @@ func _refresh_paint_chrome() -> void:
 	if _paint_picker != null and is_instance_valid(_paint_picker) and _paint != null:
 		if _paint_picker.has_method("set_edited_resource"):
 			_paint_picker.set("edited_resource", _paint.material())
-			_compact_resource_preview(_paint_picker)
 	if _unique_button != null:
 		var allowed: bool = _paint != null and _paint.can_make_unique()
 		_unique_button.disabled = not allowed

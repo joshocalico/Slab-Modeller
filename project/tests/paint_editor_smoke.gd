@@ -10,10 +10,19 @@ func _run() -> void:
 	var editor := Engine.get_singleton("EditorInterface")
 	while editor.get_resource_filesystem().is_scanning() or _plugin(root) == null:
 		await process_frame
+	# Session restore can reopen the previous scene after the first scan.
+	await create_timer(1.5).timeout
 	editor.open_scene_from_path("res://demo/modeller_lab.tscn")
 	editor.set_main_screen_editor("3D")
-	while editor.get_edited_scene_root() == null or editor.get_edited_scene_root().scene_file_path != "res://demo/modeller_lab.tscn":
+	var stable_frames := 0
+	var deadline := Time.get_ticks_msec() + 15000
+	while stable_frames < 20:
 		await process_frame
+		var edited: Node = editor.get_edited_scene_root()
+		stable_frames = stable_frames + 1 if edited != null and edited.scene_file_path == "res://demo/modeller_lab.tscn" else 0
+		if Time.get_ticks_msec() > deadline:
+			_fail("Paint fixture did not remain current after session restore")
+			return
 	await create_timer(1.0).timeout
 	var solid: Node3D = editor.get_edited_scene_root().get_node("Box2")
 	editor.get_selection().clear()
@@ -31,6 +40,30 @@ func _run() -> void:
 	await _click(_button_named(panel, "Surface Paint"))
 	await _click(_button_named(panel, "Make Unique"))
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
+	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
+	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
+	var resource_button_width := 0.0
+	for child in picker.find_children("*", "Button", true, false):
+		if child is Button and child.is_visible_in_tree():
+			resource_button_width = maxf(resource_button_width, child.get_global_rect().size.x)
+	_check(picker.is_visible_in_tree() and picker.get_global_rect().size.x >= 200.0, "material_picker_is_visible")
+	_check(picker_wrap.get_global_rect().encloses(picker.get_global_rect()), "material_picker_fits_its_slot")
+	_check(resource_button_width >= 120.0, "material_picker_resource_button_is_readable")
+	var imported := ResourceLoader.load("res://demo/signal_foundry/materials/brick.tres") as StandardMaterial3D
+	picker.set("edited_resource", imported)
+	picker.emit_signal("resource_changed", imported)
+	await create_timer(0.2).timeout
+	_check(panel.get("_paint").material() == imported, "material_picker_loads_imported_material")
+	var actions_row: Control = panel.find_child("PaintActions", true, false)
+	var thumbnail: TextureRect
+	for child in picker.find_children("*", "TextureRect", true, false):
+		if child is TextureRect and child.is_visible_in_tree():
+			thumbnail = child
+			break
+	_check(picker_wrap.get_global_rect().encloses(picker.get_global_rect()), "loaded_material_picker_fits_its_slot")
+	_check(actions_row.get_global_rect().grow(1.0).encloses(picker_wrap.get_global_rect()), "loaded_material_picker_fits_action_row")
+	_check(thumbnail != null and picker.get_global_rect().encloses(thumbnail.get_global_rect()), "loaded_material_thumbnail_is_fully_visible")
+	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-picker", "capture_rect": panel.get_global_rect()}, "after")
 	var paint: RefCounted = panel.get("_paint")
 	var canvas: Control = panel.find_child("PaintCanvas", true, false)
 	var before: PackedByteArray = solid.get("data")

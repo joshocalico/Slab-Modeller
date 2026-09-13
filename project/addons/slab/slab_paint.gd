@@ -663,15 +663,34 @@ func material_label(mat: Variant, slot: int) -> String:
 func pick_material(mat: StandardMaterial3D) -> void:
 	if _selection == null or _selection.solid == null or mat == null:
 		return
-	var mats: Array = (_selection.solid.get("materials") as Array).duplicate()
+	var solid: Node3D = _selection.solid
+	var before_mats: Array = (solid.get("materials") as Array).duplicate()
+	var before_data: PackedByteArray = solid.get("data")
+	var prev_slot: int = _actions.material_slot
+	var mats: Array = before_mats.duplicate()
 	var slot: int = mats.find(mat)
 	if slot < 0:
+		# Slot 0 is the implicit material of every newly-created face. Keep it
+		# empty when importing the first material so only the selected faces
+		# receive the resource.
+		if mats.is_empty():
+			mats.append(null)
 		mats.append(mat)
-		_selection.solid.set("materials", mats)
 		slot = mats.size() - 1
+	solid.set("materials", mats)
 	_actions.material_slot = slot
 	if not _selection.ids.is_empty():
-		_selection.solid.call("set_face_material", _selection.ids, slot)
+		solid.call("set_face_material", _selection.ids, slot)
+	var after_data: PackedByteArray = solid.get("data")
+	if _undo != null and (mats != before_mats or after_data != before_data or slot != prev_slot):
+		_undo.create_action("Slab Pick Material", UndoRedo.MERGE_DISABLE, solid)
+		_undo.add_do_property(solid, "materials", mats)
+		_undo.add_undo_property(solid, "materials", before_mats)
+		_undo.add_do_property(solid, "data", after_data)
+		_undo.add_undo_property(solid, "data", before_data)
+		_undo.add_do_property(_actions, "material_slot", slot)
+		_undo.add_undo_property(_actions, "material_slot", prev_slot)
+		_undo.commit_action(false)
 	_bind_from_selection()
 	_report("Using %s." % material_label(mat, slot))
 

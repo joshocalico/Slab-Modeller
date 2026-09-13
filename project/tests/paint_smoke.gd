@@ -762,8 +762,8 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(target != null and actions_row != null and palette != null, "paint rows exist")
 	_expect(target.custom_minimum_size.y <= SlabPanel.PAINT_ROW_HEIGHT + 0.5,
 		"the target row is an explicit %s px band" % SlabPanel.PAINT_ROW_HEIGHT)
-	_expect(actions_row.custom_minimum_size.y <= SlabPanel.PAINT_ROW_HEIGHT + 0.5,
-		"the action row is an explicit %s px band" % SlabPanel.PAINT_ROW_HEIGHT)
+	_expect(actions_row.custom_minimum_size.y <= SlabPanel.PAINT_PICKER_HEIGHT + 0.5,
+		"the action row fits the native picker in a %s px band" % SlabPanel.PAINT_PICKER_HEIGHT)
 	_expect(not _rects_overlap(target.get_global_rect(), actions_row.get_global_rect()),
 		"target and actions do not overlap, %s vs %s" % [target.get_global_rect(), actions_row.get_global_rect()])
 	_expect(not _rects_overlap(actions_row.get_global_rect(), palette.get_global_rect()),
@@ -776,10 +776,10 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(face_label != null and face_label.get_global_rect().size.x >= 48.0,
 		"Face is readable, size=%s" % (face_label.get_global_rect().size if face_label else Vector2.ZERO))
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
-	_expect(picker_wrap != null, "the resource picker sits in a clipped slot")
-	_expect(picker_wrap != null and picker_wrap.custom_minimum_size.y <= SlabPanel.PAINT_ROW_HEIGHT + 0.5,
-		"the picker slot is %s px, got %s" % [
-			SlabPanel.PAINT_ROW_HEIGHT, picker_wrap.custom_minimum_size.y if picker_wrap else -1
+	_expect(picker_wrap is MarginContainer, "the resource picker sits in a layout container")
+	_expect(picker_wrap != null and picker_wrap.custom_minimum_size.y >= SlabPanel.PAINT_PICKER_HEIGHT,
+		"the picker slot reserves %s px, got %s" % [
+			SlabPanel.PAINT_PICKER_HEIGHT, picker_wrap.custom_minimum_size.y if picker_wrap else -1
 		])
 	var preview: Node = panel.find_child("Preview", true, false)
 	_expect(preview == null or (preview is CanvasItem and not (preview as CanvasItem).visible),
