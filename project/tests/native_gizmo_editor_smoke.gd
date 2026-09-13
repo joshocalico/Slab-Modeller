@@ -227,6 +227,8 @@ func _capture(editor: Object, config: Dictionary, stage: String) -> void:
 	RenderingServer.force_sync()
 	RenderingServer.force_draw(true)
 	var image: Image = editor.get_base_control().get_viewport().get_texture().get_image()
+	if config.has("capture_rect"):
+		image = image.get_region(Rect2i(config.capture_rect))
 	var output: String = str(config.capture_prefix) + "-" + stage + ".png"
 	var result := image.save_png(output)
 	_check(result == OK, "capture_" + stage)

@@ -29,7 +29,7 @@ func begin(next_kind: int, target: Node3D, selected_ids: PackedInt64Array,
 	kind = next_kind
 	solid = target
 	ids = selected_ids.duplicate()
-	amount = initial_amount
+	amount = initial_amount if kind == Kind.EXTRUDE else maxf(MIN_AMOUNT, absf(initial_amount))
 	segments = clampi(bevel_segments, 1, 16)
 	tangent = Vector3.ZERO
 	_before = solid.get("data")
@@ -126,6 +126,9 @@ func preview() -> Dictionary:
 
 
 func confirm(undo: Object = null) -> Dictionary:
+	if active and (not is_instance_valid(solid) or solid.get("data") != _before):
+		cancel()
+		return {}
 	if not active or error != OK or preview_data.is_empty() or not is_instance_valid(solid) or solid.get("data") != _before:
 		return {}
 	var target := solid

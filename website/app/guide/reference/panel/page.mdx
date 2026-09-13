@@ -4,29 +4,39 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. It is a command toolbar. Object mode shows Create and Object. Vertex, Edge, and Face each show their own group and Selection. Commands have icons and labels. The tooltip holds the name, what it does, and the shortcut. A command disables when the selection count is too small. The tooltip then states the missing requirement.
+The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes show their own command group and **Selection**. Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel in Face mode, with Face and Selection icon rows above Distance and UV fields."
-  caption="Face mode, with no solid selected. Commands stay disabled until their selection requirements are met. UV opens the placement fields."
+  alt="The Slab panel in Face mode, with Face and Selection commands beside Face settings."
+  caption="Idle Face mode. The settings contain UV controls and the material palette. Extrude and Inset stay in the Face command group."
 />
 
 The header status line repeats the selection, for example `Box, 1 face.`
 
-## Settings strip
+On a wide panel, settings sit beside the command groups. On a narrow panel, settings stack below them.
 
-Under the commands. Click **UV** beside Distance to show the UV fields. The fields follow the mode, and in Object mode they follow the Create icon you last hovered.
+## Settings
+
+The settings change with the current mode and active command. In Object mode, the idle settings follow the Create command you point at.
 
 | Field | When it shows | Role |
 | --- | --- | --- |
 | Width, Height, Depth | Object, on the focused Create icon | Size for that click. |
 | Steps, Sides, Segments, Thickness, Arc | Object, when Stair, Cylinder, or Arch is focused | Only the params that shape reads. |
-| Amount | Vertex, Edge | Distance for Bevel and Weld. Default 0.5; range 0.05 to 64. |
-| Distance | Face | Distance for Extrude and Inset. Default 0.5; range -64 to 64. Extrude keeps the sign. Inset uses the absolute value. |
-| UV scale, offset, rotation | Face | Written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
-| Pixels / metre, Texture px | Face, with UV open | Set the physical density and normalization used by Unwrap. |
-| Material chips | Face, with a solid selected | Click a chip to pick the paint. The plus chip appends a material. **Set Material** writes that index onto the faces. |
+| Weld distance | Vertex, with at least 2 vertices selected | Maximum distance for Weld. Range 0.05 to 64 m. |
+| Cuts, Centre % | Edge | Count and position for Loop Cut. |
+| UV scale, offset, rotation | Face, with **UV** open | Values written by Apply UV. Rotation is degrees on the panel. The solid stores radians. |
+| Pixels / metre, Texture px | Face, with **UV** open | Physical density and normalization for Unwrap. |
+| Material palette | Face, with a solid selected | The active material slot and the control that appends a material. **Set Material** assigns the active slot to selected faces. |
+
+There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting one of those commands replaces the idle settings with its preview controls.
+
+<Figure
+  src="/img/panel-preview.png"
+  alt="The Slab panel during an Extrude preview, with Extrude distance, Apply, and Cancel controls."
+  caption="An active Extrude preview. Adjust Extrude distance, then Apply or Cancel."
+/>
 
 ## Create fields
 
@@ -80,7 +90,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Weld | 2 vertices | Merges vertices closer than Amount. |
+| Weld | 2 vertices | Merges vertices closer than **Weld distance**. |
 | Collapse | 2 vertices | Collapses the selection to one vertex. |
 | Connect | 2 vertices | Cuts an edge between the selected vertices. |
 
@@ -88,7 +98,7 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 
 | Command | Needs | Result |
 | --- | --- | --- |
-| Bevel | 1 edge | Opens a preview with a draggable purple width arc. Amount sets the exact width. |
+| Bevel | 1 edge | Opens a preview with a draggable purple width arc. **Bevel width** sets the exact width. |
 | Bridge | 2 edges | Builds a face between two open edges. |
 | Connect | 2 edges | Cuts a new edge between edge midpoints. |
 | Loop Cut | Edge mode | Previews cuts through a quad strip. Click to slide, wheel to change count, type a percentage, Enter to apply. |
@@ -157,8 +167,10 @@ The selection controls above the command rows configure the editor transform giz
 
 In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the group centre along the starting edge. The group stops before its outer cuts leave the edge. See [Cut and slide edge loops](/guide/how-to/cut-edge-loops).
 
-## Modal settings
+## Extrude, Inset, and Bevel previews
 
-**Extrude** and **Inset** expose Distance, Apply, and Cancel. **Bevel** exposes Amount, 1 to 16 Segments, Apply, and Cancel. Their coloured handles change the same numeric value; the field is the exact-entry path. Enter applies one undo action. Escape, right-click, or Cancel leaves the solid unchanged. Invalid previews are refused and cannot commit.
+**Extrude** opens **Extrude distance**, **Apply**, and **Cancel**. **Inset** opens **Inset distance**, **Apply**, and **Cancel**. **Bevel** opens **Bevel width**, **Segments**, **Apply**, and **Cancel**. **Segments** ranges from 1 to 16.
+
+The coloured viewport handle changes the operation's numeric value. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** leaves the solid unchanged. A refused preview disables **Apply**.
 
 **Plane Cut** exposes local normal, offset, retained side, cap material, Apply, and Cancel. **Array** exposes Linear or Radial mode, a total Count from 2 to 256, and parent-local placement fields. Snap and Align show the current target instructions; Align also lets you choose whether the face normals oppose each other.

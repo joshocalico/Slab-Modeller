@@ -4,7 +4,7 @@ export const metadata = { title: "Block out a room" };
 
 # Block out a room
 
-We will hollow a box from the top. The box becomes walls, a floor, and an open top. There is no roof.
+We will hollow a 4 m by 3 m by 4 m box from the top. The box becomes walls, a floor, and an open top.
 
 <Figure
   src="/img/solid-box.png"
@@ -16,23 +16,22 @@ We will hollow a box from the top. The box becomes walls, a floor, and an open t
 
 1. Open `project/` in Godot 4.7.
 2. Click the **Slab** bottom panel so it is visible.
-3. Press <kbd>1</kbd> to stay in Object mode.
-4. Hover the Create icons until you see **Box**. Click it.
+3. Press <kbd>1</kbd> for Object mode.
+4. Point to **Box** in **Create** to show its fields.
+5. Set **Width** to 4, **Height** to 3, and **Depth** to 4.
+6. Click **Box**.
 
-A `SlabSolid` appears at the origin. The default box is 2 m on a side.
+A 4 m by 3 m by 4 m `SlabSolid` appears at the origin.
 
-5. Press <kbd>4</kbd>.
-6. Click a side face. Press <kbd>W</kbd>. Drag the Move gizmo out.
-7. Move an adjacent side the same way. Stop when the floor is about 4 m by 4 m.
-8. Click the top face. Drag the Move gizmo up until the box is about 3 m tall.
-
-You should see a closed rectangular volume that matches the shot.
+Press <kbd>4</kbd> for Face mode. You should see a closed rectangular volume that matches the shot.
 
 ## Inset the top
 
 1. Click the top face.
-2. Set **Distance** to 0.45. The default 0.5 also works.
-3. Press <kbd>I</kbd>. Or hover the Face icons until you see **Inset**. Click it.
+2. In **Face**, click **Inset**, or press <kbd>I</kbd>.
+3. Set **Inset distance** to 0.45.
+4. Inspect the preview. The original solid has not changed yet.
+5. Click **Apply**, or press Enter.
 
 The top face shrinks in place. A rim of new faces appears around it. The inner cap stays selected.
 
@@ -42,17 +41,19 @@ The top face shrinks in place. A rim of new faces appears around it. The inner c
   caption="After Inset. The inner cap stays selected on the top plane."
 />
 
-## Move the inner face down
+## Extrude the inner face down
 
-1. Click the inner cap if it is not selected.
-2. Press <kbd>W</kbd>.
-3. Drag the Move gizmo toward the floor. Do not hold Shift. Do not press <kbd>E</kbd>.
+1. Keep the inner cap selected.
+2. In **Face**, click **Extrude**, or press <kbd>E</kbd>.
+3. Set **Extrude distance** to -2.4.
+4. Inspect the preview. The cap should stop above the bottom face and leave a floor.
+5. Click **Apply**, or press Enter.
 
-The gizmo translates the face. Its travel comes from the gizmo, not the panel's Distance field. **Extrude** can use a negative Distance to move inward, but it also creates a new side ring. Moving the inset cap gives this room one inner wall loop.
+The negative distance moves inward. Extrude keeps the inset rim and builds one inner wall loop down to the new cap.
 
-Release when you can see a floor and four inner walls. That gizmo commit is one undo action.
+You should see a floor and four inner walls. The inset and extrude are separate undo actions.
 
-If you hold Shift and drag, Slab extrudes a new loop first, then moves the new cap. You get extra side faces you did not ask for.
+If a preview is wrong, click **Cancel**, press Escape, or right-click. Slab leaves the solid unchanged.
 
 <Figure
   src="/img/solid-room.png"
@@ -63,10 +64,11 @@ If you hold Shift and drag, Slab extrudes a new loop first, then moves the new c
 ## Cut a door
 
 1. Press <kbd>1</kbd>.
-2. Hover the Create icons until you see **Box**. Click it. That solid is the cutter.
-3. Move the cutter so it pokes through one wall. It should stick out on both sides of the wall thickness.
-4. Click the room solid first, then Shift-click the cutter.
-5. Hover the Object icons until you see **Subtract**. Click it.
+2. Point to **Box** in **Create**. Set **Width** to 1, **Height** to 2, and **Depth** to 1.
+3. Click **Box**. That solid is the cutter.
+4. Move the cutter so it pokes through one wall. It should stick out on both sides of the wall thickness.
+5. Click the room solid first, then Shift-click the cutter.
+6. In **Object**, click **Subtract**.
 
 Slab knifes both wall faces and joins the hole with the cutter's sides. Delete or hide the cutter node afterward.
 
@@ -76,6 +78,6 @@ Slab knifes both wall faces and joins the hole with the cutter's sides. Delete o
   caption="Subtract through a wall. The opening stays a closed solid."
 />
 
-If you want a softer top corner, switch to Edge mode and bevel those edges before you inset. Shift-drag makes a single chamfer; the panel's **Bevel** preview can use 1 to 16 segments for a rounder profile. After the volume is hollow, bevel on those rim edges is often refused. For an arch, hover the Create icons until you see **Arch**. Click it.
+If you want a softer top corner, bevel those edges before you inset. **Bevel** can use 1 to 16 segments. After the volume is hollow, bevel on those rim edges is often refused. To make an arch, switch to Object mode and click **Arch** in **Create**.
 
 Next, [texture a room](/guide/tutorials/texture-a-room), [build a house](/guide/tutorials/build-a-house), [select more than one element](/guide/how-to/select-in-the-view), or [pull a wall](/guide/how-to/pull-a-wall).

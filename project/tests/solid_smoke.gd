@@ -281,15 +281,18 @@ func _check_signed_extrude_after_inset() -> void:
 	_expect(solid.call("make_box", Vector3(4, 3, 4)) == 0, "room box builds")
 	var top: int = _top_face(solid)
 	_expect(solid.call("inset_faces", PackedInt64Array([top]), 0.45) == 0, "room inset succeeds")
-	var selection := SlabSelection.new()
+	var session := preload("res://addons/slab/slab_viewport.gd").new(preload("res://tests/slab_test_host.gd").over(root))
+	var selection: RefCounted = session.state()
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
+	session.bind_actions(actions)
 	var said: Array[String] = []
 	actions.reported.connect(func(text: String) -> void: said.append(text))
 	actions.amount = -1.0
 	actions.run("extrude_faces")
+	actions.operation_apply_requested.emit()
 	_expect(said.is_empty() or not said[0].contains("failed"), "a signed inward extrude after inset commits, got %s" % [said])
 	_expect(solid.call("face_count") > 10, "the room extrusion added faces, got %d" % solid.call("face_count"))
 	var stabbed: Node3D = ClassDB.instantiate("SlabSolid")
@@ -302,6 +305,7 @@ func _check_signed_extrude_after_inset() -> void:
 	actions.amount = -4.0
 	said.clear()
 	actions.run("extrude_faces")
+	actions.operation_apply_requested.emit()
 	_expect(not said.is_empty() and said[0].contains("cross another face") and said[0].contains("opposite wall"),
 		"a numeric stab still refuses at commit with the embedding copy, got %s" % [said])
 

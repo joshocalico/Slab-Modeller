@@ -11,7 +11,6 @@ const SlabPlaneCut := preload("res://addons/slab/slab_plane_cut.gd")
 const SlabLoopCut := preload("res://addons/slab/slab_loop_cut.gd")
 const SlabArray := preload("res://addons/slab/slab_array.gd")
 const SlabSnapAlign := preload("res://addons/slab/slab_snap_align.gd")
-const SlabBevel := preload("res://addons/slab/slab_bevel.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
 
@@ -63,7 +62,6 @@ var _plane: RefCounted
 var _loop: RefCounted
 var _array: RefCounted
 var _snap_align: RefCounted
-var _bevel: RefCounted
 var _paint: RefCounted
 var _gizmo_nodes: Array[Node3D] = []
 var _grab: Grab = Grab.idle()
@@ -93,6 +91,7 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
 	_actions.operation_requested.connect(_begin_operation)
 	_actions.operation_amount_changed.connect(_change_operation_amount)
+	_actions.operation_segments_changed.connect(_change_operation_segments)
 	_actions.operation_apply_requested.connect(_confirm_operation)
 	_actions.operation_cancel_requested.connect(_cancel_operation)
 	_selection.changed.connect(_cancel_operation)
@@ -101,7 +100,7 @@ func bind_actions(actions: RefCounted) -> void:
 			_loop.cancel()
 		_cancel_array()
 		_cancel_snap_align()
-		_cancel_bevel()
+		_cancel_operation()
 		_exit_paint()
 	)
 	_actions.loop_requested.connect(func() -> void:
@@ -109,7 +108,7 @@ func bind_actions(actions: RefCounted) -> void:
 			_plane.cancel()
 		_cancel_array()
 		_cancel_snap_align()
-		_cancel_bevel()
+		_cancel_operation()
 		_exit_paint()
 	)
 	_plane = SlabPlaneCut.new(_selection, _actions, _host)
@@ -129,12 +128,7 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions.align_face_requested.connect(_begin_face_align)
 	_actions.snap_align_settings_changed.connect(_refresh_snap_align)
 	_actions.snap_align_cancel_requested.connect(_cancel_snap_align)
-	_bevel = SlabBevel.new(_selection, _actions, _host)
-	_actions.bevel_requested.connect(_begin_bevel)
-	_actions.bevel_settings_changed.connect(_refresh_bevel)
-	_actions.bevel_apply_requested.connect(_confirm_bevel)
-	_actions.bevel_cancel_requested.connect(_cancel_bevel)
-	_selection.changed.connect(_sync_bevel_state)
+
 
 
 func bind_paint(paint: RefCounted) -> void:
@@ -144,7 +138,7 @@ func bind_paint(paint: RefCounted) -> void:
 			if _paint.active:
 				_cancel_array()
 				_cancel_snap_align()
-				_cancel_bevel()
+				_cancel_operation()
 				if _plane != null and _plane.active:
 					_plane.cancel()
 				if _loop != null and _loop.active:
@@ -163,10 +157,6 @@ func handle(camera: Camera3D, event: InputEvent) -> int:
 		return _handle_operation(camera, event)
 	if _snap_align != null and _snap_align.active:
 		return _snap_align.handle(camera, event)
-	if _bevel != null and _bevel.active:
-		var bevel_verdict: int = _bevel.handle(camera, event)
-		_sync_bevel_state()
-		return bevel_verdict
 	if _array != null and _array.active:
 		return _handle_array(event)
 	if _plane != null and _plane.active:
@@ -200,7 +190,7 @@ func adopt_host_selection() -> void:
 		_loop.cancel()
 	_cancel_array()
 	_cancel_snap_align()
-	_cancel_bevel()
+	_cancel_operation()
 	if _grab.dragging():
 		_cancel()
 	_selection.set_objects(_host.selected_nodes())
@@ -241,7 +231,7 @@ func _begin_array() -> void:
 	if _loop != null and _loop.active:
 		_loop.cancel()
 	_cancel_snap_align()
-	_cancel_bevel()
+	_cancel_operation()
 	_exit_paint()
 	_sync_array_settings()
 	_actions.array_active = _array.begin(_selection.solid)
@@ -315,7 +305,7 @@ func _exit_paint() -> void:
 
 
 func _begin_vertex_snap() -> void:
-	_cancel_bevel()
+	_cancel_operation()
 	_cancel_other_modals_for_snap()
 	_actions.snap_align_active = _snap_align.begin_vertex_snap()
 	_actions.snap_align_mode = SlabActions.SNAP_VERTEX if _actions.snap_align_active else SlabActions.SNAP_NONE
@@ -323,7 +313,7 @@ func _begin_vertex_snap() -> void:
 
 
 func _begin_face_align() -> void:
-	_cancel_bevel()
+	_cancel_operation()
 	_cancel_other_modals_for_snap()
 	_snap_align.oppose_face_normals = _actions.align_oppose_normals
 	_actions.snap_align_active = _snap_align.begin_face_align()
@@ -361,58 +351,6 @@ func _on_snap_align_preview(preview: Dictionary) -> void:
 		_actions.snap_align_active = next_active
 		_actions.snap_align_mode = next_mode
 		_actions.snap_align_state_changed.emit()
-
-
-func _begin_bevel() -> void:
-	if _plane != null and _plane.active:
-		_plane.cancel()
-	if _loop != null and _loop.active:
-		_loop.cancel()
-	_cancel_array()
-	_cancel_snap_align()
-	_exit_paint()
-	_bevel.amount = _actions.amount
-	_bevel.segments = _actions.bevel_segments
-	_bevel.begin()
-	_actions.bevel_active = _bevel.active
-	_actions.snap_align_state_changed.emit()
-
-
-func _refresh_bevel() -> void:
-	if _bevel == null or not _bevel.active:
-		return
-	_bevel.set_amount(_actions.amount)
-	_bevel.set_segments(_actions.bevel_segments)
-
-
-func _confirm_bevel() -> void:
-	if _bevel != null and _bevel.active:
-		_bevel.confirm()
-	_actions.bevel_active = false
-	_actions.snap_align_state_changed.emit()
-
-
-func _cancel_bevel() -> void:
-	var was_active: bool = _bevel != null and _bevel.active
-	if _bevel != null and _bevel.active:
-		_bevel.cancel()
-	if _actions != null and _actions.bevel_active:
-		_actions.bevel_active = false
-		_actions.snap_align_state_changed.emit()
-	if was_active and _actions != null:
-		_actions.status_reset_requested.emit()
-
-
-func _sync_bevel_state() -> void:
-	if _actions == null or _bevel == null:
-		return
-	var next_active: bool = _bevel.active
-	if _actions.bevel_active != next_active:
-		var ended: bool = _actions.bevel_active and not next_active
-		_actions.bevel_active = next_active
-		_actions.snap_align_state_changed.emit()
-		if ended:
-			_actions.status_reset_requested.emit()
 
 
 func _on_motion(camera: Camera3D, event: InputEventMouseMotion) -> int:
@@ -796,12 +734,13 @@ func _begin_operation(kind: int) -> void:
 		return
 	_cancel_array()
 	_cancel_snap_align()
-	_cancel_bevel()
 	_exit_paint()
 	if _plane != null and _plane.active: _plane.cancel()
 	if _loop != null and _loop.active: _loop.cancel()
 	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.amount, _actions.bevel_segments):
 		_publish_operation()
+	else:
+		_actions.reported.emit("This selection cannot run the tool. Select one face or a connected region with a shared direction; Bevel needs valid edges.")
 
 
 func _publish_operation() -> void:
@@ -816,6 +755,14 @@ func _publish_operation() -> void:
 	_actions.operation_state_changed.emit()
 	_selection.hover_changed.emit()
 	_actions.reported.emit(shape["label"] + (". Drag the handle or enter an amount; Apply confirms, Escape cancels." if _operation.error == OK else ". " + _actions.describe_error(_operation.error, "extrude_faces" if _operation.kind == 0 else "")))
+
+
+func _change_operation_segments(value: int) -> void:
+	if not _operation.active: return
+	_actions.bevel_segments = clampi(value, 1, 16)
+	_operation.segments = _actions.bevel_segments
+	_operation.refresh()
+	_publish_operation()
 
 
 func _change_operation_amount(value: float) -> void:
@@ -865,19 +812,25 @@ func _cancel_operation() -> void:
 
 func _confirm_operation() -> void:
 	var before_ids: PackedInt64Array = _selection.ids.duplicate()
+	var operation_name: String = ["Extrude", "Inset", "Bevel"][_operation.kind]
 	var result: Dictionary = _operation.confirm()
-	if result.is_empty(): return
+	if result.is_empty():
+		if not _operation.active:
+			_cancel_operation()
+			_actions.reported.emit("Preview cancelled because the solid changed. Start the tool again.")
+		return
 	_cancel_operation()
 	var after_ids: PackedInt64Array = result["result_ids"]
 	if after_ids.is_empty(): after_ids = before_ids
 	var undo: Object = _host.undo()
 	if undo != null:
-		undo.create_action("Slab Handle Edit", UndoRedo.MERGE_DISABLE, result["solid"])
+		undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
 		undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
 		undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
 		undo.commit_action(false)
 	_selection.set_ids(after_ids)
-	_actions.reported.emit("Handle edit applied.")
+	_actions.amount = result["amount"]
+	_actions.reported.emit(operation_name + " applied. Undo restores the previous solid.")
 
 
 func _restore_operation(solid: Node3D, data: PackedByteArray, ids: PackedInt64Array) -> void:

@@ -1,0 +1,37 @@
+export const metadata = { title: "Meet the Slab editor" };
+
+# Meet the Slab editor
+
+Create a box, edit one face through a preview, and undo the edit. This short tour establishes the workflow used throughout the guide.
+
+## Create a box
+
+1. Open the **Slab** bottom panel.
+2. Press <kbd>1</kbd> for Object mode.
+3. Click **Box** in **Create**. Its default **Width**, **Height**, and **Depth** are 2.
+
+The status names the selected solid. Object mode moves the whole `SlabSolid` with Godot's transform gizmo.
+
+## Select a face
+
+1. Press <kbd>4</kbd> for Face mode.
+2. Click the top face.
+
+The status should report one selected face. Vertex, Edge, and Face modes change which mesh elements a click can select. Press <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, or <kbd>4</kbd> to change mode.
+
+## Preview and apply an edit
+
+1. In **Face**, click **Extrude**, or press <kbd>E</kbd>.
+2. Set **Extrude distance** to 0.5, or drag the coloured handle in the 3D view.
+3. Inspect the preview.
+4. Click **Apply**, or press Enter.
+
+Starting the command does not change the saved solid. **Apply** commits the preview as one undo action. To discard a preview, click **Cancel**, press Escape, or right-click.
+
+## Undo and continue
+
+Press <kbd>Ctrl</kbd>+<kbd>Z</kbd>, or <kbd>Cmd</kbd>+<kbd>Z</kbd> on macOS. The box returns to its earlier shape and Slab restores the face selection.
+
+The same pattern applies to Inset and Bevel: choose the mode, select elements, start the command, adjust the preview, then apply it. Disabled commands need a different mode or selection. Point at a disabled command to read its requirement.
+
+Next, [block out a room](/guide/tutorials/block-out-a-room) or read [Select in the 3D view](/guide/how-to/select-in-the-view) for multi-selection, pivots, axes, and X-ray selection.

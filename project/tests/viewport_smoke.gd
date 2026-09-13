@@ -207,7 +207,9 @@ func case_e_with_a_face_selected_stops() -> void:
 	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_E))
 
 	expect(verdict == SlabViewport.Verdict.STOP, "E is claimed so Godot Rotate does not run")
-	expect(box.call("face_count") == before + 4, "E still extrudes, faces %d after %d" % [box.call("face_count"), before])
+	expect(actions.operation_active and box.call("face_count") == before, "E starts a non-destructive preview")
+	_session.handle(_world.camera(), _world.key(KEY_ENTER))
+	expect(box.call("face_count") == before + 4, "Enter commits the extrusion")
 
 
 func case_mode_key_claims_the_press_so_godot_never_sees_it() -> void:

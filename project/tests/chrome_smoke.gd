@@ -69,10 +69,11 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	var selection := SlabSelection.new()
 	selection.mode = SlabSelection.Mode.EDGE
 	var actions := SlabActions.new(selection)
-	actions.bevel_active = true
+	actions.operation_active = true
+	selection.operation_preview = {"kind": 2}
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	expect(panel.find_child("bevel_amount", true, false) != null, "Bevel modal exposes exact Amount")
+	expect(panel.find_child("HandleAmount", true, false) != null, "Bevel modal exposes exact Amount")
 	expect(panel.find_child("bevel_segments", true, false) != null, "Bevel modal exposes Segments")
 	expect(_button_for(panel, "Apply") != null and _button_for(panel, "Cancel") != null, "Bevel modal exposes Apply and Cancel")
 	panel.free()
@@ -335,7 +336,7 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel.find_child("Settings", true, false)).size() == 8, "Face mode keeps Distance, five transform spins, and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
+	expect(_spins(panel.find_child("Settings", true, false)).size() == 7, "Face mode keeps five UV transform spins and two unwrap settings, got %d" % _spins(panel.find_child("Settings", true, false)).size())
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
 	expect(_label_for(panel, "Face") != null and _label_for(panel, "Selection") != null,
@@ -678,7 +679,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	selection.mode = SlabSelection.Mode.VERTEX
 	expect(not previews.visible and not settings.visible, "Vertex mode has no unused amount or preview controls")
 	selection.mode = SlabSelection.Mode.FACE
-	expect(previews.visible and settings.visible, "Face mode restores previews and settings")
+	expect(not previews.visible and settings.visible, "Face mode shows settings without duplicate launchers")
 	selection.operation_preview = {"kind": 1}
 	actions.operation_active = true
 	actions.operation_state_changed.emit()
@@ -723,11 +724,13 @@ func case_face_distance_accepts_a_negative_extrude() -> void:
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	selection.mode = SlabSelection.Mode.FACE
-	var amount: SpinBox = _spins(panel.find_child("amount", true, false))[0]
+	var value := {"amount": 0.0}
+	actions.operation_amount_changed.connect(func(v: float) -> void: value.amount = v)
+	var amount: SpinBox = panel.find_child("HandleAmount", true, false)
 	expect(amount.min_value < 0.0, "Face distance allows inward values, min %s" % amount.min_value)
 	amount.value = -1.0
 	amount.value_changed.emit(amount.value)
-	expect(is_equal_approx(actions.amount, -1.0), "typing -1 keeps -1, got %s" % actions.amount)
+	expect(is_equal_approx(value.amount, -1.0), "typing -1 keeps -1, got %s" % value.amount)
 	expect(is_equal_approx(amount.value, -1.0), "the spin does not clamp -1 up to 0.05")
 	panel.free()
 
@@ -841,8 +844,10 @@ func case_mouse_click_extrude_and_delete_run() -> void:
 		if n.y > up:
 			up = n.y
 			top = id
-	var selection := SlabSelection.new()
+	var session := preload("res://addons/slab/slab_viewport.gd").new(preload("res://tests/slab_test_host.gd").over(root))
+	var selection: RefCounted = session.state()
 	var actions := SlabActions.new(selection)
+	session.bind_actions(actions)
 	var said: Array[String] = []
 	actions.reported.connect(func(text: String) -> void: said.append(text))
 	var panel := SlabPanel.new()
@@ -878,6 +883,10 @@ func case_mouse_click_extrude_and_delete_run() -> void:
 	extrude.pressed.connect(func() -> void: hits["n"] += 1)
 	var before: int = solid.call("face_count")
 	_mouse_click(extrude)
+	expect(actions.operation_active and int(solid.call("face_count")) == before, "mouse Extrude starts a preview without changing geometry")
+	await process_frame
+	await process_frame
+	_mouse_click(_button_for(panel, "Apply"))
 	expect(hits["n"] == 1, "a viewport mouse click fires Extrude.pressed, got %d size=%s rect=%s" % [
 		hits["n"], extrude.size, extrude.get_global_rect()
 	])

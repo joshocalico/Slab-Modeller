@@ -111,57 +111,70 @@ func _operation_controls() -> Control:
 	var row := HFlowContainer.new()
 	row.name = "OperationHandles"
 	var caption := Label.new()
-	caption.text = "Preview"
-	caption.add_theme_font_size_override("font_size", _font(14))
+	caption.add_theme_font_size_override("font_size", _font(15))
 	row.add_child(caption)
-	var starters: Array[Button] = []
-	for kind in 3:
-		var button := Button.new()
-		button.text = ["Extrude", "Inset", "Bevel"][kind]
-		button.tooltip_text = "Preview %s with a viewport handle. Apply commits; Escape cancels." % button.text.to_lower()
-		starters.append(button)
-		button.add_theme_font_size_override("font_size", _font(14))
-		button.pressed.connect(func() -> void:
-			button.release_focus()
-			_actions.operation_requested.emit(kind))
-		row.add_child(button)
 	var amount := SpinBox.new()
 	amount.name = "HandleAmount"
 	amount.min_value = -64.0
 	amount.max_value = 64.0
 	amount.step = 0.001
 	amount.suffix = "m"
-	amount.custom_minimum_size.x = _scaled(100)
-	amount.add_theme_font_size_override("font_size", _font(14))
-	amount.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	amount.custom_minimum_size.x = _scaled(110)
+	amount.add_theme_font_size_override("font_size", _font(15))
+	amount.get_line_edit().add_theme_font_size_override("font_size", _font(15))
 	amount.value_changed.connect(func(value: float) -> void: _actions.operation_amount_changed.emit(value))
 	row.add_child(amount)
+	var segment_label := Label.new()
+	segment_label.text = "Segments"
+	segment_label.add_theme_font_size_override("font_size", _font(15))
+	row.add_child(segment_label)
+	var segments := SpinBox.new()
+	segments.name = "bevel_segments"
+	segments.min_value = 1
+	segments.max_value = 16
+	segments.step = 1
+	segments.custom_minimum_size.x = _scaled(80)
+	segments.add_theme_font_size_override("font_size", _font(15))
+	segments.get_line_edit().add_theme_font_size_override("font_size", _font(15))
+	segments.value_changed.connect(func(value: float) -> void: _actions.operation_segments_changed.emit(int(value)))
+	row.add_child(segments)
+	var apply_button: Button
 	for apply in [true, false]:
 		var button := Button.new()
 		button.text = "Apply" if apply else "Cancel"
-		button.add_theme_font_size_override("font_size", _font(14))
+		button.accessibility_name = button.text
+		button.set_meta("slab_label", button.text)
+		button.add_theme_font_size_override("font_size", _font(15))
+		button.tooltip_text = "Commit this preview as one undoable edit. Enter also applies." if apply else "Discard this preview. Escape also cancels."
+		button.accessibility_description = button.tooltip_text
 		button.pressed.connect(func() -> void:
 			button.release_focus()
 			if apply: _actions.operation_apply_requested.emit()
 			else: _actions.operation_cancel_requested.emit())
 		row.add_child(button)
+		if apply: apply_button = button
 	var sync := func() -> void:
 		var active: bool = _actions.operation_active
-		row.visible = (_paint == null or not _paint.active) and (_selection.mode in [2, 3] or active)
+		row.visible = (_paint == null or not _paint.active) and active
 		var kind: int = _selection.operation_preview.get("kind", 0)
-		caption.text = (["Extrude", "Inset", "Bevel"][kind] + " preview") if active else "Preview"
-		for i in 3:
-			starters[i].visible = not active and _selection.mode == (2 if i == 2 else 3)
-			starters[i].disabled = _selection.ids.is_empty()
-		for i in range(4, row.get_child_count()):
-			row.get_child(i).visible = active
-		if _settings != null:
-			_settings.visible = not active and (_selection.mode != SlabSelection.Mode.VERTEX or _actions.snap_align_active)
+		caption.text = ["Extrude distance", "Inset distance", "Bevel width"][kind]
+		segment_label.visible = active and kind == 2
+		segments.visible = active and kind == 2
+		segments.set_value_no_signal(_actions.bevel_segments)
+		amount.min_value = -64.0 if kind == 0 else 0.001
 		amount.set_value_no_signal(_actions.operation_amount)
+		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
+		if _settings != null:
+			_settings.visible = _show_settings()
+		_refresh_buttons()
 	_selection.changed.connect(sync)
 	_actions.operation_state_changed.connect(sync)
 	sync.call()
 	return row
+
+
+func _show_settings() -> bool:
+	return not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _selection.ids.size() >= 2 or _actions.snap_align_active)
 
 
 func _get_minimum_size() -> Vector2:
@@ -212,6 +225,7 @@ func refresh() -> void:
 		_built_mode = mode
 		_refresh_settings()
 	_refresh_buttons()
+	_settings.visible = _show_settings()
 	_refresh_material_chips()
 	set_status(_last_report if _last_report != "" else _selection.describe())
 	if _paint != null and _paint.active:
@@ -257,7 +271,7 @@ func _refresh_buttons() -> void:
 
 
 func _refresh_settings() -> void:
-	_settings.visible = not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _actions.snap_align_active)
+	_settings.visible = _show_settings()
 	for spin in _spins_under(_settings_fields):
 		spin.apply()
 		if not spin.is_inside_tree():
@@ -322,9 +336,6 @@ func _refresh_settings() -> void:
 			_add_snap_align_settings()
 			_uv_wrap = null
 		else:
-			_settings_fields.add_child(_spin("Distance", SlabActions.EXTRUDE_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
-				_actions.amount = v
-			, "Positive extrudes outward. Negative extrudes inward. Inset uses the absolute value.", &"amount"))
 			_settings_fields.add_child(_uv_toggle())
 			_uv_wrap = HFlowContainer.new()
 			_uv_wrap.name = "UvFields"
@@ -353,18 +364,16 @@ func _refresh_settings() -> void:
 			, "Texture resolution used to convert density into normalized UV scale.", &"uv_texture_resolution"))
 			_settings_fields.add_child(_uv_wrap)
 	else:
-		_settings_title.text = "Bevel" if _actions.bevel_active else ("Snap to Vertex" if _actions.snap_align_active else "Edge settings")
+		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Weld" if mode == SlabSelection.Mode.VERTEX else "Loop cut")
 		_settings_title.visible = true
-		if _actions.bevel_active:
-			_add_bevel_settings()
-		elif _actions.snap_align_active:
+		if _actions.snap_align_active:
 			_add_snap_align_settings()
-		else:
-			_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
+		elif mode == SlabSelection.Mode.VERTEX:
+			_settings_fields.add_child(_spin("Weld distance", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _clamped_amount(), func(v: float) -> void:
 				_actions.amount = v
 			, "", &"amount"))
 		_uv_wrap = null
-	if mode == SlabSelection.Mode.EDGE and not _actions.snap_align_active and not _actions.bevel_active:
+	if mode == SlabSelection.Mode.EDGE and not _actions.snap_align_active:
 		_settings_fields.add_child(_spin("Cuts", 1, 32, 1, _actions.loop_count, func(v: float) -> void:
 			_actions.loop_count = int(v)
 			_actions.loop_settings_changed.emit()
@@ -454,23 +463,6 @@ func _add_snap_align_settings() -> void:
 		_settings_fields.add_child(oppose)
 	_settings_fields.add_child(_named_action("Cancel", "Clear", "Leave the source unchanged and clear the target preview.", func() -> void:
 		_actions.snap_align_cancel_requested.emit()
-	))
-
-
-func _add_bevel_settings() -> void:
-	_settings_fields.add_child(_spin("Amount", SlabActions.AMOUNT_FLOOR, SlabActions.AMOUNT_CEILING, 0.05, _actions.amount, func(v: float) -> void:
-		_actions.amount = v
-		_actions.bevel_settings_changed.emit()
-	, "Exact bevel width in metres.", &"bevel_amount"))
-	_settings_fields.add_child(_spin("Segments", 1, 16, 1, _actions.bevel_segments, func(v: float) -> void:
-		_actions.bevel_segments = int(v)
-		_actions.bevel_settings_changed.emit()
-	, "One is a chamfer; higher values make a rounder profile.", &"bevel_segments"))
-	_settings_fields.add_child(_named_action("Apply", "Apply", "Commit the preview as one undoable bevel.", func() -> void:
-		_actions.bevel_apply_requested.emit()
-	))
-	_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the bevel preview.", func() -> void:
-		_actions.bevel_cancel_requested.emit()
 	))
 
 
@@ -1168,7 +1160,7 @@ func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
 	if _selection_controls != null: _selection_controls.visible = not on
 	if _operation_row != null:
-		_operation_row.visible = not on and (_selection.mode in [2, 3] or _actions.operation_active)
+		_operation_row.visible = not on and _actions.operation_active
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(on)
 	if _model_body != null:

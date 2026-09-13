@@ -20,6 +20,10 @@ export const GUIDE_NAV: NavGroup[] = [
     title: "Tutorial",
     items: [
       {
+        href: "/guide/tutorials/editor-orientation",
+        label: "Meet the Slab editor",
+      },
+      {
         href: "/guide/tutorials/block-out-a-room",
         label: "Block out a room",
       },
@@ -57,6 +61,10 @@ export const GUIDE_NAV: NavGroup[] = [
       {
         href: "/guide/how-to/paint-texture-pixels",
         label: "Paint texture pixels",
+      },
+      {
+        href: "/guide/how-to/prepare-a-solid-for-runtime",
+        label: "Prepare a solid for runtime",
       },
     ],
   },

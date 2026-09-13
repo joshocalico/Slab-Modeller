@@ -9,6 +9,7 @@ signal reported(text: String)
 signal status_reset_requested
 signal operation_requested(kind: int)
 signal operation_amount_changed(value: float)
+signal operation_segments_changed(value: int)
 signal operation_apply_requested
 signal operation_cancel_requested
 signal operation_state_changed
@@ -32,10 +33,6 @@ signal align_face_requested
 signal snap_align_settings_changed
 signal snap_align_state_changed
 signal snap_align_cancel_requested
-signal bevel_requested
-signal bevel_settings_changed
-signal bevel_apply_requested
-signal bevel_cancel_requested
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -90,7 +87,6 @@ var array_rotate_copies := true
 var snap_align_active: bool = false
 var snap_align_mode: int = SNAP_NONE
 var align_oppose_normals := true
-var bevel_active := false
 var bevel_segments: int = 1
 
 var amount: float = 0.5
@@ -160,6 +156,8 @@ static func section_of(row: Dictionary) -> String:
 
 
 func disabled_reason(row: Dictionary) -> String:
+	if operation_active:
+		return "Apply or cancel the current preview first."
 	var modes: Array = row["modes"]
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
@@ -195,6 +193,9 @@ func run_shortcut(keycode: int) -> bool:
 
 
 func _apply(row: Dictionary, plan: Dictionary) -> void:
+	if plan.has("preview"):
+		operation_requested.emit(plan["preview"])
+		return
 	if plan.has("status"):
 		_report(plan["status"])
 		return
@@ -325,8 +326,8 @@ func _unwrap_op() -> Dictionary:
 	return { "run": _unwrap_target }
 
 
-func _amount_op(method: String) -> Dictionary:
-	return { "method": method, "args": [_selection.ids, amount] }
+func _operation_op(kind: int) -> Dictionary:
+	return { "preview": kind }
 
 
 func _positive_amount() -> float:
@@ -473,11 +474,6 @@ func _align_face_op() -> Dictionary:
 	return { "status": "Align Face: point at a face on another solid, preview the rigid placement, then click to apply. Escape cancels." }
 
 
-func _bevel_op() -> Dictionary:
-	bevel_requested.emit()
-	return { "status": "Bevel: adjust Amount and Segments, then Apply or press Enter." }
-
-
 func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
@@ -579,7 +575,7 @@ func _build() -> Array[Dictionary]:
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
 		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Cuts an edge between the selected vertices.", KEY_K, _ids_op.bind("connect_vertices")),
 
-		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _bevel_op),
+		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _operation_op.bind(2)),
 		_row("bridge_edges", "Bridge", "CurveIn", edge, 2, "Builds a face between two open edges.", KEY_G, _ids_op.bind("bridge_edges")),
 		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Cuts a new edge between edge midpoints.", KEY_K, _ids_op.bind("connect_edges")),
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
@@ -587,8 +583,8 @@ func _build() -> Array[Dictionary]:
 		_row("mark_uv_seam", "Mark Seam", "MaterialPreviewCube", edge, 1, "Marks selected edges as UV island boundaries.", 0, _seam_op.bind(true)),
 		_row("clear_uv_seam", "Clear Seam", "Save", edge, 1, "Removes UV seam marks from selected edges.", 0, _seam_op.bind(false)),
 
-		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _amount_op.bind("extrude_faces")),
-		_row("inset_faces", "Inset", "ToolScale", face, 1, "Shrinks one face, or one connected coplanar face region, inside its shared boundary.", KEY_I, _positive_amount_op.bind("inset_faces")),
+		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _operation_op.bind(0)),
+		_row("inset_faces", "Inset", "ToolScale", face, 1, "Shrinks one face, or one connected coplanar face region, inside its shared boundary.", KEY_I, _operation_op.bind(1)),
 		_row("delete_faces", "Delete", "Remove", face, 1, "Deletes the selected faces. A closed solid cannot open.", KEY_DELETE, _ids_op.bind("delete_faces")),
 		_row("flip_faces", "Flip Normals", "QuadMesh", face, 1, "Reverses which way the faces point.", KEY_N, _ids_op.bind("flip_faces")),
 		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each face into four.", KEY_U, _ids_op.bind("subdivide_faces")),

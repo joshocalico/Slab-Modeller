@@ -17,7 +17,7 @@ If you do not have Slab open yet, do [Install Slab](/guide/install) first. Arch 
 ## Create the walls
 
 1. Press <kbd>1</kbd> for Object mode.
-2. Hover the Create icons until you see **Box**.
+2. Point to **Box** in **Create** to show its fields.
 3. Set **Width** to 4, **Height** to 2.2, and **Depth** to 4.
 4. Click **Box**.
 
@@ -25,7 +25,7 @@ A `SlabSolid` appears at the origin.
 
 ## Make the arch
 
-1. Hover until you see **Arch**.
+1. Point to **Arch** in **Create** to show its fields.
 2. Set **Width** to 4 and **Depth** to 4. Width is the outer span.
 3. Set **Segments** to 12, **Thickness** to 0.4, and **Arc** to 180.
 4. Click **Arch**.
@@ -49,7 +49,7 @@ The feet must overlap the box a little. Union of two solids that only touch, or 
 ## Union
 
 1. Click the box first, then Shift-click the arch. The box must stay first.
-2. Hover the Object icons until you see **Union**. Click it.
+2. In **Object**, click **Union**.
 
 The arch joins the box. Hide or delete the unused arch node afterward. You should see one vaulted solid.
 
@@ -63,10 +63,10 @@ If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so 
 
 ## Cut a door
 
-1. Hover until you see **Box**. Set **Width** to 0.9, **Height** to 1.6, and **Depth** to 1.2. Click **Box**.
+1. Point to **Box** in **Create**. Set **Width** to 0.9, **Height** to 1.6, and **Depth** to 1.2. Click **Box**.
 2. Move that cutter so it pokes through one wall. It should stick out on both sides of the wall.
 3. Click the house first, then Shift-click the cutter.
-4. Hover until you see **Subtract**. Click it.
+4. In **Object**, click **Subtract**.
 
 <Figure
   src="/img/house-03.png"
@@ -84,7 +84,7 @@ If Slab refuses Union, the arch is disjoint or fully inside the box. Move it so 
 Faces still use slot 0.
 
 5. Click a roof face. Grow until the vault is selected.
-6. Click chip 1. Hover until you see **Set Material**. Click it.
+6. Click chip 1, then click **Set Material** in **Face**.
 7. Click a gable face, the flat end of the arch. Click chip 2, then **Set Material**.
 
 <Figure
@@ -93,7 +93,7 @@ Faces still use slot 0.
   caption="Slot 0 on the walls. Slot 1 on the vault. Slot 2 on the gables."
 />
 
-Click **UV** beside Distance to open the placement fields. Set **UV scale X** and **UV scale Y** to 2, then **Apply UV** on the roof if the pattern is huge. **UV Larger** doubles the scale on the selected faces.
+Open **UV** in the Face settings. Set **UV scale X** and **UV scale Y** to 2, then click **Apply UV** on the roof if the pattern is huge. **UV Larger** doubles the scale on the selected faces.
 
 ## Check
 

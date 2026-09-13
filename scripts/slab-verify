@@ -8,7 +8,15 @@ step() {
 	local name="$1"
 	shift
 	printf '\n=== %s ===\n' "${name}"
-	if "$@"; then
+	local step_log
+	step_log="$(mktemp)"
+	local passed=0
+	if "$@" 2>&1 | tee "$step_log"; then
+		# Godot can return zero after a GDScript parse/runtime error.
+		if ! grep -q '^SCRIPT ERROR:' "$step_log"; then passed=1; fi
+	fi
+	rm -f "$step_log"
+	if [[ "$passed" == 1 ]]; then
 		printf 'PASS %s\n' "${name}"
 	else
 		printf 'FAIL %s\n' "${name}"

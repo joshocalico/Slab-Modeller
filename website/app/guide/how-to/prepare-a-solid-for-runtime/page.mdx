@@ -1,0 +1,36 @@
+export const metadata = { title: "Prepare a solid for runtime" };
+
+# Prepare a solid for runtime
+
+Use editable `SlabSolid` nodes directly in a scene, or build one combined mesh from a `SlabModule` in code.
+
+## Save editable solids
+
+1. Keep each `SlabSolid` in the edited scene tree.
+2. Save the scene.
+3. Close and reopen the scene.
+4. Select a solid and enter Face mode to confirm that its faces remain editable.
+
+The `SlabSolid` stores its half-edge data and material slots. Its internal `Mesh` and `__body/__shape` children are generated output. Do not edit or move those children.
+
+## Test collision
+
+1. Select the `SlabSolid` in the scene tree.
+2. Leave **Collision Enabled** on for floors, walls, and other static level geometry.
+3. Run the scene and test it with the player or another physics body.
+4. Return to the editor, change the solid, and run the scene again.
+
+Slab rebuilds the visible mesh and its concave `StaticBody3D` collision after every geometry edit. Turn **Collision Enabled** off for decorative solids or when another node owns collision.
+
+## Build a combined module mesh
+
+Call `bake_mesh()` when code needs one `ArrayMesh` from the direct `SlabSolid` children of a `SlabModule`:
+
+```gdscript
+var baked: ArrayMesh = $SlabModule.bake_mesh()
+$MeshInstance3D.mesh = baked
+```
+
+The baked mesh applies each direct child's transform and combines positions, normals, UVs, and triangle indices. It omits nested solids, sockets, collision, and material assignments. Keep the original module when you still need editable geometry or those omitted parts.
+
+Save any resource created from the returned mesh with Godot's `ResourceSaver` if it must persist outside the running scene. See [Nodes and output](/guide/reference/nodes-and-output) for the complete node contract.

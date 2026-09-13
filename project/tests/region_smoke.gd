@@ -26,17 +26,22 @@ func _run() -> void:
 	var caps := _up_faces(solid, 5.0)
 	check(caps.size() == 4, "four connected cap faces are selected")
 
-	var selection := Selection.new()
+	var host: RefCounted = preload("res://tests/slab_test_host.gd").over(root)
+	var session := preload("res://addons/slab/slab_viewport.gd").new(host)
+	var selection: RefCounted = session.state()
 	selection.set_objects([solid])
 	selection.mode = Selection.Mode.FACE
 	var undo := Undo.new()
+	host.stub_undo(undo)
 	var actions := Actions.new(selection, undo)
+	session.bind_actions(actions)
 	selection.set_ids(PackedInt64Array([caps[0]]))
 	actions.run("select_coplanar")
 	check(selection.ids.size() == 4, "Select Coplanar expands one subdivided top face to its connected four-face plane")
 	var before_inset: PackedByteArray = solid.get("data")
 	actions.amount = 0.45
 	actions.run("inset_faces")
+	actions.operation_apply_requested.emit()
 	var after_inset: PackedByteArray = solid.get("data")
 	check(after_inset != before_inset, "Inset edits the connected region")
 	check(selection.ids.size() == 4 and _all_faces_alive(solid, selection.ids), "Inset refreshes all four cap handles")
@@ -44,6 +49,7 @@ func _run() -> void:
 
 	actions.amount = -2.4
 	actions.run("extrude_faces")
+	actions.operation_apply_requested.emit()
 	var after_extrude: PackedByteArray = solid.get("data")
 	check(after_extrude != after_inset, "negative Extrude pulls the inset region into a room")
 	check(selection.ids.size() == 4 and _all_faces_alive(solid, selection.ids), "Extrude refreshes all four cap handles")
@@ -61,6 +67,7 @@ func _run() -> void:
 	actions.reported.connect(func(text: String) -> void: reports.append(text))
 	actions.amount = 0.5
 	actions.run("extrude_faces")
+	actions.operation_apply_requested.emit()
 	check(solid.get("data") == before_refusal, "disconnected region leaves geometry unchanged")
 	check(not reports.is_empty() and reports.back().contains("selection cannot run"), "disconnected region reports an invalid selection")
 
