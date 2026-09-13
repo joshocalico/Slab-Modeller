@@ -351,6 +351,9 @@ func _check_unique_paint_undo_save() -> void:
 	_expect(solid.call("face_count") == before_faces, "painting never changes geometry")
 	var painted: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
 	_expect(painted.r > 0.4, "the stroke wrote red into the albedo, %s" % painted)
+	var painted_mip_color := _mip_center(paint.image(), 1)
+	_expect(painted_mip_color.r > 0.35 and painted_mip_color.r > painted_mip_color.b * 1.4,
+		"live paint regenerates the minified mip level, got %s" % painted_mip_color)
 	_expect(undo.actions.size() >= 2, "unique and stroke recorded undo")
 	var stroke_action: Dictionary = undo.actions[undo.actions.size() - 1]
 	_expect(String(stroke_action.get("name", "")) == "Slab Paint Stroke",
@@ -363,9 +366,13 @@ func _check_unique_paint_undo_save() -> void:
 	undo.undo()
 	var restored: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
 	_expect(restored.r < painted.r - 0.1, "undo restores the pre-stroke albedo, %s" % restored)
+	_expect(_mip_center(paint.image(), 1).r < painted_mip_color.r - 0.1,
+		"undo restores the prior minified mip level")
 	undo.redo()
 	var redone: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
 	_expect(redone.r > 0.4, "redo reapplies the stroke")
+	_expect(_mip_center(paint.image(), 1).r > 0.35,
+		"redo reapplies the painted minified mip level")
 	var path: String = "user://slab_paint_test/paintbox.png"
 	_expect(paint.save_png(path) == OK, "save writes a PNG")
 	_expect(FileAccess.file_exists(path), "the PNG exists on disk")
@@ -884,6 +891,49 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(hint.get_parent() == canvas, "the UV hint overlays the canvas instead of adding a dock row")
 	_expect(hint.text == SlabPaint.uv_canvas_hint(),
 		"the live hint matches the platform rotate modifier, got %s" % hint.text)
+	paint.tool = SlabPaint.Tool.MATERIAL_UV
+	panel.refresh()
+	var fit_uv: Button = panel.find_child("PaintFitUv", true, false)
+	_expect(fit_uv != null and fit_uv.visible, "Material/UV exposes an explicit Fit UV control")
+	_expect(fit_uv != null and fit_uv.position.x >= 8.0 and fit_uv.position.x + fit_uv.size.x <= canvas.size.x - 7.0,
+		"Fit UV stays inside the compact canvas with right padding")
+	_expect(fit_uv != null and fit_uv.get_combined_minimum_size().x <= fit_uv.size.x + 0.5,
+		"Fit UV has enough width for its complete label")
+	var hint_style := hint.get_theme_stylebox("normal") as StyleBoxFlat
+	_expect(hint_style != null and hint_style.bg_color.a >= 0.75,
+		"UV instructions have a readable translucent background")
+	solid.call("set_face_uv", selection.ids, Vector2(3.0, 0.5), Vector2.ZERO, 0.0)
+	paint.rebind()
+	canvas.frame_uv()
+	var expanded_uvs: PackedVector2Array = paint.selected_uvs()
+	var expanded_bounds := SlabPaintCanvas._uv_bounds(expanded_uvs)
+	_expect(expanded_bounds.size.x > 1.0, "UV fixture spans repeated texture tiles")
+	var framed := true
+	for uv in expanded_uvs:
+		var point: Vector2 = canvas.call("_uv_to_canvas", uv)
+		framed = framed and Rect2(Vector2.ZERO, canvas.size).grow(1.0).has_point(point)
+	_expect(framed, "Fit UV frames every original unwrapped boundary corner")
+	var second_face: int = 0
+	for face in solid.call("get_faces"):
+		if face != top:
+			second_face = face
+			break
+	selection.set_ids(PackedInt64Array([top, second_face]))
+	paint.rebind()
+	canvas.frame_uv()
+	var selected_loops: Array = paint.selected_uv_loops()
+	_expect(second_face != 0 and selected_loops.size() == 2,
+		"Material/UV renders every selected face outline")
+	var all_framed := true
+	for loop: PackedVector2Array in selected_loops:
+		for uv in loop:
+			all_framed = all_framed and Rect2(Vector2.ZERO, canvas.size).grow(1.0).has_point(canvas.call("_uv_to_canvas", uv))
+	_expect(all_framed, "Fit UV frames all selected face outlines together")
+	canvas.set("_uv_pixels_per_unit", 2.0)
+	var before_zoom_out: float = canvas.get("_uv_pixels_per_unit")
+	canvas.call("_zoom_at", canvas.size * 0.5, 1.0 / 1.12)
+	_expect(float(canvas.get("_uv_pixels_per_unit")) < before_zoom_out,
+		"UV wheel zoom-out stays monotonic after fitting a large extent")
 	panel.free()
 	paint.exit()
 	solid.free()
@@ -891,6 +941,15 @@ func _check_canvas_letterbox_and_press() -> void:
 
 func _rects_overlap(a: Rect2, b: Rect2) -> bool:
 	return a.grow(-1.0).intersects(b.grow(-1.0))
+
+
+func _mip_center(image: Image, level: int) -> Color:
+	var width := maxi(1, image.get_width() >> level)
+	var height := maxi(1, image.get_height() >> level)
+	var offset := image.get_mipmap_offset(level)
+	var data := image.get_data()
+	var index := offset + ((height / 2) * width + width / 2) * 4
+	return Color(data[index] / 255.0, data[index + 1] / 255.0, data[index + 2] / 255.0, data[index + 3] / 255.0)
 
 
 func _buttons_under(node: Node) -> Array[Button]:

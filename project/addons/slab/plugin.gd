@@ -65,6 +65,8 @@ func _enter_tree() -> void:
 	_sync_native_local_axes()
 	_on_editor_selection_changed()
 	main_screen_changed.connect(_on_main_screen_changed)
+	if not scene_saved.is_connected(_on_scene_saved):
+		scene_saved.connect(_on_scene_saved)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
@@ -76,6 +78,8 @@ func _exit_tree() -> void:
 		_host.disconnect_host_selection(_on_editor_selection_changed)
 	if main_screen_changed.is_connected(_on_main_screen_changed):
 		main_screen_changed.disconnect(_on_main_screen_changed)
+	if scene_saved.is_connected(_on_scene_saved):
+		scene_saved.disconnect(_on_scene_saved)
 	if _selection:
 		if _selection.changed.is_connected(_refresh_gizmos):
 			_selection.changed.disconnect(_refresh_gizmos)
@@ -154,6 +158,11 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func _on_main_screen_changed(screen_name: String) -> void:
 	_workspace = screen_name
+
+
+func _on_scene_saved(path: String) -> void:
+	if _paint != null:
+		_paint.scene_saved(path)
 
 
 func _on_selection_settings_changed() -> void:

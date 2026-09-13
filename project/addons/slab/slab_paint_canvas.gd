@@ -12,6 +12,7 @@ signal stroke_cancelled
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 8.0
+const MAX_VISIBLE_TILES := 256
 
 var _paint: RefCounted
 var _metrics: RefCounted
@@ -23,6 +24,10 @@ var _zoom: float = 1.0
 var _pan := Vector2.ZERO
 var _pan_from := Vector2.ZERO
 var _pan_origin := Vector2.ZERO
+var _uv_center := Vector2(0.5, 0.5)
+var _uv_pixels_per_unit: float = 100.0
+var _uv_pan := Vector2.ZERO
+var _uv_signature := ""
 
 
 func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
@@ -46,6 +51,27 @@ func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
 func _paint_changed() -> void:
 	if not _paint.stroke_active and not _paint.uv_drag_active:
 		_dragging = false
+	var signature := _selection_signature()
+	if signature != _uv_signature:
+		_uv_signature = signature
+		frame_uv.call_deferred()
+	queue_redraw()
+
+
+func frame_uv() -> void:
+	if _paint == null or _paint.is_pixel():
+		_zoom = 1.0
+		_pan = Vector2.ZERO
+		queue_redraw()
+		return
+	var loops: Array = _paint.selected_uv_loops()
+	if loops.is_empty() or size.x < 2.0 or size.y < 2.0:
+		return
+	var bounds := _uv_loops_bounds(loops)
+	var span := Vector2(maxf(bounds.size.x, 0.25), maxf(bounds.size.y, 0.25))
+	_uv_center = bounds.get_center()
+	_uv_pixels_per_unit = maxf(0.01, minf(size.x / span.x, size.y / span.y) * 0.82)
+	_uv_pan = Vector2.ZERO
 	queue_redraw()
 
 
@@ -72,6 +98,8 @@ func canvas_to_pixel(pos: Vector2) -> Vector2:
 
 
 func hits_image(pos: Vector2) -> bool:
+	if _paint != null and not _paint.is_pixel():
+		return Rect2(Vector2.ZERO, size).has_point(pos)
 	var fitted := image_rect()
 	return fitted.size.x > 1.0 and fitted.size.y > 1.0 and fitted.has_point(pos)
 
@@ -96,7 +124,7 @@ func _gui_input(event: InputEvent) -> void:
 		if event.pressed:
 			_panning = true
 			_pan_from = event.position
-			_pan_origin = _pan
+			_pan_origin = _pan if _paint.is_pixel() else _uv_pan
 		else:
 			_panning = false
 		accept_event()
@@ -108,7 +136,10 @@ func _gui_input(event: InputEvent) -> void:
 			_brush = Vector2(-1, -1)
 		queue_redraw()
 		if _panning:
-			_pan = _pan_origin + (event.position - _pan_from)
+			if _paint.is_pixel():
+				_pan = _pan_origin + (event.position - _pan_from)
+			else:
+				_uv_pan = _pan_origin + (event.position - _pan_from)
 			queue_redraw()
 			accept_event()
 			return
@@ -159,6 +190,9 @@ func cancel() -> void:
 func _draw() -> void:
 	var rect := Rect2(Vector2.ZERO, size)
 	draw_rect(rect, Color(0.12, 0.12, 0.12))
+	if _paint != null and not _paint.is_pixel():
+		_draw_uv_workspace()
+		return
 	var fitted := image_rect()
 	if fitted.size.x <= 1.0 or fitted.size.y <= 1.0:
 		return
@@ -183,7 +217,46 @@ func _draw() -> void:
 		draw_arc(_brush, _paint.brush_radius * pixel_scale(), 0.0, TAU, 32, Color(1, 1, 1, 0.85), 1.5)
 
 
+func _draw_uv_workspace() -> void:
+	var tex: Texture2D = _paint.texture()
+	var a := _canvas_to_uv(Vector2.ZERO)
+	var b := _canvas_to_uv(size)
+	var x0 := int(floor(minf(a.x, b.x)))
+	var x1 := int(ceil(maxf(a.x, b.x)))
+	var y0 := int(floor(minf(a.y, b.y)))
+	var y1 := int(ceil(maxf(a.y, b.y)))
+	_draw_checker(Rect2(Vector2.ZERO, size))
+	if tex != null and tex.get_width() > 0 and tex.get_height() > 0:
+		var texture_size := Vector2(tex.get_width(), tex.get_height())
+		draw_set_transform(_uv_to_canvas(Vector2.ZERO), 0.0,
+			Vector2(_uv_pixels_per_unit / texture_size.x, _uv_pixels_per_unit / texture_size.y))
+		draw_texture_rect(tex, Rect2(Vector2(x0, y0) * texture_size,
+			Vector2(x1 - x0, y1 - y0) * texture_size), true)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var count := 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			if count >= MAX_VISIBLE_TILES:
+				break
+			var tile := Rect2(_uv_to_canvas(Vector2(x, y)), Vector2(_uv_pixels_per_unit, _uv_pixels_per_unit))
+			draw_rect(tile, Color(0.45, 0.45, 0.45, 0.7), false, 1.0)
+			count += 1
+		if count >= MAX_VISIBLE_TILES:
+			break
+	for uvs: PackedVector2Array in _paint.selected_uv_loops():
+		if uvs.size() < 2:
+			continue
+		var pts := PackedVector2Array()
+		for uv in uvs:
+			pts.append(_uv_to_canvas(uv))
+		pts.append(pts[0])
+		draw_polyline(pts, Color(0.95, 0.82, 0.28), 2.0, true)
+
+
 func _draw_checker(fitted: Rect2) -> void:
+	fitted = fitted.intersection(Rect2(Vector2.ZERO, size))
+	if fitted.size.x <= 0.0 or fitted.size.y <= 0.0:
+		return
 	var cell: float = maxf(8.0, _metrics.px(8.0))
 	var x0: int = int(floor(fitted.position.x / cell))
 	var y0: int = int(floor(fitted.position.y / cell))
@@ -199,11 +272,15 @@ func _draw_checker(fitted: Rect2) -> void:
 
 
 func _uv_to_canvas(uv: Vector2) -> Vector2:
+	if _paint != null and not _paint.is_pixel():
+		return (uv - _uv_center) * _uv_pixels_per_unit + size * 0.5 + _uv_pan
 	var fitted := image_rect()
 	return fitted.position + Vector2(uv.x * fitted.size.x, uv.y * fitted.size.y)
 
 
 func _canvas_to_uv(pos: Vector2) -> Vector2:
+	if _paint != null and not _paint.is_pixel():
+		return (pos - size * 0.5 - _uv_pan) / maxf(_uv_pixels_per_unit, 0.001) + _uv_center
 	var fitted := image_rect()
 	if fitted.size.x < 0.001 or fitted.size.y < 0.001:
 		return Vector2.ZERO
@@ -222,6 +299,12 @@ func _canvas_to_pixel(pos: Vector2) -> Vector2:
 
 
 func _zoom_at(pos: Vector2, factor: float) -> void:
+	if _paint != null and not _paint.is_pixel():
+		var anchor := _canvas_to_uv(pos)
+		_uv_pixels_per_unit = clampf(_uv_pixels_per_unit * factor, 0.01, 4096.0)
+		_uv_pan = pos - size * 0.5 - (anchor - _uv_center) * _uv_pixels_per_unit
+		queue_redraw()
+		return
 	var uv: Vector2 = _canvas_to_uv(pos)
 	_zoom = clampf(_zoom * factor, ZOOM_MIN, ZOOM_MAX)
 	var img: Image = _paint.image() if _paint != null else null
@@ -233,3 +316,31 @@ func _zoom_at(pos: Vector2, factor: float) -> void:
 	var drawn: Vector2 = img_size * fit * _zoom
 	_pan = pos - Vector2(uv.x * drawn.x, uv.y * drawn.y) - (size - drawn) * 0.5
 	queue_redraw()
+
+
+func _selection_signature() -> String:
+	if _paint == null or _paint.is_pixel():
+		return "pixel"
+	var solid: Node3D = _paint.get("_solid")
+	var selection: RefCounted = _paint.get("_selection")
+	var ids: PackedInt64Array = selection.ids if selection != null else PackedInt64Array()
+	return "%s:%s" % [solid.get_instance_id() if solid != null else 0, ids]
+
+
+static func _uv_bounds(uvs: PackedVector2Array) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for uv in uvs:
+		lo = lo.min(uv)
+		hi = hi.max(uv)
+	return Rect2(lo, hi - lo)
+
+
+static func _uv_loops_bounds(loops: Array) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for uvs: PackedVector2Array in loops:
+		var bounds := _uv_bounds(uvs)
+		lo = lo.min(bounds.position)
+		hi = hi.max(bounds.end)
+	return Rect2(lo, hi - lo)

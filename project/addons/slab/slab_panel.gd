@@ -54,6 +54,7 @@ var _paint_tool_pixel: Button
 var _unique_button: Button
 var _paint_picker: Node
 var _paint_uv_hint: Label
+var _paint_fit_uv: Button
 var _paint_uv_controls: Control
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
@@ -912,17 +913,39 @@ func _paint_block() -> Control:
 	_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
 	_paint_uv_hint.add_theme_font_size_override("font_size", _font(12))
 	_paint_uv_hint.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62, 0.92))
-	_paint_uv_hint.add_theme_color_override("font_shadow_color", Color.BLACK)
-	_paint_uv_hint.add_theme_constant_override("shadow_outline_size", 4)
+	var hint_bg := StyleBoxFlat.new()
+	hint_bg.bg_color = Color(0.04, 0.04, 0.04, 0.82)
+	hint_bg.corner_radius_top_left = 3
+	hint_bg.corner_radius_top_right = 3
+	hint_bg.corner_radius_bottom_left = 3
+	hint_bg.corner_radius_bottom_right = 3
+	hint_bg.content_margin_left = 5
+	hint_bg.content_margin_right = 5
+	hint_bg.content_margin_top = 2
+	hint_bg.content_margin_bottom = 2
+	_paint_uv_hint.add_theme_stylebox_override("normal", hint_bg)
 	_paint_uv_hint.clip_text = true
 	_paint_uv_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_paint_canvas.add_child(_paint_uv_hint)
 	_paint_uv_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
 	_paint_uv_hint.offset_left = 6
 	_paint_uv_hint.offset_top = 4
-	_paint_uv_hint.offset_right = -6
-	_paint_uv_hint.offset_bottom = 18
-	_paint_canvas.add_child(_paint_uv_hint)
+	_paint_uv_hint.offset_right = -104
+	_paint_uv_hint.offset_bottom = 28
+	_paint_fit_uv = Button.new()
+	_paint_fit_uv.name = "PaintFitUv"
+	_paint_fit_uv.text = "Fit UV"
+	_paint_fit_uv.add_theme_font_size_override("font_size", _font(12))
+	_paint_fit_uv.tooltip_text = "Frame the selected faces' complete unwrapped UV outlines."
+	_paint_fit_uv.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_paint_canvas.add_child(_paint_fit_uv)
+	_paint_fit_uv.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_paint_fit_uv.offset_left = -96
+	_paint_fit_uv.offset_top = 3
+	_paint_fit_uv.offset_right = -8
+	_paint_fit_uv.offset_bottom = 29
+	_paint_fit_uv.pressed.connect(_paint_canvas.frame_uv)
 	row.add_child(_paint_canvas)
 	_paint_brush = _brush_column()
 	row.add_child(_paint_brush)
@@ -1246,6 +1269,8 @@ func _refresh_paint_chrome() -> void:
 	if _paint_uv_hint != null:
 		_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
 		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
+	if _paint_fit_uv != null:
+		_paint_fit_uv.visible = _paint != null and not _paint.is_pixel()
 	if _paint_uv_controls != null:
 		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
 	if _paint_brush != null:

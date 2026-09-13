@@ -69,6 +69,7 @@ var _uv_solid: Node3D
 var _uv_ids := PackedInt64Array()
 var _brush_node: MeshInstance3D
 var _dirty_ids: Dictionary = {}
+var _pending_scene_saves: Dictionary = {}
 
 
 func bind(selection: RefCounted, actions: RefCounted, undo: Object, host: RefCounted = null) -> void:
@@ -188,6 +189,17 @@ func selected_uvs() -> PackedVector2Array:
 	if _selection == null or _selection.solid == null or _selection.ids.is_empty():
 		return PackedVector2Array()
 	return SlabPaintUv.face_uvs(_selection.solid, _selection.ids[0])
+
+
+func selected_uv_loops() -> Array[PackedVector2Array]:
+	var loops: Array[PackedVector2Array] = []
+	if _selection == null or _selection.solid == null:
+		return loops
+	for face in _selection.ids:
+		var uvs := SlabPaintUv.face_uvs(_selection.solid, face)
+		if not uvs.is_empty():
+			loops.append(uvs)
+	return loops
 
 
 func make_unique() -> int:
@@ -380,6 +392,9 @@ func end_stroke() -> void:
 		var before_img := Image.new()
 		var after_img: Image = _image.duplicate()
 		if before_img.load_png_from_buffer(_stroke_before) == OK:
+			before_img.generate_mipmaps()
+			if not after_img.has_mipmaps():
+				after_img.generate_mipmaps()
 			var before_tex := ImageTexture.create_from_image(before_img)
 			var after_tex := ImageTexture.create_from_image(after_img)
 			_texture = after_tex
@@ -409,6 +424,7 @@ func apply_png(bytes: PackedByteArray, mat: StandardMaterial3D = null, tex: Imag
 		return
 	if img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
+	img.generate_mipmaps()
 	var target_mat: StandardMaterial3D = mat if mat != null else _material
 	var target_tex: ImageTexture = tex if tex != null else _texture
 	if target_tex == null:
@@ -438,6 +454,10 @@ func save_png(path: String) -> int:
 		_material.set_meta(PNG_META, path)
 		_material.resource_local_to_scene = true
 		_mark_dirty(_material, false)
+		var scene_root: Node = _owning_scene_root(_solid)
+		_pending_scene_saves[_material.get_instance_id()] = {
+			"root": weakref(scene_root) if scene_root != null else null,
+		}
 	else:
 		dirty = false
 	_report("Texture saved to %s. The scene still needs saving." % path)
@@ -562,6 +582,7 @@ func _dab_at(pixel: Vector2) -> void:
 	else:
 		SlabPaintRaster.stroke(_image, _last_pixel, pixel, brush_radius, brush_color, brush_opacity)
 	_last_pixel = pixel
+	_image.generate_mipmaps()
 	(_texture as ImageTexture).set_image(_image)
 	if _material != null:
 		_material.albedo_texture = _texture
@@ -717,9 +738,46 @@ func pick_material(mat: StandardMaterial3D) -> void:
 func save_status() -> String:
 	if dirty:
 		return "Unsaved paint"
-	if _material != null and _material.has_meta(PNG_META) and str(_material.get_meta(PNG_META)) != "":
+	if _material != null and _pending_scene_saves.has(_material.get_instance_id()):
 		return "Texture saved. Scene still needs saving."
 	return ""
+
+
+func scene_saved(path: String, saved_root: Node = null) -> void:
+	var saved_path: String = path.simplify_path()
+	var cleared := false
+	for material_id: Variant in _pending_scene_saves.keys():
+		var pending: Dictionary = _pending_scene_saves[material_id]
+		var root_ref: WeakRef = pending.get("root")
+		var owner_root: Node = root_ref.get_ref() if root_ref != null else null
+		if owner_root == null:
+			_pending_scene_saves.erase(material_id)
+			continue
+		if saved_root != null and owner_root != saved_root:
+			continue
+		# EditorPlugin.scene_saved fires after Save As has updated the root path.
+		# The explicit root is used by non-editor hosts and focused tests.
+		if saved_root == null and str(owner_root.scene_file_path).simplify_path() != saved_path:
+			continue
+		_pending_scene_saves.erase(material_id)
+		cleared = true
+	if cleared:
+		_report("")
+		changed.emit()
+
+
+func _owning_scene_root(node: Node) -> Node:
+	if node == null or not is_instance_valid(node):
+		return null
+	if _host != null:
+		var hosted: Node = _host.scene_root()
+		if hosted != null and (hosted == node or hosted.is_ancestor_of(node)):
+			return hosted
+	var current: Node = node
+	var tree: SceneTree = current.get_tree()
+	while current.get_parent() != null and (tree == null or current.get_parent() != tree.root):
+		current = current.get_parent()
+	return current
 
 
 func _bind_editable(solid: Node3D, slot: int, mat: StandardMaterial3D, img: Image, tex: ImageTexture) -> void:

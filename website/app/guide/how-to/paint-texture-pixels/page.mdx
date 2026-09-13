@@ -18,7 +18,7 @@ For a material with no texture, **Make Unique** creates the paint image at **Tex
 
 ## Place the texture
 
-Stay on **Material / UV**. Drag on the canvas to move the selected face's UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
+Stay on **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to frame them. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Scroll to zoom and middle-drag to pan.
 
 For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**, and **Rotation**, then click **Apply UV**. **UV 90°** turns the placement by 90 degrees. **Reset UV** returns repeats to one and offsets and rotation to zero.
 
@@ -34,7 +34,7 @@ Press Escape or right-click during a canvas drag to restore the previous UV plac
 4. Click **Save Paint**.
 5. Save the scene.
 
-The brush radius is measured in texture pixels. A stroke wraps with the UVs when the material repeats. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
+Pixel mode shows one copy of the actual image. The brush radius is measured in texture pixels. A painted mark appears at every repeat of that image on the model. Backfaces are ignored in the 3D view. A 3D stroke starts on the clicked face's material and stays on that material while dragging. Other materials are skipped. Faces that share the same paintable material share its artwork, including faces on other solids.
 
 Save Paint writes `res://slab_paint/<solid>_m<slot>.png` and records that path on the material. It does not save the scene. The status stays **Texture saved. Scene still needs saving.** until you save the scene.
 

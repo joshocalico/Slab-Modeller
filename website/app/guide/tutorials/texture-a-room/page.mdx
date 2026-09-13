@@ -4,80 +4,77 @@ export const metadata = { title: "Texture a room" };
 
 # Texture a room
 
-We will put two materials on one room solid. The floor is brown. The walls are plaster. Then we scale the floor UVs so a tile texture does not stretch.
+We will put a plaster material on the walls and a brown material on the floor. Then we will repeat the floor texture so it does not stretch across the room.
 
 If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-a-room) first.
 
-## Add two materials
+## Select the walls
 
 1. Click the room `SlabSolid` in the Scene tree.
 2. Press <kbd>4</kbd> for Face mode.
-3. Expand **Materials & UV**, then click **Add Material** in **Material & UV settings**. That appends a `StandardMaterial3D` on **Materials**.
-4. Click **Add Material** again.
+3. Click one wall face.
+4. Shift-click the other wall faces that need plaster.
+5. Click **Surface Paint** in the Slab header.
 
-The inspector **Materials** array now has two slots. Chip 0 is the first. Chip 1 is the second. A face stores an index into that array. There is no cap at 32.
+The target line names the room and reports the selected face count. Stay on **Material / UV**.
 
-## Colour them
+## Create the plaster material
 
-1. In the inspector, open **Materials** slot 0. Set **Albedo** to a floor brown.
-2. Open slot 1. Set **Albedo** to a wall colour. A warm plaster is enough.
-3. Assign a repeating albedo texture on each if you have one. A checker, a tile, or Godot's `icon.svg` all work.
+1. Open the material picker beside **Sample**.
+2. Choose **New StandardMaterial3D**.
+3. Click the material preview to inspect the new resource.
+4. In the Inspector, set **Albedo > Color** to a warm plaster colour.
 
-The whole room may still use slot 0. Faces default to 0.
+Choosing the material adds it to the room and assigns it to the selected walls. You do not need to click **Assign** after choosing it.
+
+If you opened the full Slab source checkout, you can use the bundled plaster instead. Choose **Quick Load**, then select `limestone` from `res://demo/signal_foundry/materials/limestone.tres`. Addon-only installations do not include that demo material.
 
 <Figure
-  src="/img/texture-01.png"
-  alt="The hollow room with one brown material on every face."
-  caption="Slot 0 on every face. One look. Next we paint the walls."
+  src="/img/panel-surface-paint.png"
+  alt="Surface Paint with a material loaded, the active workspace highlighted, and the material preview visible."
+  caption="Surface Paint in Material / UV. The material picker sits beside Sample."
 />
 
-## Paint the walls
+## Create the floor material
 
-1. Stay in Face mode.
-2. Click a wall face. Shift-click the other walls, or expand **Selection** and click **Grow** until the walls are selected.
-3. Expand **Materials & UV** if it is closed, then click chip 1 so it is the active paint.
-4. Click **Set Material**.
+1. Click the highlighted Face mode button to leave Surface Paint.
+2. Click the floor face.
+3. Click **Surface Paint** again.
+4. Open the material picker and choose **New StandardMaterial3D**.
+5. Click the material preview, then set **Albedo > Color** to a floor brown.
+6. In the Inspector, set **Albedo > Texture** to a repeating floor image from your project.
 
-The walls should switch to the plaster. The floor stays on slot 0. Wall tops point up, so they stay on slot 0 until you paint them too.
+For the bundled alternative, use **Quick Load** and choose `timber` from `res://demo/signal_foundry/materials/timber.tres`.
+
+The material picker assigns the new material to the selected floor. The walls keep their plaster material.
 
 <Figure
   src="/img/solid-textured.png"
-  alt="The same room with a brown floor and lighter walls."
-  caption="Slot 0 on the floor. Slot 1 on the walls. One solid, two surfaces."
+  alt="A room with a brown floor and lighter plaster walls."
+  caption="The floor and walls use different materials on one closed solid."
 />
+
+## Repeat the floor texture
+
+1. Keep the floor selected and stay on **Material / UV**.
+2. Set **Repeat U** to `2`.
+3. Set **Repeat V** to `2`.
+4. Click **Apply UV**.
+
+Compared with the default repeat of `1`, the floor pattern now repeats twice as densely in both directions. If the pattern runs sideways, click **UV 90°**. Use **Offset U** and **Offset V** to move a seam, then click **Apply UV** again.
 
 <Figure
   src="/img/texture-a-room.mp4"
-  alt="The room going from one material to a painted floor and walls."
-  caption="Paint the walls. The floor stays on the first material."
+  alt="A room changing from one material to a brown floor and plaster walls."
+  caption="Different materials distinguish the walls from the floor."
 />
 
-## Scale the floor
+## Inspect an existing textured face
 
-These steps use the compact UV controls in the modelling workspace. The larger Surface Paint workspace also has a canvas and numeric **Repeat**, **Offset**, and **Rotation** fields. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
+When you return to Surface Paint later, the active material can belong to a different face. Select the face in modelling first, open Surface Paint, then click **Sample**. Sample loads that face's material and UV values without assigning the previously active material. You can also Alt-click a front-facing face in the 3D view.
 
-1. Click the floor face.
-2. Click chip 0 if you still need to paint it. Skip that if the floor is already brown.
-3. Expand **Materials & UV**. In **Material & UV settings**, set **UV scale X** and **UV scale Y** to `2`.
-4. Click **Apply UV** in **Materials & UV**.
+## Check the room
 
-The pattern on the floor should tighten. If it is still huge, click **UV Larger**. **UV Larger** doubles the scale on the selected faces and applies it. The settings spins follow.
+Orbit the room. The floor and walls should use different materials, and the floor pattern should repeat without stretching. Undo steps back through each material choice and UV write. Save the scene when the result looks right.
 
-<Figure
-  src="/img/panel-materials.png"
-  alt="The Slab panel in Face mode with Materials and UV expanded beside Material and UV settings."
-  caption="Expand Materials & UV to reveal its commands and the Material & UV settings."
-/>
-
-## Fix a wall that runs the wrong way
-
-1. Click a wall face.
-2. Expand **Materials & UV** if it is closed, then click **UV Rotate**.
-
-The pattern turns 90 degrees on that face. Click again if it is still sideways. **UV Reset** returns that face to scale one and no rotation.
-
-Offset is the UV offset X and Y fields, then **Apply UV**. Use it when a tile seam sits on a doorway.
-
-## Check
-
-Orbit the room. The floor and walls should be different materials. The volume should still be closed. Undo still steps back through the paints and UV writes.
+To draw into a material's albedo image, continue with [Paint texture pixels](/guide/how-to/paint-texture-pixels).
