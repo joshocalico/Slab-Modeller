@@ -38,3 +38,11 @@ The rendered panel suite passes after fixing a numeric-field feedback loop: rais
 Boolean settings now refresh with native selection, show complete names, and offer Swap. The rendered test verifies that both native selections survive Swap in the displayed order, and that Subtract changes the target while retaining the second solid. The same controls were used successfully for the corrected annex union and subtraction. The first implementation's truncated labels and single-selection Swap failure were caught in the live editor and corrected.
 
 Evidence: `/tmp/slab-annex-panel.log` reports `PANEL_EDITOR_RESULT failures=0`; `/tmp/slab-annex-verify.log` reports all gates green. The guide's Boolean capture is `website/public/img/panel-boolean.png`. These checks establish control behaviour, not completion of the annex or the broader UX goal.
+
+## Shading follow-up
+
+The emitted normal used an initial triangle from each face. Valid Boolean faces can begin with collinear corners, and a concave face's first usable triangle can point against the polygon's overall winding. Computing the oriented area of the whole loop corrects the emitted normal.
+
+After rebuilding and reopening the saved scene, the author inspected both front and rear orthographic views with Display Normal selected. The large light/dark triangular patches were gone and the entrance remained visible. Faint seam lines remained visible after deselection. This is an editor rendering check; the corrected rendering still needs a running-game pass.
+
+The broader normal contract remains open. Changing `Mesh::face_normal` also enables coplanar dissolves that were accidentally skipped by the old normal calculation, exposing existing Boolean failures. Those failures must be resolved before treating selection, operation handles, and rendering as consistent.

@@ -21,6 +21,33 @@ var _ran := 0
 var _frames := 0
 
 
+func case_scaled_sloped_face_anchor_stays_on_its_surface() -> void:
+	var box: Node3D = _world.box()
+	var original_transform := box.transform
+	var face: int = _world.top_face(box)
+	var ring: PackedInt64Array = box.face_vertices(face)
+	var raised := PackedInt64Array()
+	for vertex in ring:
+		if box.vertex_position(vertex).x > 1.0:
+			raised.append(vertex)
+	expect(box.move_vertices(raised, Vector3.UP) == OK, "sloped test face commits")
+	box.rotation = Vector3(0.3, 0.4, 0.2)
+	box.scale = Vector3(2.0, 0.5, 1.5)
+	var a: Vector3 = box.to_global(box.vertex_position(ring[0]))
+	var b: Vector3 = box.to_global(box.vertex_position(ring[1]))
+	var c: Vector3 = box.to_global(box.vertex_position(ring[2]))
+	var normal: Vector3 = SlabViewport._world_normal(box, face)
+	expect(absf(normal.dot((b - a).normalized())) < 0.00001
+		and absf(normal.dot((c - a).normalized())) < 0.00001,
+		"face interaction normal stays perpendicular under nonuniform scale")
+	var point := a * 0.7 + b * 0.2 + c * 0.1
+	var camera := _world.camera()
+	var anchor: Vector3 = SlabViewport._face_anchor(camera, camera.unproject_position(point), box, face, normal)
+	expect(anchor.distance_to(point) < 0.0001,
+		"off-centre face press anchors on the rendered surface under nonuniform scale")
+	box.transform = original_transform
+
+
 func case_native_escape_preserves_selection_and_passes_to_godot() -> void:
 	var box: Node3D = _world.box()
 	_select(box, SlabSelection.Mode.FACE)

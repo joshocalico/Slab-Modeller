@@ -687,7 +687,7 @@ static func _axis_travel(camera: Camera3D, screen: Vector2, anchor: Vector3, axi
 
 
 static func _world_normal(solid: Node3D, face: int) -> Vector3:
-	return (solid.global_transform.basis * solid.face_normal(face)).normalized()
+	return (solid.global_transform.basis.inverse().transposed() * solid.face_normal(face)).normalized()
 
 
 static func _face_anchor(camera: Camera3D, screen: Vector2, solid: Node3D, face: int, world_normal: Vector3) -> Vector3:
