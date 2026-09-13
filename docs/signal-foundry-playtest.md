@@ -44,6 +44,14 @@ An above-door placement was tested in the game and rejected because the overhead
 
 The final fresh run began at the unchanged maintenance-room spawn. At feet `(14.28, 0.45, 6.67)`, facing east, both lines and the arrow were visible against the hall wall without looking up. Turning left, aligning with the opening, and walking through reached COURTYARD at approximately `(25.42, 0.45, 2.38)`, grounded on `ExteriorCourtyard/__body`. The saved scene differs only by the new label block; removing that block reproduces the previous scene exactly. No Slab geometry, artwork, player spawn, or gameplay component changed.
 
+## Lift boarding landing, 14 September
+
+Created LiftBoardingLanding through the native Slab Create tool, positioned it through the Inspector at `(27, 0.45, 4)`, and assigned Limestone to all six box faces through Surface Paint. The box is 2 × 0.15 × 2 metres. Selected the top face boundary, then applied a 0.025-metre bevel with three segments. Saved through Godot. It is a root-level static solid outside the lift travel footprint. Removing its node block reproduces the previous saved scene exactly.
+
+A fresh native run followed the normal spawn route through the turbine hall to COURTYARD. Walking onto the pad without jumping reached feet `(28.17, 0.60, 5.13)`, grounded on `LiftBoardingLanding/__body`. This verifies the first step of the intended split ascent from courtyard y=0.45 to lift deck y≈0.75.
+
+Boarding was not verified in this pass. Two attempts missed the low-stop pause and reached the courtyard floor under the lift. The returning platform displaced the player and briefly produced a downward velocity around 14.57 m/s. This matches the previously recorded squeeze limitation; this observation alone does not establish floor tunnelling or a regression. The pad makes a safe waiting position, but departure timing and access beneath the deck still need work. Do not treat the pad as completing lift usability.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.
