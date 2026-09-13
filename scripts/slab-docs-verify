@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""Check root-relative MDX links and media against local routes and public files.
+
+This checks file existence, not external URLs, heading anchors, rendered layout,
+or whether a screenshot accurately depicts the current editor.
+"""
+
+import re
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+
+def main() -> int:
+    website = Path(__file__).resolve().parent.parent / "website"
+    app = website / "app"
+    routes = {
+        "/" if page.parent == app else "/" + page.parent.relative_to(app).as_posix()
+        for page in app.rglob("page.*")
+        if page.suffix in {".mdx", ".tsx", ".jsx", ".js", ".ts"}
+    }
+    # The manual uses inline Markdown links and quoted JSX media attributes.
+    references = re.compile(r'''\]\((/[^\s)]+)\)|\b(?:src|href|poster)\s*=\s*["'](/[^"']+)["']''')
+    count = 0
+    errors = []
+    pages = sorted(app.rglob("*.mdx"))
+    for page in pages:
+        fenced = False
+        for line_number, line in enumerate(page.read_text().splitlines(), 1):
+            if line.lstrip().startswith(("```", "~~~")):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            for match in references.finditer(line):
+                url = next(value for value in match.groups() if value is not None)
+                parts = urlsplit(url)
+                if parts.netloc:
+                    continue
+                count += 1
+                path = unquote(parts.path).rstrip("/") or "/"
+                asset = website / "public" / path.lstrip("/")
+                if path not in routes and not asset.is_file():
+                    errors.append(f"{page.relative_to(website)}:{line_number}: missing {url}")
+    for error in errors:
+        print(error, file=sys.stderr)
+    print(f"slab-docs-verify: {len(pages)} MDX pages, {count} local references, {len(errors)} failures")
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

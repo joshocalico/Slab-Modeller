@@ -29,6 +29,8 @@ Show the boolean operands before applying an operation. Provide a Swap action an
 
 Creation placement needs a deliberate choice. Adjacent placement is convenient for repeated props but surprising for cutters and large floors. View-centre placement better preserves a distant work area, but needs a preview and predictable handling of walls and empty space. Automatically framing an origin-created object reveals it but moves the author away from the work area. Prototype these interactions before selecting a default.
 
+Godot's current upstream [`focus_selection`](https://github.com/godotengine/godot/blob/master/editor/scene/3d/node_3d_editor_viewport.cpp) implementation moves the view centre to selected gizmo origins without fitting mesh bounds or changing zoom. This agrees with the live observation, though upstream source is not proof of the installed binary's implementation. A bounds-fit creation action would be additional behaviour; merely forwarding F cannot provide it.
+
 Keep Inset, Extrude, and Bevel distances independent. Cancel should discard the geometry preview while retaining the entered tool preference; Undo should restore geometry without rewinding session settings.
 
 ## Verified control changes

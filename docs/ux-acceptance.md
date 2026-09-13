@@ -48,6 +48,8 @@ The compact-dock audit found that Godot retains the enlarged splitter height aft
 
 ## Repeatable evidence
 
+`scripts/slab-docs-verify` checks root-relative inline links and media attributes in MDX against local page routes and public files. The current manual passes with 28 MDX pages and 74 local references. A temporary broken-link and missing-image probe was rejected. This check does not establish heading-anchor validity, external-link availability, rendered layout, or screenshot accuracy.
+
 `scripts/slab-install-verify` copies the addon to a disposable project and runs separate rendered creation/save and reopen passes. `project/tests/topology_editor_smoke.gd` exercises Subdivide/Merge and Connect/Dissolve through real panel clicks. Run it with `scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd`.
 
 `scripts/slab-verify` covers the kernel, extension, focused GDScript suites, and editor initialization. `scripts/slab-native-gizmo-verify` covers real native transform input. `project/tests/panel_editor_smoke.gd` covers the primary operation buttons and the room tutorial in a dedicated rendered editor, without saving the fixture. `project/tests/paint_editor_smoke.gd` checks canvas gestures in a rendered editor without saving the lab scene. Run it with `scripts/godot --editor --path project --script res://tests/paint_editor_smoke.gd`. The commands and evidence formats are described in [Native gizmo verification](native-gizmo-verification.md).
