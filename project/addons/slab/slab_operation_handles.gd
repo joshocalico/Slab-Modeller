@@ -229,7 +229,25 @@ func _bevel_frame() -> bool:
 			normal += _world_normal(face)
 	anchor = centre / float(ids.size())
 	axis = normal.normalized()
-	return axis.length_squared() > 0.0001
+	if axis.length_squared() > 0.0001:
+		return true
+	# Symmetric selections can cancel their aggregate normals. Use the active
+	# edge, stored last in the selection, to place a stable local handle while
+	# the kernel validates the complete selected set.
+	return _bevel_edge_frame(ids[-1])
+
+
+func _bevel_edge_frame(edge: int) -> bool:
+	var ends: PackedVector3Array = solid.call("edge_endpoints", edge)
+	if ends.size() < 2:
+		return false
+	anchor = solid.to_global((ends[0] + ends[1]) * 0.5)
+	tangent = (solid.to_global(ends[1]) - solid.to_global(ends[0])).normalized()
+	var edge_normal := Vector3.ZERO
+	for face in PackedInt64Array(solid.call("edge_faces", edge)):
+		edge_normal += _world_normal(face)
+	axis = edge_normal.normalized()
+	return tangent.length_squared() > 0.0001 and axis.length_squared() > 0.0001
 
 
 static func _stable_tangent(direction: Vector3) -> Vector3:

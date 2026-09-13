@@ -802,7 +802,7 @@ func _begin_operation(kind: int) -> void:
 	_cancel_create()
 	_cancel_operation()
 	if _selection.solid == null or _selection.ids.is_empty() or _selection.mode != (SlabSelection.Mode.EDGE if kind == 2 else SlabSelection.Mode.FACE):
-		_actions.reported.emit("Select edges for Bevel, or faces for Extrude and Inset.")
+		_actions.reported.emit("Bevel needs one or more selected edges." if kind == 2 else "%s needs one or more selected faces." % ["Extrude" if kind == 0 else "Inset"])
 		return
 	_cancel_array()
 	_cancel_snap_align()
@@ -812,7 +812,7 @@ func _begin_operation(kind: int) -> void:
 	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
 		_publish_operation()
 	else:
-		_actions.reported.emit("This selection cannot run the tool. Select one face or a connected region with a shared direction; Bevel needs valid edges.")
+		_actions.reported.emit("Bevel could not place a handle on these edges. Choose live edges joined to faces." if kind == 2 else "%s needs one face or a connected face region with a shared direction." % ["Extrude" if kind == 0 else "Inset"])
 
 
 func _publish_operation() -> void:

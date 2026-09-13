@@ -33,6 +33,8 @@ func _run() -> void:
 	var edge: int = solid.call("get_edges")[0]
 	selection.set_ids(PackedInt64Array([edge]))
 	var actions := Actions.new(selection, undo)
+	var reports: Array[String] = []
+	actions.reported.connect(func(message: String) -> void: reports.append(message))
 	session.bind_actions(actions)
 	var before: PackedByteArray = solid.get("data")
 	actions.bevel_amount = 0.3
@@ -67,6 +69,20 @@ func _run() -> void:
 	check(incident.size() == 3 and not (selection.operation_preview.get("preview_lines", PackedVector3Array()) as PackedVector3Array).is_empty(), "three-edge corner has a validated preview")
 	check(solid.get("data") == before, "joint-corner preview does not mutate geometry")
 	actions.operation_cancel_requested.emit()
+
+	selection.set_ids(solid.call("get_edges"))
+	actions.bevel_amount = 0.05
+	actions.bevel_segments = 1
+	actions.run("bevel_edges")
+	check(actions.operation_active and int(selection.operation_preview.get("error", OK)) == Actions.ERR_DEGENERATE_FACE,
+		"all-edge box bevel reaches kernel validation through a stable handle frame")
+	check(not reports.is_empty() and reports[-1].contains("collapse to a line or point"),
+		"all-edge refusal reports the kernel reason instead of a shared-direction gate, got %s" % (reports[-1] if not reports.is_empty() else "none"))
+	actions.operation_cancel_requested.emit()
+	selection.clear_ids()
+	actions.run("bevel_edges")
+	check(not reports.is_empty() and reports[-1] == "Bevel needs 1 edge.",
+		"missing-edge refusal is specific to Bevel, got %s" % (reports[-1] if not reports.is_empty() else "none"))
 
 	selection.set_ids(PackedInt64Array([edge + 99]))
 	actions.bevel_amount = 0.25

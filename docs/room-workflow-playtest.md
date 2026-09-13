@@ -137,3 +137,12 @@ Loop Cut now publishes its active and valid-preview state to the panel. Apply an
 Native replay cancelled a preview through the panel and saved with no scene diff. Started again, typed 3 into Cuts without pressing Enter, and clicked Apply. The saved roof had 18 faces and unchanged volume 3.8764694519341. One native Undo followed by Save restored the complete scene byte-for-byte. The focused regression checks pending field values, pinned selection, missing candidates, cancellation, preview agreement, and Undo.
 
 The final native layout keeps Apply and Cancel together below the numeric fields at the current dock width. With no edge chosen, Apply is disabled and the status asks for a hover target. Selecting an edge and restarting enables Apply. Cancel returns to the idle panel without a scene diff. The full slab-verify, documentation checks, and website build passed.
+
+
+## Symmetric bevel selection and perimeter limit
+
+Selected all 12 roof edges and started Bevel. The editor refused before opening the preview because summed adjacent normals cancelled to zero. Its generic message asked for a shared face direction despite Edge mode. A single edge accepted a 0.03 m, three-segment preview.
+
+The handle now falls back to the last selected edge when the aggregate direction cancels, while the kernel still validates the complete selection. Native replay of all 12 edges opened the preview controls and displayed the kernel's collapsed-face refusal with Apply disabled, including at width 0.03 and three segments. Cancel and Save left the scene unchanged. The full slab-verify passed.
+
+A disposable kernel probe also refused the four top perimeter edges of a 4.4 × 0.2 × 4.4 box at width 0.03 and three segments. The operation fails before embedding validation. The current bevel implementation edits edge rails sequentially, with special handling for exactly three edges meeting at one corner. Connected perimeter and complete-box bevels require planning and rebuilding their shared corner geometry together. The roof refinement remains unfinished; no partial bevel was saved.

@@ -13,6 +13,8 @@ Use a segmented bevel to soften a blockout edge or round the three edges that me
 
 The rendered preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built. If a value is invalid, Slab restores the original display and disables **Apply**.
 
+A complete box-edge selection or a connected four-edge perimeter can currently fail even at small widths. Cancel that preview; reducing the width does not resolve this connected-edge limitation.
+
 ## Apply or cancel
 
 Press Enter or click **Apply** to commit the preview as one undo action. Click **Cancel**, press Escape, or right-click to restore the original display and leave the solid unchanged. Saving while the preview is open does not save the proposed bevel. Apply it, then save the scene to keep the result. If the solid changes while the preview is open, the tool cancels rather than applying stale edge handles.

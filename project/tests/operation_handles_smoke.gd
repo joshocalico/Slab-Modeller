@@ -70,6 +70,16 @@ func _run() -> void:
 	check(not handles.preview_lines.is_empty() and solid.get("data") == before, "bevel uses validated kernel preview without mutation")
 	handles.cancel()
 
+	var all_edges: PackedInt64Array = solid.call("get_edges")
+	var all_preview: Dictionary = solid.call("preview_bevel", all_edges, 0.05, 1)
+	check(int(all_preview.get("error", -1)) == 5,
+		"kernel retains its all-edge box validation, error=%s" % all_preview.get("error", -1))
+	check(handles.begin(Handles.Kind.BEVEL, solid, all_edges, 0.05, 1),
+		"symmetric all-edge bevel gets an editor handle frame")
+	check(handles.active and handles.error == int(all_preview.get("error", -1)),
+		"editor frame exposes the kernel result for the complete edge set")
+	handles.cancel()
+
 	camera.free()
 	solid.free()
 	print("operation_handles_smoke: %d failures" % failures)
