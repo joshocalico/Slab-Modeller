@@ -412,8 +412,11 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		"the material palette scrolls in one strip")
 	expect(panel.find_child("PaintPalette", true, false).custom_minimum_size.y <= 40.5,
 		"the named palette is a 40px strip")
-	expect(panel.get_combined_minimum_size().y <= preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT + 0.5,
-		"the paint dock combined minimum stays bounded, got %s" % panel.get_combined_minimum_size().y)
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	expect(canvas.custom_minimum_size.y >= SlabPanel.PAINT_CANVAS_MIN_HEIGHT
+		and panel.get_combined_minimum_size().y >= canvas.custom_minimum_size.y,
+		"the paint dock derives enough height for a usable canvas, got canvas=%s dock=%s" % [
+			canvas.custom_minimum_size.y, panel.get_combined_minimum_size().y])
 	expect(panel.find_child("PaintUvHint", true, false) != null
 		and String(panel.find_child("PaintUvHint", true, false).text).contains("rotates"),
 		"UV modifiers have a compact hint")
@@ -437,6 +440,21 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	paint.exit()
 	expect(panel.find_child("ModelBody", true, false).visible, "closing paint restores modeling")
 	panel.free()
+	var scaled_selection := SlabSelection.new()
+	var scaled_actions := SlabActions.new(scaled_selection)
+	var scaled_paint := preload("res://addons/slab/slab_paint.gd").new()
+	scaled_paint.bind(scaled_selection, scaled_actions, SlabTestUndo.new())
+	var scaled_panel := SlabPanel.new()
+	scaled_panel.setup(scaled_selection, scaled_actions, SlabMetrics.at_scale(1.5))
+	scaled_panel.bind_paint(scaled_paint)
+	root.add_child(scaled_panel)
+	scaled_paint.enter()
+	await process_frame
+	var scaled_canvas: Control = scaled_panel.find_child("PaintCanvas", true, false)
+	expect(is_equal_approx(scaled_canvas.custom_minimum_size.y, SlabPanel.PAINT_CANVAS_MIN_HEIGHT * 1.5)
+		and scaled_panel.get_combined_minimum_size().y >= scaled_canvas.custom_minimum_size.y,
+		"paint canvas and derived dock minimum follow 1.5x editor scale")
+	scaled_panel.free()
 
 
 func case_a_half_typed_create_field_commits_on_mode_change() -> void:

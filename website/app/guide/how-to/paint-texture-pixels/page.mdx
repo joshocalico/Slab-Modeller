@@ -14,6 +14,8 @@ Use this when you want to draw into a face material's albedo texture.
 
 Opening Surface Paint with faces that share one material adopts it as the Brush without changing the selection. A material chip changes the Brush only; click **Assign** to apply it. The material picker is different: choosing a `StandardMaterial3D` immediately assigns it to the selected faces.
 
+Select the face before opening Surface Paint. Entering with only the solid selected opens with no Brush, and a plain viewport click cannot paint until you choose or sample a material. To recover without leaving Surface Paint, Alt-click the textured face to sample its material and UV values, then click **Make Unique**.
+
 Make Unique copies the Brush into a new slot and assigns that slot to the selected face. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
 
 For a material with no texture, **Make Unique** creates the paint image at **Texture px**, the same resolution used by **Unwrap**. Set that value before making the copy. When a material already has artwork, Slab preserves its dimensions and updates **Texture px** to show the image width.

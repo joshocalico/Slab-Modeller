@@ -869,10 +869,10 @@ func _check_canvas_letterbox_and_press() -> void:
 		"the named palette is ~40px, got %s" % palette.custom_minimum_size.y)
 	_expect(is_equal_approx(panel.custom_minimum_size.y, SlabPaint.PAINT_HEIGHT),
 		"the paint dock custom min stays %s, got %s" % [SlabPaint.PAINT_HEIGHT, panel.custom_minimum_size.y])
-	_expect(panel.get_combined_minimum_size().y <= SlabPaint.PAINT_HEIGHT + 0.5,
-		"child minima cannot grow the dock past %s, got %s" % [
-			SlabPaint.PAINT_HEIGHT, panel.get_combined_minimum_size().y
-		])
+	_expect(canvas.custom_minimum_size.y >= SlabPanel.PAINT_CANVAS_MIN_HEIGHT
+		and canvas.size.y >= SlabPanel.PAINT_CANVAS_MIN_HEIGHT,
+		"paint mode reserves a usable canvas, got min=%s size=%s" % [canvas.custom_minimum_size.y, canvas.size.y])
+	var dock_height_before_slots := panel.get_combined_minimum_size().y
 	var mats: Array = solid.get("materials")
 	var extra: Array = mats.duplicate()
 	for i in 8:
@@ -886,7 +886,7 @@ func _check_canvas_letterbox_and_press() -> void:
 	paint.rebind()
 	panel.refresh()
 	await process_frame
-	_expect(panel.get_combined_minimum_size().y <= SlabPaint.PAINT_HEIGHT + 0.5,
+	_expect(panel.get_combined_minimum_size().y <= dock_height_before_slots + 0.5,
 		"eight imported-size slots do not grow the dock, got %s" % panel.get_combined_minimum_size().y)
 	var chip: Button = panel.find_child("paint_material_0", true, false)
 	_expect(chip != null and chip.icon != null and chip.icon.get_width() <= 32,
@@ -915,8 +915,8 @@ func _check_canvas_letterbox_and_press() -> void:
 		"Material/UV restores material placement controls")
 	_expect(not save_button.visible and not pixel_help.visible,
 		"Material/UV hides pixel-only save controls and guidance")
-	_expect(pixel_canvas_height > canvas.size.y + 40.0,
-		"Pixel gives the recovered control rows to the image canvas")
+	_expect(pixel_canvas_height > canvas.size.y + 20.0,
+		"Pixel gives recovered control-row space to the image canvas")
 	_expect(not _rects_overlap(palette.get_global_rect(), canvas.get_global_rect()),
 		"Material/UV palette stays above its canvas")
 	var fit_uv: Button = panel.find_child("PaintFitUv", true, false)

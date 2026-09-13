@@ -19,6 +19,7 @@ const PAINT_ROW_HEIGHT := 28.0
 const PAINT_PICKER_HEIGHT := 64.0
 const PAINT_PICKER_WIDTH := 220.0
 const PAINT_UV_ROW_HEIGHT := 44.0
+const PAINT_CANVAS_MIN_HEIGHT := 190.0
 
 var _selection: RefCounted
 var _actions: RefCounted
@@ -201,8 +202,18 @@ func _show_settings() -> bool:
 func _get_minimum_size() -> Vector2:
 	var min_size := Vector2(0.0, _scaled(PANEL_HEIGHT))
 	if _paint != null and _paint.active:
-		min_size.y = _scaled(SlabPaint.PAINT_HEIGHT)
+		min_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _visible_stack_minimum_height())
 	return min_size
+
+
+func _visible_stack_minimum_height() -> float:
+	var height := 0.0
+	var count := 0
+	for child in get_children():
+		if child is Control and (child as Control).visible:
+			height += (child as Control).get_combined_minimum_size().y
+			count += 1
+	return height + maxf(0, count - 1) * get_theme_constant("separation")
 
 
 func bind_paint(paint: RefCounted) -> void:
@@ -215,6 +226,7 @@ func bind_paint(paint: RefCounted) -> void:
 			_paint.reported.connect(_on_reported)
 	if _paint_canvas != null:
 		_paint_canvas.setup(_paint, _metrics)
+		_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_on_paint_changed()
 
 
@@ -926,6 +938,7 @@ func _paint_block() -> Control:
 	row.add_theme_constant_override("separation", 8)
 	_paint_canvas = SlabPaintCanvas.new()
 	_paint_canvas.setup(_paint, _metrics)
+	_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_paint_canvas.stroke_started.connect(func() -> void:
 		if _paint:
 			_paint.begin_stroke()
@@ -1387,6 +1400,7 @@ func _refresh_paint_chrome() -> void:
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
 	_refresh_paint_palette()
+	update_minimum_size()
 
 
 func _pixel_help_text() -> String:
