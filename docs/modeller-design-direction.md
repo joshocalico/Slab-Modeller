@@ -63,3 +63,11 @@ For Slab, these support making mapping state and the next action visible, giving
 ## Acceptance
 
 Use the editor to select a wall, assign an existing material, adjust UVs, paint pixels, return to face editing, and undo each edit. Save and reopen the result. Repeat on a curved model and a room with an opening. Record where a control needs explanation or hides the next action. A screenshot alone cannot establish that the flow works.
+
+## Native gizmo ownership during Paint
+
+The 14 September native landing pass still shows Godot's transform arrows and rotation rings over the painted face. Paint consumes its gestures, but these handles imply an available transform action and obscure narrow bevel strips.
+
+The installed Godot 4.7.2 extension API has no public native-transform visibility switch. Hiding a plugin gizmo affects its own drawing; clearing Slab subgizmo selection falls back to the selected object's transform gizmo. Removing native selection through EditorSelection could hide it while Slab retains a paint target, but would remove the Scene tree highlight and native Focus Selection target. It also requires explicit ownership across deferred selection signals, scene changes, target deletion, and external selection. Do not treat a temporary signal guard as sufficient restoration logic.
+
+Preserve native selection behavior for now. A future detached paint-target prototype must prove framing, Inspector context, tree selection, switching solids, scene changes, and restoration before adoption. The ordinary Godot View Transform Gizmo toggle remains a manual option. This limitation is still open.

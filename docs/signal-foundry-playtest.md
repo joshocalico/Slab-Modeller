@@ -52,6 +52,14 @@ A fresh native run followed the normal spawn route through the turbine hall to C
 
 Boarding was not verified in this pass. Two attempts missed the low-stop pause and reached the courtyard floor under the lift. The returning platform displaced the player and briefly produced a downward velocity around 14.57 m/s. This matches the previously recorded squeeze limitation; this observation alone does not establish floor tunnelling or a regression. The pad makes a safe waiting position, but departure timing and access beneath the deck still need work. Do not treat the pad as completing lift usability.
 
+## Bevel mapping acceptance, 14 September
+
+Selected all 18 LiftBoardingLanding faces through Face mode and opened Surface Paint. Mapping reported Limestone across the selection. Set Pixels/metre to 16 with Texture px 256 and clicked Unwrap. The panel reported one island and 15 automatic cuts. The canvas reframed and the viewport updated. This checks the native authoring path on narrow segmented bevel strips; it does not prove packing optimality or absence of UV overlap.
+
+Saved the temporary unwrapped state through Godot, then used native Cmd-Z and Save. The complete saved scene matched the committed scene byte-for-byte. Cmd-Shift-Z and Save reproduced the complete temporary unwrapped scene byte-for-byte. A final Cmd-Z and Save restored the original limestone mapping. No acceptance-only mapping change remains in the scene.
+
+Undo retains the canvas framing established by Unwrap, so the restored planar outlines extend outside the visible canvas. Fit UV remains available, but recovery framing deserves a further interaction pass. Native transform handles also remain visible during Paint; the design record documents the public API limitation and selection-ownership tradeoffs.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.
