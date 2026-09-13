@@ -36,6 +36,14 @@ This prevents floor tunnelling. A player trapped under a platform can still be d
 
 `scripts/slab-verify` now runs the player, interaction, and animation gameplay checks alongside the kernel and editor suites. All gates passed after the scene and mover changes.
 
+## Courtyard route cue, 14 September
+
+A fresh normal-spawn playtest reached the turbine hall and courtyard checkpoint. The turbine dominates the doorway view, and the hall's courtyard opening had no nearby direction cue. A native Label3D was created, named CourtyardRouteSign, styled, positioned, and saved through Godot as a child of TurbineHall.
+
+An above-door placement was tested in the game and rejected because the overhead landing obscured the lettering from the walking approach. The final sign sits beside the opening at hall-local `(11.52, 2.4, 9.5)`, Y rotation -90 degrees, with 64-pixel text and a 4-pixel outline. It reads `<- COURTYARD` and `LIFT / CELL 03`. Depth testing remains enabled. A typed Unicode arrow did not reach the saved text through computer input; the final sign uses a verified ASCII arrow.
+
+The final fresh run began at the unchanged maintenance-room spawn. At feet `(14.28, 0.45, 6.67)`, facing east, both lines and the arrow were visible against the hall wall without looking up. Turning left, aligning with the opening, and walking through reached COURTYARD at approximately `(25.42, 0.45, 2.38)`, grounded on `ExteriorCourtyard/__body`. The saved scene differs only by the new label block; removing that block reproduces the previous scene exactly. No Slab geometry, artwork, player spawn, or gameplay component changed.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.
