@@ -68,6 +68,7 @@ var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
 var _selection_controls: Control
 var _operation_row: Control
+var _named_solids: Array[Node] = []
 
 
 func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
@@ -107,6 +108,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_selection.changed.connect(_on_selection_changed)
 	_actions.reported.connect(_on_reported)
 	_actions.status_reset_requested.connect(_reset_status)
+	_watch_selected_names()
 	refresh()
 	_layout_model()
 
@@ -659,10 +661,36 @@ func _on_reported(text: String) -> void:
 
 
 func _on_selection_changed() -> void:
+	_watch_selected_names()
 	_last_report = ""
 	if _selection.mode == SlabSelection.Mode.OBJECT:
 		_refresh_settings()
 	refresh()
+
+
+func _watch_selected_names() -> void:
+	for solid in _named_solids:
+		if is_instance_valid(solid) and solid.renamed.is_connected(_on_selected_renamed):
+			solid.renamed.disconnect(_on_selected_renamed)
+	_named_solids.clear()
+	for solid in _selection.objects:
+		if is_instance_valid(solid):
+			_named_solids.append(solid)
+			solid.renamed.connect(_on_selected_renamed)
+
+
+func _on_selected_renamed() -> void:
+	if not _actions.operation_active:
+		_last_report = ""
+	_refresh_settings()
+	refresh()
+
+
+func _exit_tree() -> void:
+	for solid in _named_solids:
+		if is_instance_valid(solid) and solid.renamed.is_connected(_on_selected_renamed):
+			solid.renamed.disconnect(_on_selected_renamed)
+	_named_solids.clear()
 
 
 func _reset_status() -> void:

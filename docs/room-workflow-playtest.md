@@ -22,7 +22,7 @@ Chrome smoke passed 41 cases, including visibility and restoration checks. The f
 
 - The generic transform gizmo overlaps the operation handle. Clearing Slab's subgizmo selection merely moves the native gizmo back to the object pivot. That attempted fix failed a native replay and was reverted. No supported visibility hook was found in the exposed editor API.
 - Operation previews draw result wire over the unchanged opaque source mesh. An inward extrusion's cavity becomes readable only after Apply. Rendered result geometry needs a deliberate preview lifecycle and source visibility strategy.
-- Slab's status retains the old node name immediately after a scene-tree rename, until selection is refreshed.
+- Fixed in the follow-up pass: Slab's status and boolean operand labels now follow selected-node renames immediately. Native rename to MaintenanceBayRenameCheck updated the status without reselection; Undo restored MaintenanceBay in both the tree and Slab. The test rename was undone and the scene saved without a scene diff. Smoke coverage also checks that renaming an unselected solid preserves current feedback.
 - The doorway's native multi-selection step remains unfinished. Keyboard range-selection attempts did not produce two boolean operands through the current computer-use session. Do not classify this as a Slab bug without separating editor and input-tool behaviour.
 - This bay has no final materials, roof, gameplay interaction, or tested approach route yet. It remains an authoring checkpoint.
 

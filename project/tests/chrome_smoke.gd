@@ -749,6 +749,8 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 	target.name = "PowerHouse"
 	var cutter: Node3D = ClassDB.instantiate("SlabSolid")
 	cutter.name = "PowerHouseDoorCutter"
+	root.add_child(target)
+	root.add_child(cutter)
 	selection.set_objects([target, cutter])
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
@@ -769,6 +771,16 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 	expect(swap != null and not swap.clip_text, "Swap operands fits the compact settings column")
 	swap.pressed.emit()
 	expect(selection.objects == [cutter, target], "Swap reverses the Boolean operand order")
+	cutter.name = "RenamedDoorCutter"
+	operands = panel.find_child("BooleanOperands", true, false)
+	labels = operands.find_children("*", "Label", true, false)
+	expect(labels[0].text == "Target: RenamedDoorCutter", "renaming a selected operand updates its role without reselection")
+	selection.set_objects([target])
+	target.name = "RenamedRoom"
+	expect(panel.get_node("Status").text.contains("RenamedRoom"), "renaming the selected solid updates status immediately")
+	actions.reported.emit("Current report")
+	cutter.name = "UnselectedCutter"
+	expect(panel.get_node("Status").text == "Current report", "renaming an unselected solid does not erase current feedback")
 	panel.free()
 	target.free()
 	cutter.free()
