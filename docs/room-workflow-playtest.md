@@ -100,3 +100,11 @@ Created a Box in Godot with Width 4.4, Height 0.2, and Depth 4.4. Placed it thro
 Added an OmniLight3D under the roof using Godot's Create Node dialog. Set local position to (2.2, -0.6, 2.2) and enabled shadows. The saved scene reload confirms roof bounds approximately (4.400391, 0.200195, 4.400391), positive volume 3.8764694519341, six teal-steel faces, and the light's intended transform with range 5 and shadows enabled. Room and step geometry and material counts remain as before.
 
 Switching between modelling and painting resized the viewport and moved the target under the cursor during this pass. Rechecked the selected node and face count before applying materials; no unintended material assignments remain. This is evidence for reviewing layout stability, not proof of a picking defect. Gameplay clearance and lighting with the roof in place still need a native playtest.
+
+## Enclosed room replay and wall UV correction
+
+Repeated the native jump approach with the roof visible. The player entered the bay and stood at (28, 0.77, 22.25), with floor contact on MaintenanceBay/__body. Stopped autorun and turned toward the doorway. The interior light kept the walls and ceiling readable, with sunlight entering through the opening. This verifies the local jump entrance and standing clearance, not every stair tread, an exit crossing, or the full gameplay route.
+
+The interior view exposed vertical brick courses on both side walls. Hid the roof through the Inspector, selected each inner side face in Surface Paint, and rotated its UVs by 90 degrees. Restored roof visibility and replayed from inside the room. Both side walls now have horizontal brick courses. Restored Player to (3, 0.4, 3.5), Y rotation -90 degrees, and saved through Godot.
+
+Read-only scene verification confirms that only faces 219043332097 and 261993005057 have the new 90-degree rotations. Room geometry and material counts, step geometry and materials, roof visibility, lighting, and the normal player spawn remain correct. No source code changed in this pass.
