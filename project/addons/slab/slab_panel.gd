@@ -1324,8 +1324,13 @@ func _make_paint_picker() -> Node:
 				picker.custom_minimum_size = Vector2(_scaled(PAINT_PICKER_WIDTH), _scaled(PAINT_PICKER_HEIGHT))
 			if picker.has_signal("resource_changed"):
 				picker.resource_changed.connect(func(res: Resource) -> void:
-					if _paint != null and res is StandardMaterial3D:
-						_paint.pick_material(res)
+					if _paint != null:
+						_paint.choose_brush_material(res as StandardMaterial3D)
+				)
+			if picker.has_signal("resource_selected"):
+				picker.resource_selected.connect(func(res: Resource, _inspect: bool) -> void:
+					if _paint != null:
+						_paint.inspect_brush_resource(res)
 				)
 			_apply_picker_fonts(picker)
 			return picker

@@ -10,6 +10,7 @@ var _undo: EditorUndoRedoManager
 static func with_undo(undo: EditorUndoRedoManager) -> RefCounted:
 	var host := new()
 	host._undo = undo
+	host._connect_inspector_edits()
 	return host
 
 
@@ -51,6 +52,25 @@ func icon(icon_name: String) -> Texture2D:
 
 func undo() -> Object:
 	return _undo
+
+
+func inspect_resource(resource: Resource) -> void:
+	if resource != null:
+		_connect_inspector_edits()
+		EditorInterface.edit_resource(resource)
+
+
+func _connect_inspector_edits() -> void:
+	var inspector := EditorInterface.get_inspector()
+	if inspector != null and not inspector.property_edited.is_connected(_on_inspector_property_edited):
+		inspector.property_edited.connect(_on_inspector_property_edited)
+
+
+func _on_inspector_property_edited(_property: String) -> void:
+	var inspector := EditorInterface.get_inspector()
+	var resource: Variant = inspector.get_edited_object() if inspector != null else null
+	if resource is Resource:
+		inspected_resource_edited.emit(resource)
 
 
 func connect_host_selection(target: Callable) -> void:

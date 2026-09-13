@@ -50,19 +50,76 @@ func _run() -> void:
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
 	var resource_button_width := 0.0
+	var resource_button: Button
 	for child in picker.find_children("*", "Button", true, false):
 		if child is Button and child.is_visible_in_tree():
-			resource_button_width = maxf(resource_button_width, child.get_global_rect().size.x)
+			if child.get_global_rect().size.x > resource_button_width:
+				resource_button_width = child.get_global_rect().size.x
+				resource_button = child
 	_check(picker.is_visible_in_tree() and picker.get_global_rect().size.x >= 200.0, "material_picker_is_visible")
 	_check(picker_wrap.get_global_rect().encloses(picker.get_global_rect()), "material_picker_fits_its_slot")
 	_check(resource_button_width >= 120.0, "material_picker_resource_button_is_readable")
 	var imported := ResourceLoader.load("res://demo/signal_foundry/materials/brick.tres") as StandardMaterial3D
+	var before_picker_materials: Array = (solid.get("materials") as Array).duplicate()
+	var before_picker_data: PackedByteArray = solid.get("data")
+	var before_picker_target: String = target_label.text
 	picker.set("edited_resource", imported)
 	picker.emit_signal("resource_changed", imported)
 	await create_timer(0.2).timeout
-	_check(panel.get("_paint").material() == imported, "material_picker_loads_imported_material")
-	_check(target_label.text == "%s · 1 face · %s" % [solid.name, panel.get("_paint").selected_material_summary()],
-		"material_status_keeps_paint_target_context")
+	_check(panel.get("_paint").brush_material() == imported, "material picker chooses an imported preview brush")
+	_check(solid.get("materials") == before_picker_materials and solid.get("data") == before_picker_data
+		and target_label.text == before_picker_target,
+		"material picker choice leaves slots, face data, and target context unchanged")
+	await _click(resource_button)
+	await create_timer(0.2).timeout
+	_check(editor.get_inspector().get_edited_object() == imported,
+		"clicking the picker resource opens the chosen brush in the Inspector")
+	await _click(_button_named(panel, "Assign"))
+	var assigned_picker_materials: Array = (solid.get("materials") as Array).duplicate()
+	var assigned_picker_data: PackedByteArray = solid.get("data")
+	_check(assigned_picker_data != before_picker_data and panel.get("_paint").selected_material_summary() == "Brick",
+		"Assign applies the chosen picker brush")
+	await _history_shortcut(panel, false)
+	_check(solid.get("materials") == before_picker_materials and solid.get("data") == before_picker_data,
+		"picker brush assignment Undo restores exact slots and face data")
+	await _history_shortcut(panel, true)
+	_check(solid.get("materials") == assigned_picker_materials and solid.get("data") == assigned_picker_data,
+		"picker brush assignment Redo restores the assignment")
+	var editable_preview := StandardMaterial3D.new()
+	picker.set("edited_resource", editable_preview)
+	picker.emit_signal("resource_changed", editable_preview)
+	await create_timer(0.2).timeout
+	await _click(resource_button)
+	await create_timer(0.2).timeout
+	var albedo_editor: Control
+	for inspector_control in editor.get_inspector().find_children("*", "Control", true, false):
+		if String(inspector_control.tooltip_text) == "property|BaseMaterial3D|albedo_color":
+			albedo_editor = inspector_control
+			break
+	var color_button: ColorPickerButton
+	if albedo_editor != null:
+		var color_buttons: Array[Node] = albedo_editor.find_children("*", "ColorPickerButton", true, false)
+		if not color_buttons.is_empty():
+			color_button = color_buttons[0] as ColorPickerButton
+	var before_inspector_materials: Array = (solid.get("materials") as Array).duplicate()
+	var before_inspector_data: PackedByteArray = solid.get("data")
+	var copper := Color("c98239")
+	var inspector_edits: Array[String] = []
+	var record_inspector_edit := func(property: String) -> void: inspector_edits.append(property)
+	editor.get_inspector().property_edited.connect(record_inspector_edit)
+	if color_button != null:
+		color_button.color = copper
+		albedo_editor.call("emit_changed", "albedo_color", copper, "", false)
+	await create_timer(0.3).timeout
+	editor.get_inspector().property_edited.disconnect(record_inspector_edit)
+	var preview_pixel: Color = panel.get("_paint").image().get_pixel(0, 0)
+	_check(color_button != null and editable_preview.albedo_color.is_equal_approx(copper),
+		"the real Inspector Albedo Color control edits the chosen brush")
+	_check(inspector_edits.has("albedo_color"), "the Inspector publishes the Albedo Color property edit")
+	_check(preview_pixel.is_equal_approx(copper),
+		"Inspector property editing refreshes Paint preview pixels without Resource.emit_changed")
+	_check(solid.get("materials") == before_inspector_materials and solid.get("data") == before_inspector_data,
+		"Inspector preview editing leaves solid slots and face data unchanged")
 	var actions_row: Control = panel.find_child("PaintActions", true, false)
 	var thumbnail: TextureRect
 	for child in picker.find_children("*", "TextureRect", true, false):

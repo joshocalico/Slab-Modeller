@@ -45,3 +45,15 @@ Pixel now opens without repeated UV lines obscuring the image. The Show UV check
 Make Unique, a red stroke, Save Paint, and scene save were exercised through the simplified Pixel controls. Both edits were undone, the scene saved, and the temporary PNG removed. The saved scene matched the committed scene. A final reload confirmed the compact Material / UV picker and the mixed-selection Pixel state: no image, disabled Make Unique and Save Paint, and guidance to select faces sharing one material.
 
 The full verification suite passed. After the final picker-width adjustment, paint and chrome checks passed again with no script errors, followed by the native reload above. Documentation verification passed for 28 pages and 72 references; website lint and its 32-page build also passed.
+
+## Explicit picker preview and material inspection
+
+The resource picker now chooses a Brush preview, matching palette chips. Assign is the edit that adds a slot and applies it to selected faces. The picker preview opens Godot's Inspector. Unnamed resources use New material before assignment and Material N for a scene slot, rather than a generated subresource identifier. Explicit names and external filenames remain visible.
+
+Native replay selected all 18 MaintenanceBayRoof faces, opened Surface Paint, and created a new StandardMaterial3D through the picker. The Brush and canvas became white while the roof and selected-material header stayed Teal Steel. Clicking the preview opened the material Inspector without losing the face selection.
+
+Editing Albedo Color to c98239 exposed a stale preview: the Inspector sphere changed to copper, but Slab's canvas stayed white. StandardMaterial3D's Inspector edit did not notify the existing Resource.changed listener. The fix also listens to EditorInspector.property_edited for the active Brush and defers a preview refresh, preserving the selected faces and pending UV placement. A fresh native replay confirmed the copper color appeared in both the Paint sphere and canvas immediately after closing the color picker. Native Undo restored white in both previews, and Redo restored copper. The roof and its 18-face selection stayed teal until assignment. Undo, leaving Paint, and Save restored the exact scene. The Inspector connection lives behind the existing editor-host adapter.
+
+Before Assign, Save produced no scene diff, despite Godot marking the Inspector edit dirty. Assign followed by Save produced three roof material slots and copper faces, with the original 18 faces and volume 3.87238744273782. One native Undo and Save restored the scene exactly.
+
+The final rendered paint regression passed with zero failures. It clicks the picker preview, checks choice leaves the solid unchanged, applies through Assign, and verifies exact Undo and Redo. Its Inspector final-property-edit path updates preview pixels without manually emitting Resource.changed. The complete verifier, the final editor-boundary chrome check, documentation links, and website build passed.

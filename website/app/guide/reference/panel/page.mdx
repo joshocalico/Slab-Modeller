@@ -164,7 +164,7 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Make Unique | Copies the Brush onto the selected faces and makes its albedo editable. With default-material faces, it creates a blank image. Mixed-material selections are refused. |
 | Sample | Adopts the selected faces' common material as the Brush without assigning the previous Brush. Select faces using one material before sampling. Alt-click a face in the 3D view samples that face and its UV values directly. |
 | Material palette | Chooses the Brush without assigning it. Click **Assign**, or click a front-facing viewport face, to apply it. |
-| Material picker | Chooses a `StandardMaterial3D` as the Brush and immediately assigns it to the selected faces. Undo restores the previous assignment and material slots. |
+| Material picker | Chooses or creates a `StandardMaterial3D` as the Brush preview. Click Assign to apply it to selected faces. Choosing a Brush does not change the solid or add an Undo step. Click its preview to edit the resource in Godot's Inspector. |
 | Pixels/metre | Sets the density for Unwrap. |
 | Texture px | Sets the reference atlas width for Unwrap. It does not resize existing artwork. |
 | Unwrap | Creates seam-aware UV islands at the requested density and resets placement. An atlas that cannot fit leaves the solid unchanged and reports a suggested resolution. |

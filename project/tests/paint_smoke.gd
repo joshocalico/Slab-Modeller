@@ -25,6 +25,7 @@ func _boot() -> void:
 		return
 	_check_uv_matches_emit()
 	_check_texture_resolution_coherence()
+	_check_material_labels()
 	_check_uv_modifier_dispatch()
 	_check_brush_preview_caption()
 	_check_uv_transform_and_wrap()
@@ -47,6 +48,19 @@ func _boot() -> void:
 	_finish()
 
 
+func _check_material_labels() -> void:
+	var named := StandardMaterial3D.new()
+	named.resource_name = "Named Copper"
+	var external := StandardMaterial3D.new()
+	external.take_over_path("res://materials/external_brick.tres")
+	var built_in := StandardMaterial3D.new()
+	built_in.take_over_path("res://demo/test_scene.tscn::StandardMaterial3D_abc")
+	_expect(SlabPaint.material_label(named, 2) == "Named Copper", "material labels prefer explicit resource names")
+	_expect(SlabPaint.material_label(external, 2) == "external_brick", "external material labels use the resource filename")
+	_expect(SlabPaint.material_label(built_in, 2) == "Material 3", "built-in material labels avoid scene subresource IDs")
+	_expect(SlabPaint.material_label(StandardMaterial3D.new(), -1) == "New material", "unassigned materials have a stable label")
+
+
 func _check_brush_preview_caption() -> void:
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
 	root.add_child(solid)
@@ -67,6 +81,23 @@ func _check_brush_preview_caption() -> void:
 	solid.set("materials", [assigned, preview])
 	paint.enter()
 	_expect(paint.brush_preview_caption().is_empty(), "matching selected material keeps the UV gesture hint")
+	var imported_preview := StandardMaterial3D.new()
+	imported_preview.resource_name = "Copper"
+	var before_choice_materials: Array = (solid.get("materials") as Array).duplicate()
+	var before_choice_data: PackedByteArray = solid.get("data")
+	var before_choice_undo: int = undo.actions.size()
+	paint.choose_brush_material(imported_preview)
+	_expect(paint.brush_material() == imported_preview and paint.brush_preview_caption().contains("Assign to apply")
+		and solid.get("materials") == before_choice_materials and solid.get("data") == before_choice_data
+		and undo.actions.size() == before_choice_undo,
+		"choosing an imported brush previews without mutating geometry or Undo")
+	paint.assign_active_to_selection()
+	_expect((solid.get("materials") as Array).has(imported_preview) and solid.get("data") != before_choice_data
+		and undo.actions.size() == before_choice_undo + 1,
+		"Assign applies the chosen brush as one undoable geometry edit")
+	undo.undo()
+	_expect(solid.get("materials") == before_choice_materials and solid.get("data") == before_choice_data,
+		"brush assignment Undo restores exact materials and face data")
 	paint.select_material_slot(1)
 	_expect(paint.brush_preview_caption().contains("Assign to apply"),
 		"same-label distinct material resources still show a brush preview warning")

@@ -2,6 +2,7 @@
 extends RefCounted
 
 signal host_selection_changed
+signal inspected_resource_edited(resource: Resource)
 
 
 func scene_root() -> Node:
@@ -30,3 +31,7 @@ func icon(_icon_name: String) -> Texture2D:
 
 func undo() -> Object:
 	return null
+
+
+func inspect_resource(_resource: Resource) -> void:
+	pass

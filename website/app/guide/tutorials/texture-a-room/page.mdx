@@ -18,7 +18,7 @@ If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-
 
 The Slab header names the room, reports the selected face count, and shows the selection's material. Faces with no assigned material start with no brush material. Stay on **Material / UV**.
 
-The Material / UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a material chip changes this preview, but the header continues to report the material on the faces. To apply that palette choice, click **Assign** or paint the Brush onto a face in the 3D view.
+The Material / UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a material chip or using the material picker changes this preview, but the header continues to report the material on the faces. To apply that palette choice, click **Assign** or paint the Brush onto a face in the 3D view.
 
 ## Create the plaster material
 
@@ -26,10 +26,11 @@ The Material / UV canvas previews the current Brush texture beneath the selected
 2. Choose **New StandardMaterial3D**.
 3. Click the material preview to inspect the new resource.
 4. In the Inspector, set **Albedo > Color** to a warm plaster colour.
+5. Click **Assign** in Surface Paint.
 
-Choosing the material adds it to the room and assigns it to the selected walls. You do not need to click **Assign** after choosing it.
+Choosing the material previews it as the Brush. Assign adds it to the room and applies it to the selected walls in one undoable edit.
 
-If you opened the full Slab source checkout, you can use the bundled plaster instead. Choose **Quick Load**, then select `limestone` from `res://demo/signal_foundry/materials/limestone.tres`. Addon-only installations do not include that demo material.
+If you opened the full Slab source checkout, you can use the bundled plaster instead. Choose **Quick Load**, then select `limestone` from `res://demo/signal_foundry/materials/limestone.tres`. Click **Assign** to apply it. Addon-only installations do not include that demo material.
 
 ## Create the floor material
 
@@ -39,10 +40,11 @@ If you opened the full Slab source checkout, you can use the bundled plaster ins
 4. Open the material picker and choose **New StandardMaterial3D**.
 5. Click the material preview, then set **Albedo > Color** to a floor brown.
 6. In the Inspector, set **Albedo > Texture** to a repeating floor image from your project.
+7. Click **Assign**.
 
 For the bundled alternative, use **Quick Load** and choose `timber` from `res://demo/signal_foundry/materials/timber.tres`.
 
-The material picker assigns the new material to the selected floor. The walls keep their plaster material.
+Assign applies the new material to the selected floor. The walls keep their plaster material.
 
 <Figure
   src="/img/solid-textured.png"
@@ -77,6 +79,6 @@ Material assignment and UV placement stay in **Material / UV**. **Save Paint** a
 
 ## Check the room
 
-Orbit the room. The floor and walls should use different materials, and the floor pattern should repeat without stretching. Undo steps back through each material choice and UV write. Save the scene when the result looks right.
+Orbit the room. The floor and walls should use different materials, and the floor pattern should repeat without stretching. Undo steps back through each material assignment and UV write. Previewing a Brush does not add an Undo step. Save the scene when the result looks right.
 
 To draw into a material's albedo image, continue with [Paint texture pixels](/guide/how-to/paint-texture-pixels).

@@ -32,7 +32,7 @@ The legacy Materials & UV panel and Surface Paint share scale, offset, rotation,
 
 Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain useful and must stay available.
 
-Preserve brush identity across solids. Surface Paint chooses a material resource, then Assign applies it to selected faces. A target-local numeric slot is not a transferable brush. The material picker currently assigns its loaded resource immediately; Sample adopts the selected material and UV values. Migration must make these differing actions explicit.
+Preserve brush identity across solids. Surface Paint chooses a material resource, then Assign applies it to selected faces. A target-local numeric slot is not a transferable brush. The material picker and palette both choose the Brush without changing the solid. Assign or a viewport paint click applies it. Sample adopts the selected material and UV values.
 
 The legacy Add Material creates a blank, unassigned slot. Decide on an explicit New Material workflow before removing it or rewriting the house tutorial around loaded resources. UV Larger and UV Smaller are expressible through Repeat fields or canvas scaling, but their one-click doubling and halving behavior should be retained if it earns space in the revised layout.
 
