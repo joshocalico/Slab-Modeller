@@ -32,8 +32,14 @@ The room tutorial now covers installed-addon prerequisites and exact cutter plac
 
 Created a temporary 4 × 3 × 4 box in Godot, inset its top by 0.45, and saved that baseline. Extrude -2.4 displayed the cavity before Apply. The old selected-cap fill no longer covered the opening. Save kept the preview active and left the scene file byte-for-byte identical to the baseline. Extrude -4 restored the original surface and disabled Apply; returning to -2.4 recovered the preview. Cancel restored the original display. Apply committed the cavity, and Undo restored the inset cap.
 
-Deleted the temporary box in Godot and restored the cutter's temporary inspection position. Saving returned the scene file to HEAD exactly. A later bevel pick hit PowerHouseVault rather than the intended cutter and was rejected at both 0.5 and 0.05 width. Cancel left its geometry unchanged. This is not evidence of a successful native bevel preview; crowded picking needs further investigation.
+Deleted the temporary box in Godot and restored the cutter's temporary inspection position. Saving returned the scene file to HEAD exactly. A later bevel pick hit PowerHouseVault rather than the intended cutter and was rejected at both 0.5 and 0.05 width. Cancel left its geometry unchanged. Crowded picking needs further investigation.
+
+For a clear bevel replay, temporarily moved the cutter to Y=10 through the Inspector. Selected its exposed vertical edge and previewed a three-segment bevel at widths 0.05 and 0.3. The rendered silhouette changed before Apply; Cancel restored the sharp edge. Restored Y=0.77 and saved, again leaving the scene file identical to HEAD.
 
 The full verifier passed all gates. The viewport smoke covers valid-to-invalid-to-valid preview changes. The new display-preview smoke checks packed scene properties, material references, collision state, mesh export, corrupt preview data, and exact display restoration on Cancel. The docs verifier passed 28 MDX pages and 72 local references.
 
-Undo exposed a separate issue: geometry returns to the inset cap but the native gizmo can remain at the extruded floor. Its selected face ID has not changed, so the current refresh cache misses the geometry change. This is the next focused fix.
+Undo exposed a separate issue: geometry returned to the inset cap but the native gizmo remained at the extruded floor. The selected face ID had not changed, so the refresh cache missed the geometry change.
+
+Fixed by subscribing to the selected solid's topology changes and invalidating the native gizmo frame. Native replay used an isolated cutter side face: Apply Extrude 0.5 moved the gizmo with the face, Undo restored both, and Redo moved both again. Undid the test edit, restored the cutter's position, and saved with no scene diff.
+
+The full verifier passed all gates. The separate editor-hosted regression passed nine checks, including disconnecting the previously selected solid and preserving pending native drag state while invalidating its cached frame. It now runs in slab-verify. The runtime chrome smoke retains its 41 cases; editor-plugin construction belongs in the editor-hosted test.

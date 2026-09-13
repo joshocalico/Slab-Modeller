@@ -25,6 +25,7 @@ var _gizmos: Array = []
 var _solid_gizmo: EditorNode3DGizmoPlugin
 var _subgizmo_token := ""
 var _subgizmo_solid: Node3D = null
+var _topology_solid: Node3D = null
 var _workspace := "3D"
 var _overlay_camera: Camera3D
 
@@ -59,7 +60,7 @@ func _enter_tree() -> void:
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, _strip)
 
 	_host.connect_host_selection(_on_editor_selection_changed)
-	_selection.changed.connect(_refresh_gizmos)
+	_selection.changed.connect(_on_selection_changed)
 	_selection.hover_changed.connect(_refresh_gizmos)
 	_selection.settings_changed.connect(_on_selection_settings_changed)
 	_sync_native_local_axes()
@@ -81,8 +82,8 @@ func _exit_tree() -> void:
 	if scene_saved.is_connected(_on_scene_saved):
 		scene_saved.disconnect(_on_scene_saved)
 	if _selection:
-		if _selection.changed.is_connected(_refresh_gizmos):
-			_selection.changed.disconnect(_refresh_gizmos)
+		if _selection.changed.is_connected(_on_selection_changed):
+			_selection.changed.disconnect(_on_selection_changed)
 		if _selection.hover_changed.is_connected(_refresh_gizmos):
 			_selection.hover_changed.disconnect(_refresh_gizmos)
 		if _selection.settings_changed.is_connected(_on_selection_settings_changed):
@@ -101,6 +102,7 @@ func _exit_tree() -> void:
 		_strip = null
 	remove_custom_type("SlabSweep")
 	_clear_subgizmo()
+	_bind_topology_solid(null)
 	for gizmo in _gizmos:
 		remove_node_3d_gizmo_plugin(gizmo)
 	_gizmos.clear()
@@ -278,7 +280,33 @@ func _on_editor_selection_changed() -> void:
 	if _session == null:
 		return
 	_session.adopt_host_selection()
+	_bind_topology_solid(_selection.solid)
 	_refresh_gizmos()
+
+
+func _on_selection_changed() -> void:
+	_bind_topology_solid(_selection.solid)
+	_refresh_gizmos()
+
+
+func _bind_topology_solid(solid: Node3D) -> void:
+	if solid == _topology_solid:
+		return
+	if _topology_solid != null and is_instance_valid(_topology_solid) \
+			and _topology_solid.has_signal("topology_changed") \
+			and _topology_solid.topology_changed.is_connected(_on_selected_topology_changed):
+		_topology_solid.topology_changed.disconnect(_on_selected_topology_changed)
+	_topology_solid = solid
+	if _topology_solid != null and is_instance_valid(_topology_solid) \
+			and _topology_solid.has_signal("topology_changed") \
+			and not _topology_solid.topology_changed.is_connected(_on_selected_topology_changed):
+		_topology_solid.topology_changed.connect(_on_selected_topology_changed)
+
+
+func _on_selected_topology_changed() -> void:
+	_subgizmo_token = ""
+	if _session != null and not _session.native_gizmo_pending():
+		_refresh_gizmos.call_deferred()
 
 
 func _refresh_gizmos() -> void:
