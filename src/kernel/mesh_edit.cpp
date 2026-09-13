@@ -679,6 +679,24 @@ MeshFault MeshEdit::merge_face_region(const std::vector<FaceId> &p_faces) {
 		fault.code = MeshError::INVALID_SELECTION;
 		return fault;
 	}
+	std::unordered_map<uint32_t, std::vector<uint32_t>> graph;
+	for (const HalfEdgeIdx he : internal) {
+		const HalfEdgeIdx twin = work.half_edges[he.i].twin;
+		graph[work.half_edges[he.i].face.i].push_back(work.half_edges[twin.i].face.i);
+	}
+	std::unordered_map<uint32_t, bool> reached;
+	std::vector<uint32_t> stack{ p_faces[0].slot };
+	while (!stack.empty()) {
+		const uint32_t face = stack.back();
+		stack.pop_back();
+		if (!reached.emplace(face, true).second) continue;
+		for (const uint32_t next : graph[face]) stack.push_back(next);
+	}
+	if (reached.size() != selected.size()) {
+		fault.code = MeshError::INVALID_SELECTION;
+		fault.slot = p_faces[0].slot;
+		return fault;
+	}
 
 	std::unordered_map<uint32_t, HalfEdgeIdx> by_origin;
 	std::unordered_map<uint32_t, int> arrivals;
@@ -703,6 +721,9 @@ MeshFault MeshEdit::merge_face_region(const std::vector<FaceId> &p_faces) {
 	std::unordered_map<uint32_t, bool> seen_boundary;
 	HalfEdgeIdx cursor = boundary[0];
 	for (size_t guard = 0; guard < boundary.size(); guard++) {
+		if (!ordered.empty() && cursor.i == boundary[0].i) {
+			break;
+		}
 		if (!seen_boundary.emplace(cursor.i, true).second) {
 			fault.code = MeshError::INVALID_SELECTION;
 			fault.slot = p_faces[0].slot;
@@ -718,7 +739,12 @@ MeshFault MeshEdit::merge_face_region(const std::vector<FaceId> &p_faces) {
 		}
 		cursor = next->second;
 	}
-	if (cursor.i != boundary[0].i || ordered.size() != boundary.size()) {
+	if (cursor.i == boundary[0].i && ordered.size() != boundary.size()) {
+		fault.code = MeshError::MULTIPLE_BOUNDARY_LOOPS;
+		fault.slot = p_faces[0].slot;
+		return fault;
+	}
+	if (cursor.i != boundary[0].i) {
 		fault.code = MeshError::INVALID_SELECTION;
 		fault.slot = p_faces[0].slot;
 		return fault;

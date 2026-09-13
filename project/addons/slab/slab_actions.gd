@@ -70,6 +70,7 @@ const ERR_NO_INTERSECTION := 13
 const ERR_CORRUPT_DATA := 14
 const ERR_INVALID_SELECTION := 15
 const ERR_SELF_INTERSECTION := 16
+const ERR_MULTIPLE_BOUNDARY_LOOPS := 17
 
 var loop_count: int = 1
 var loop_position: float = 0.5
@@ -417,6 +418,8 @@ func clamp_material_slot() -> void:
 
 
 static func describe_error(code: int, action_id: String = "") -> String:
+	if action_id == "merge_faces" and code == ERR_MULTIPLE_BOUNDARY_LOOPS:
+		return "These faces surround an opening. Merge a smaller region that does not surround the opening."
 	if action_id == "subdivide_faces" and code == ERR_ADJACENT_SELECTION:
 		return "Selected faces share an edge. Subdivide separate faces in this operation."
 	if action_id in ["connect_vertices", "connect_edges"] and code in [ERR_INVALID_SELECTION, ERR_ADJACENT_SELECTION]:
@@ -460,6 +463,8 @@ static func describe_error(code: int, action_id: String = "") -> String:
 			return "The stored mesh is corrupt."
 		ERR_INVALID_SELECTION:
 			return "That selection cannot run this command."
+		ERR_MULTIPLE_BOUNDARY_LOOPS:
+			return "The selected region has more than one boundary."
 		_:
 			return "Mesh error %d." % code
 

@@ -42,6 +42,8 @@ Slab builds one quad for every corner of each source face. A quad becomes four q
 
 Slab joins the region into one face. The first selected face supplies the merged face's material and UV values; changing the order of the remaining selection does not affect the result. The merged face becomes selected.
 
-The region must have one simple outer boundary. Merge refuses a ring of selected faces that encloses an unselected hole.
+The region must have one boundary loop. Merge refuses faces that surround an opening, such as the wall around a doorway, or enclose an unselected patch. A single Slab face cannot contain a hole.
+
+**Select Coplanar** can select a valid flat wall all the way around a doorway. If Merge reports that the faces surround an opening, merge smaller regions that do not wrap around the opening. The refusal leaves the solid unchanged.
 
 These commands preserve a closed solid. To make an opening through a solid, use [Subtract](/guide/how-to/punch-a-cavity). To hollow a capped region without opening the shell, [inset and extrude inward](/guide/how-to/edit-face-regions#hollow-a-divided-cap).

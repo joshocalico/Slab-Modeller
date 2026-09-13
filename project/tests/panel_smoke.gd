@@ -247,7 +247,14 @@ func _check_phrasing(actions: RefCounted) -> void:
 		"other tools do not prescribe an unrelated inset workflow")
 	_expect(not SlabActions.describe_error(SlabActions.ERR_NOT_CLOSED, "delete_faces").contains("Mesh error"),
 		"delete does not fall back to a bare error number")
-	_expect(SlabActions.ERR_SELF_INTERSECTION == 16, "SELF_INTERSECTION stays last at 16")
+	_expect(SlabActions.ERR_SELF_INTERSECTION == 16, "SELF_INTERSECTION keeps its existing value")
+	_expect(SlabActions.ERR_MULTIPLE_BOUNDARY_LOOPS == 17, "multiple boundaries append without renumbering existing errors")
+	_expect(SlabActions.describe_error(SlabActions.ERR_MULTIPLE_BOUNDARY_LOOPS, "merge_faces").contains("surround an opening"),
+		"holed Merge explains the single-face boundary limit")
+	_expect(SlabActions.describe_error(SlabActions.ERR_INVALID_SELECTION, "merge_faces").contains("disconnected"),
+		"disconnected Merge keeps its distinct connected-region guidance")
+	_expect(SlabActions.describe_error(SlabActions.ERR_DEGENERATE_FACE, "merge_faces").contains("Folded"),
+		"folded Merge keeps its distinct flat-surface guidance")
 	_expect(SlabActions.describe_error(SlabActions.ERR_ADJACENT_SELECTION).contains("share"),
 		"adjacent selection names the shared-edge rule")
 	_expect(not SlabActions.describe_error(SlabActions.ERR_ADJACENT_SELECTION).contains("faces that do not touch"),
@@ -258,7 +265,7 @@ func _check_phrasing(actions: RefCounted) -> void:
 		"twin mismatch names the twin")
 	_expect(SlabActions.describe_error(SlabActions.ERR_DEGENERATE_FACE).contains("line or point"),
 		"collapsed faces explain the geometric problem in plain language")
-	for code in range(1, SlabActions.ERR_SELF_INTERSECTION + 1):
+	for code in range(1, SlabActions.ERR_MULTIPLE_BOUNDARY_LOOPS + 1):
 		_expect(not SlabActions.describe_error(code).contains("Mesh error"),
 			"code %d has a named phrase, got %s" % [code, SlabActions.describe_error(code)])
 	_expect(SlabActions.describe_error(99).contains("Mesh error 99"), "unknown codes still print the number")

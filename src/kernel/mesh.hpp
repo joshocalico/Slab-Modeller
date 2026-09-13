@@ -75,6 +75,7 @@ enum class MeshError : uint8_t {
 	CORRUPT_DATA,
 	INVALID_SELECTION,
 	SELF_INTERSECTION,
+	MULTIPLE_BOUNDARY_LOOPS,
 };
 
 enum class FaultElement : uint8_t { NONE, VERTEX, HALF_EDGE, FACE };

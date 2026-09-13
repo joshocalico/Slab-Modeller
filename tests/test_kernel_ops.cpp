@@ -371,7 +371,7 @@ SLAB_TEST(merge_faces_refuses_folded_and_disconnected_regions_atomically) {
 	expect_eq(int(rim.size()), 4, "inset has four rim faces around its cap hole");
 	MeshEdit holed(ring);
 	const MeshFault hole_fault = ops::merge_faces(holed, rim);
-	expect_eq(int(hole_fault.code), int(MeshError::INVALID_SELECTION), "a region with a hole refuses merge");
+	expect_eq(int(hole_fault.code), int(MeshError::MULTIPLE_BOUNDARY_LOOPS), "a region with a hole has a typed merge refusal");
 	expect_eq(holed.scratch().face_count(), ring.face_count(), "hole refusal changes no faces");
 }
 
