@@ -260,14 +260,15 @@ func refresh() -> void:
 func focus_create(id: StringName) -> void:
 	if not _actions.shapes.CATALOG.has(id):
 		return
-	_actions.create_settings_changed.emit()
 	if _create_focus == id:
 		_sync_create_pressed()
+		_actions.create_settings_changed.emit()
 		return
 	_create_focus = id
 	if _selection.mode == SlabSelection.Mode.OBJECT:
 		_refresh_settings()
 	_sync_create_pressed()
+	_actions.create_settings_changed.emit()
 
 
 func _rebuild_commands(sections: Array[Dictionary]) -> void:

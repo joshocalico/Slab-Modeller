@@ -743,6 +743,29 @@ func case_object_settings_are_for_the_next_shape() -> void:
 	panel.free()
 
 
+func case_mouse_shape_choice_updates_before_notifying_consumers() -> void:
+	root.size = Vector2i(1280, 800)
+	var panel := _build_panel(1.0)
+	root.add_child(panel)
+	panel.size = Vector2(1226.0, 320.0)
+	panel.resized.emit()
+	await process_frame
+	await process_frame
+	var stair: Button = panel.find_child("make_stair", true, false)
+	var observed := {"title": "", "pressed": false}
+	panel.get("_actions").create_settings_changed.connect(func() -> void:
+		observed.title = (panel.find_child("SettingsTitle", true, false) as Label).text
+		observed.pressed = stair.button_pressed
+	)
+	_mouse_click(stair)
+	expect(observed.title == "New Stair" and observed.pressed,
+		"mouse Stair choice updates pressed state and settings before notifying consumers")
+	expect((panel.find_child("SettingsTitle", true, false) as Label).text == "New Stair"
+		and panel.find_child("stair_steps", true, false) != null,
+		"mouse Stair choice displays Stair fields")
+	panel.free()
+
+
 func case_boolean_operands_are_named_and_swappable() -> void:
 	var selection := SlabSelection.new()
 	var target: Node3D = ClassDB.instantiate("SlabSolid")
