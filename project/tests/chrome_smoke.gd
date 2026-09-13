@@ -505,7 +505,7 @@ func case_command_labels_fit_and_wrap() -> void:
 			"%s keeps a hit target, size=%s min=%s" % [label, button.size, button.custom_minimum_size])
 	panel.free()
 	var face := _build_panel(1.0, SlabSelection.Mode.FACE)
-	for label in ["Extrude", "Inset", "Flip Normals"]:
+	for label in ["Extrude", "Inset", "Select Coplanar"]:
 		var button: Button = _button_for(face, label)
 		expect(button != null, "%s is on the Face dock" % label)
 		expect(not button.clip_text, "%s does not clip its caption" % label)
@@ -833,7 +833,7 @@ func case_status_wraps_a_long_recovery_message() -> void:
 	panel.free()
 
 
-func case_mouse_click_extrude_and_delete_run() -> void:
+func case_mouse_click_extrude_and_refused_merge_run() -> void:
 	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
 		expect(false, "SlabSolid is built")
 		return
@@ -899,22 +899,24 @@ func case_mouse_click_extrude_and_delete_run() -> void:
 	expect(int(solid.call("face_count")) > before, "mouse Extrude still extrudes, faces %d after %d" % [
 		solid.call("face_count"), before
 	])
-	var trash: Button = _button_for(panel, "Delete")
-	expect(trash != null and not trash.disabled, "Delete is enabled for a selected face")
-	var trash_rect: Rect2 = trash.get_global_rect()
-	expect(trash_rect.size.x >= 40.0 and trash_rect.size.y >= 24.0,
-		"Delete has a clickable rect, size=%s min=%s global=%s" % [
-			trash.size, trash.get_combined_minimum_size(), trash_rect
-		])
+	var other := 0
+	for face_id in solid.call("get_faces"):
+		if absf(solid.call("face_normal", face_id).y) < 0.1:
+			other = face_id
+			break
+	selection.set_ids(PackedInt64Array([top, other]))
+	await process_frame
+	await process_frame
+	var merge: Button = _button_for(panel, "Merge")
+	expect(merge != null and not merge.disabled, "Merge is enabled for two selected faces")
 	said.clear()
-	var trash_hits := {"n": 0}
-	trash.pressed.connect(func() -> void: trash_hits["n"] += 1)
-	_mouse_click(trash)
-	expect(trash_hits["n"] == 1, "a viewport mouse click fires Delete.pressed, got %d rect=%s" % [
-		trash_hits["n"], trash.get_global_rect()
-	])
-	expect(not said.is_empty() and said[0].contains("open solid"),
-		"a mouse click on Delete reports the closed-solid copy, got %s" % [said])
+	var merge_hits := {"n": 0}
+	merge.pressed.connect(func() -> void: merge_hits["n"] += 1)
+	var before_refusal: PackedByteArray = solid.get("data")
+	_mouse_click(merge)
+	expect(merge_hits["n"] == 1, "a viewport mouse click fires Merge.pressed")
+	expect(solid.get("data") == before_refusal and not said.is_empty() and said[0].contains("flat surface"),
+		"refused Merge preserves geometry and explains the selection constraint, got %s" % [said])
 	panel.free()
 	solid.free()
 

@@ -37,12 +37,12 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.EDGE: {
-		"Edge": ["bevel_edges", "bridge_edges", "connect_edges", "insert_loop", "dissolve_edges", "mark_uv_seam", "clear_uv_seam", "select_loop", "select_ring"],
+		"Edge": ["bevel_edges", "connect_edges", "insert_loop", "dissolve_edges", "mark_uv_seam", "clear_uv_seam", "select_loop", "select_ring"],
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
 		"Face": [
-			"extrude_faces", "inset_faces", "delete_faces", "flip_faces", "subdivide_faces", "merge_faces", "select_coplanar", "align_face",
+			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "align_face",
 		],
 		"UV": [
 			"set_face_material", "uv_apply", "uv_scale_up", "uv_scale_down", "uv_rotate", "uv_reset", "uv_unwrap",

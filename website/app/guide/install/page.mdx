@@ -2,32 +2,79 @@ export const metadata = { title: "Install Slab" };
 
 # Install Slab
 
-Build the GDExtension, then open the Godot project that already enables the plugin.
+Slab is currently installed from a source checkout. There is no public repository URL or packaged addon in this guide. Ask the project owner for a complete checkout, then build the GDExtension for your computer.
 
 ## What you need
 
-- Godot 4.7 for the bundled project. The extension declares Godot 4.5 as its compatibility minimum.
-- A C++ toolchain that can run `scons`
-- Git, so you can fetch `godot-cpp`
+- Godot 4.7 to open the bundled project. The extension declares Godot 4.5 as its compatibility minimum.
+- Git to initialize the `godot-cpp` submodule.
+- Python 3 and SCons. The SCons project recommends `python -m pip install scons`. Confirm the installation with `scons --version`.
+- A C++ compiler for your operating system.
 
-## Build
+Slab's verified development path is macOS with Xcode or the Xcode Command Line Tools. Godot documents the same compiler, Python, and SCons setup for [building C++ projects on macOS](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_macos.html).
 
-From the repository root:
+The extension descriptor also declares Windows x86-64 and Linux x86-64 libraries, but this guide has not verified those Slab builds. Godot documents Visual Studio 2019 or later and MinGW-w64 as Windows compiler choices, and GCC or Clang as Linux choices. Follow Godot's [Windows](https://docs.godotengine.org/en/4.7/engine_details/development/compiling/compiling_for_windows.html) or [Linux](https://docs.godotengine.org/en/4.7/engine_details/development/compiling/compiling_for_linuxbsd.html) toolchain setup before trying Slab on those systems.
+
+The official [godot-cpp build guide](https://docs.godotengine.org/en/4.7/tutorials/scripting/cpp/build_system/scons.html) explains why each platform needs its own compiled library and how Godot chooses that library from a `.gdextension` file.
+
+## Build the extension
+
+From the Slab repository root:
 
 ```bash
 git submodule update --init --recursive
 scons target=template_debug
+```
+
+The first command fills `godot-cpp/`. The build uses the repository's `SConstruct` and writes the debug library under `project/addons/slab/bin/`.
+
+On the verified macOS path, the library is:
+
+```text
+project/addons/slab/bin/libslab.macos.template_debug.framework/
+```
+
+The `project/addons/slab/slab.gdextension` file declares the library paths that Godot loads. Do not rename the built library or move it outside `addons/slab/bin/`.
+
+## Run the developer checks
+
+If you are changing Slab itself, run:
+
+```bash
 scripts/slab-verify
 ```
 
-`scons target=template_debug` writes the debug library under `project/addons/slab/bin/`. `scripts/slab-verify` builds it again, runs the kernel tests, loads the extension, and exercises the editor plugin and demos.
+This Bash script rebuilds the extension and kernel test, runs the kernel suite, loads the extension, and exercises the plugin and demos. It is the repository's developer gate, not a required second installation step. The script has been verified on macOS. Windows and Linux use the same SCons build, but the complete verifier has not been confirmed on those platforms.
 
-## Open the editor
+## Open the bundled project
 
 1. Open `project/` in Godot 4.7.
 2. Confirm **Project → Project Settings → Plugins** lists Slab as enabled.
 3. Open `demo/demo.tscn` if the 3D view is empty.
 
-The Slab bottom panel should appear. The spatial editor menu should show the Object, Vertex, Edge, and Face strip.
+The **Slab** bottom panel should appear. The 3D editor menu should show Object, Vertex, Edge, and Face mode buttons.
 
-If Godot reports that `SlabSolid` is missing, the extension did not build. Run `scons target=template_debug` again and restart the editor.
+## Add Slab to an existing project
+
+1. Build Slab for the operating system that runs the target Godot project.
+2. Copy the complete `project/addons/slab/` directory from the Slab checkout into `<your-project>/addons/slab/`.
+3. Confirm that the copied `addons/slab/bin/` contains the library for that operating system and build target.
+4. Open the target project in Godot.
+5. Open **Project → Project Settings → Plugins**, then enable **Slab**.
+
+Copy the complete addon directory. The GDScript editor tools, `plugin.cfg`, `slab.gdextension`, icons, and compiled library work together.
+
+This copy workflow has been verified in a fresh Godot project: a box created through the Slab panel remained editable with the same dimensions and collision after saving, closing the editor, and reopening the project.
+
+## Fix a failed installation
+
+| Symptom | Check |
+| --- | --- |
+| `godot-cpp is missing` | Run `git submodule update --init --recursive` from the repository root. |
+| `scons: command not found` | Install SCons with `python -m pip install scons`, then open a new terminal and run `scons --version`. See the [SCons installation guide](https://scons.org/doc/4.9.0/HTML/scons-user/ch01s02.html). |
+| The compiler is missing | Install the platform toolchain linked under **What you need**, then run the build again. |
+| Godot cannot load the dynamic library | Confirm that the current operating system and architecture have a matching entry in `slab.gdextension` and a matching file under `addons/slab/bin/`. |
+| Godot reports that `SlabSolid` is missing | Read the editor's GDExtension load error, fix the missing or incompatible library, restart Godot, and reopen the project. |
+| Slab is absent from **Plugins** | Confirm that `<your-project>/addons/slab/plugin.cfg` exists and that the whole addon directory was copied. |
+
+Do not use a library built for another operating system or architecture. Build on the target system unless you have configured and tested a cross-compiler.

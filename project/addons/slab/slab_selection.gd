@@ -149,6 +149,12 @@ func set_ids(value: PackedInt64Array) -> void:
 	changed.emit()
 
 
+func restore_ids_for(target: Node3D, target_mode: int, value: PackedInt64Array) -> void:
+	# Undoing a mesh edit must not put its handles onto another selected solid.
+	if solid == target and mode == target_mode:
+		set_ids(value)
+
+
 func toggle_id(id: int, additive: bool) -> void:
 	if not additive:
 		set_ids(PackedInt64Array([id]) if id != 0 else PackedInt64Array())

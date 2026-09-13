@@ -3,6 +3,7 @@
 #include "kernel/mesh_edit.hpp"
 #include "kernel/ops/bevel.hpp"
 #include "kernel/ops/bridge.hpp"
+#include "kernel/ops/edit.hpp"
 #include "kernel/ops/inset.hpp"
 #include "kernel/ops/loop.hpp"
 #include "kernel/ops/primitives.hpp"
@@ -45,6 +46,18 @@ static FaceId face_facing(const Mesh &p_mesh, const godot::Vector3 &p_dir) {
 
 static FaceId top_face(const Mesh &p_mesh) {
 	return face_facing(p_mesh, godot::Vector3(0, 1, 0));
+}
+
+static std::vector<FaceId> upward_faces(const Mesh &p_mesh) {
+	std::vector<FaceId> out;
+	std::vector<FaceId> faces;
+	p_mesh.all_faces(faces);
+	for (const FaceId id : faces) {
+		if (p_mesh.face_normal(id).y > 0.99f) {
+			out.push_back(id);
+		}
+	}
+	return out;
 }
 
 static VertexId far_corner(const Mesh &p_mesh, VertexId p_from) {
@@ -294,6 +307,92 @@ SLAB_TEST(subdivide_two_opposite_faces_at_once) {
 	expect_eq(out.vertex_count(), 18, "two face subdivide verts");
 	expect_eq(euler(out), 2, "two face subdivide euler");
 	expect_near(out.signed_volume(), 12.0, 0.01, "two face subdivide moves no volume");
+}
+
+SLAB_TEST(merge_faces_consumes_a_connected_coplanar_region_in_any_input_order) {
+	const Mesh box = unit_box();
+	MeshEdit divided(box);
+	expect(ops::subdivide(divided, { top_face(box) }).ok(), "subdivide top before merge");
+	Mesh tiled;
+	expect(std::move(divided).commit(tiled).ok(), "subdivided top commits");
+	const std::vector<FaceId> caps = upward_faces(tiled);
+	expect_eq(int(caps.size()), 4, "subdivide leaves four coplanar cap faces");
+
+	const std::vector<std::vector<FaceId>> orders = {
+		{ caps[2], caps[0], caps[3], caps[1] },
+		{ caps[1], caps[3], caps[0], caps[2] },
+	};
+	for (const std::vector<FaceId> &order : orders) {
+		MeshEdit merged(tiled);
+		FaceAttrs first_attrs = merged.scratch().attrs(order[0]);
+		first_attrs.material_slot = 17;
+		merged.set_attrs(order[0], first_attrs);
+		expect(ops::merge_faces(merged, order).ok(), "merge accepts a cyclic region in shuffled order");
+		Mesh out;
+		expect(std::move(merged).commit(out).ok(), "order-independent merge commits");
+		expect_eq(out.face_count(), 6, "four cap tiles merge into one face");
+		expect_eq(int(upward_faces(out).size()), 1, "merged cap is one face");
+		expect(out.alive(order[0]), "merge keeps the first selected face id");
+		expect_eq(int(out.attrs(order[0]).material_slot), 17, "merged face keeps the first selected face attributes");
+		expect_eq(euler(out), 2, "merged solid keeps Euler characteristic");
+		expect_near(out.signed_volume(), 12.0, 0.0001, "merge preserves volume");
+		expect(validate(out).ok(), "merged solid validates");
+	}
+}
+
+SLAB_TEST(merge_faces_refuses_folded_and_disconnected_regions_atomically) {
+	const Mesh box = unit_box();
+	const FaceId top = top_face(box);
+	const FaceId side = face_facing(box, godot::Vector3(0, 0, -1));
+	const FaceId bottom = face_facing(box, godot::Vector3(0, -1, 0));
+
+	MeshEdit folded(box);
+	const MeshFault folded_fault = ops::merge_faces(folded, { top, side });
+	expect_eq(int(folded_fault.code), int(MeshError::DEGENERATE_FACE), "folded faces refuse merge");
+	expect_eq(folded.scratch().face_count(), 6, "folded refusal changes no faces");
+	expect(folded.scratch().alive(top) && folded.scratch().alive(side), "folded refusal keeps both face ids");
+
+	MeshEdit disconnected(box);
+	const MeshFault disconnected_fault = ops::merge_faces(disconnected, { top, bottom });
+	expect_eq(int(disconnected_fault.code), int(MeshError::INVALID_SELECTION), "disconnected faces refuse merge");
+	expect_eq(disconnected.scratch().face_count(), 6, "disconnected refusal changes no faces");
+	expect(disconnected.scratch().alive(top) && disconnected.scratch().alive(bottom), "disconnected refusal keeps both face ids");
+
+	MeshEdit inset(box);
+	expect(ops::inset(inset, { top }, 0.25f).ok(), "inset creates a coplanar ring");
+	Mesh ring;
+	expect(std::move(inset).commit(ring).ok(), "inset ring commits");
+	std::vector<FaceId> rim;
+	for (const FaceId id : upward_faces(ring)) {
+		if (id.slot != top.slot) {
+			rim.push_back(id);
+		}
+	}
+	expect_eq(int(rim.size()), 4, "inset has four rim faces around its cap hole");
+	MeshEdit holed(ring);
+	const MeshFault hole_fault = ops::merge_faces(holed, rim);
+	expect_eq(int(hole_fault.code), int(MeshError::INVALID_SELECTION), "a region with a hole refuses merge");
+	expect_eq(holed.scratch().face_count(), ring.face_count(), "hole refusal changes no faces");
+}
+
+SLAB_TEST(merge_faces_cannot_clear_an_existing_edit_fault) {
+	const Mesh box = unit_box();
+	const FaceId top = top_face(box);
+	std::vector<VertexId> corners;
+	box.face_corners(top, corners);
+	MeshEdit poisoned(box);
+	poisoned.split_face(top, corners[0], corners[2]);
+	expect(poisoned.last_fault().ok(), "split creates a valid merge target");
+	const std::vector<FaceId> split = upward_faces(poisoned.scratch());
+	expect_eq(int(split.size()), 2, "split top has two faces to merge");
+	poisoned.move_vertex(VertexId{ 9999, 1 }, IVec3{});
+	expect_eq(int(poisoned.last_fault().code), int(MeshError::STALE_HANDLE), "stale move poisons the edit");
+	const MeshFault merged = ops::merge_faces(poisoned, split);
+	expect_eq(int(merged.code), int(MeshError::STALE_HANDLE), "merge returns the existing fault");
+	expect_eq(poisoned.scratch().face_count(), 7, "merge leaves poisoned scratch unchanged");
+	Mesh out;
+	const MeshFault committed = std::move(poisoned).commit(out);
+	expect_eq(int(committed.code), int(MeshError::STALE_HANDLE), "merge cannot make a poisoned edit commit");
 }
 
 SLAB_TEST(bevel_retires_the_edge_and_cuts_the_corner_off) {

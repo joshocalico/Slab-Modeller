@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+fixture="$(mktemp -d /tmp/slab-install-XXXXXX)"
+mkdir -p "$fixture/addons" "$fixture/tests"
+cp -R "$repo_root/project/addons/slab" "$fixture/addons/slab"
+for script in native_gizmo_editor_smoke panel_editor_smoke install_editor_smoke; do
+  cp "$repo_root/project/tests/$script.gd" "$fixture/tests/"
+done
+cat > "$fixture/project.godot" <<'PROJECT'
+config_version=5
+[application]
+config/name="Slab install acceptance"
+run/main_scene="res://main.tscn"
+[editor_plugins]
+enabled=PackedStringArray("res://addons/slab/plugin.cfg")
+PROJECT
+cat > "$fixture/main.tscn" <<'SCENE'
+[gd_scene format=3]
+[node name="Level" type="Node3D"]
+SCENE
+printf 'Disposable installation project: %s\n' "$fixture"
+"$repo_root/scripts/godot" --editor --headless --path "$fixture" --import > "$fixture/import.log" 2>&1
+if grep -Eq 'SCRIPT ERROR:|Parse Error' "$fixture/import.log"; then
+  cat "$fixture/import.log"
+  exit 1
+fi
+for stage in create reopen; do
+  if ! SLAB_INSTALL_CAPTURE="$fixture/$stage" "$repo_root/scripts/godot" --editor --path "$fixture" --script res://tests/install_editor_smoke.gd -- "$stage" > "$fixture/$stage.log" 2>&1; then
+    cat "$fixture/$stage.log"
+    exit 1
+  fi
+  if grep -Eq 'SCRIPT ERROR:|NATIVE_FAILURE|"passed":false' "$fixture/$stage.log" || ! grep -Eq 'INSTALL_EDITOR_RESULT failures=0' "$fixture/$stage.log"; then
+    cat "$fixture/$stage.log"
+    exit 1
+  fi
+  printf 'PASS clean-project %s\n' "$stage"
+done

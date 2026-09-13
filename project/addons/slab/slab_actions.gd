@@ -161,6 +161,9 @@ func disabled_reason(row: Dictionary) -> String:
 	var modes: Array = row["modes"]
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
+	var exact: int = row.get("exact_count", 0)
+	if exact > 0 and _selection.count() != exact:
+		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
 	var need: int = row["min_count"]
 	if _selection.count() < need:
 		return "%s needs %s." % [row["label"], _element_count(_selection.mode, need)]
@@ -227,6 +230,7 @@ func _apply(row: Dictionary, plan: Dictionary) -> void:
 func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -> void:
 	var before: PackedByteArray = target.get("data")
 	var before_ids := PackedInt64Array(_selection.ids)
+	var before_elements := SlabTopology.all_ids(target, _selection.mode) if method in ["subdivide_faces", "merge_faces", "connect_edges"] else PackedInt64Array()
 	var err: int = target.callv(method, args)
 	if err != OK:
 		_report("%s failed. %s" % [row["label"], describe_error(err, row["id"])])
@@ -236,16 +240,24 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		_report("%s did not change the solid." % row["label"])
 		return
 	var after_ids := before_ids
+	if method in ["subdivide_faces", "merge_faces", "dissolve_edges", "collapse_vertices", "weld_vertices", "connect_edges", "connect_vertices"]:
+		var alive := SlabTopology.all_ids(target, _selection.mode)
+		after_ids = PackedInt64Array()
+		for id in before_ids:
+			if method != "connect_edges" and alive.has(id): after_ids.append(id)
+		if method in ["subdivide_faces", "merge_faces", "connect_edges"]:
+			for id in alive:
+				if not before_elements.has(id): after_ids.append(id)
 	if before_ids.size() > 1 and (method == "extrude_faces" or method == "inset_faces"):
 		after_ids = PackedInt64Array(target.call("get_last_edited_faces"))
-		_selection.set_ids(after_ids)
+	_selection.set_ids(after_ids)
 	if _undo != null:
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
 		_undo.add_undo_property(target, "data", before)
 		if after_ids != before_ids:
-			_undo.add_do_property(_selection, "ids", after_ids)
-			_undo.add_undo_property(_selection, "ids", before_ids)
+			_undo.add_do_method(_selection, "restore_ids_for", target, _selection.mode, after_ids)
+			_undo.add_undo_method(_selection, "restore_ids_for", target, _selection.mode, before_ids)
 		_undo.commit_action(false)
 	_report("%s applied. %s now has %d faces." % [row["label"], target.name, int(target.call("face_count"))])
 
@@ -375,6 +387,12 @@ func clamp_material_slot() -> void:
 
 
 static func describe_error(code: int, action_id: String = "") -> String:
+	if action_id == "subdivide_faces" and code == ERR_ADJACENT_SELECTION:
+		return "Selected faces share an edge. Subdivide separate faces in this operation."
+	if action_id in ["connect_vertices", "connect_edges"] and code in [ERR_INVALID_SELECTION, ERR_ADJACENT_SELECTION]:
+		return "Choose two elements on one face with endpoints that are not already joined."
+	if action_id in ["merge_faces", "dissolve_edges"] and code in [ERR_INVALID_SELECTION, ERR_DEGENERATE_FACE]:
+		return "Choose a connected region on one flat surface. Folded or disconnected faces cannot merge."
 	if code == ERR_NOT_CLOSED and action_id == "delete_faces":
 		return "Deleting this face would leave an open solid. Inset, then extrude the inner cap to hollow a room, or Subtract a second solid to cut a hole."
 	if code == ERR_SELF_INTERSECTION:
@@ -536,13 +554,14 @@ func _unwrap_target(target: Node3D) -> String:
 	return "Unwrapped %d island(s); added %d automatic cut(s)." % [int(result.get("islands", 0)), automatic.size()]
 
 
-func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable) -> Dictionary:
+func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable, exact_count: int = 0) -> Dictionary:
 	return {
 		"id": id,
 		"label": label,
 		"icon": icon,
 		"modes": modes,
 		"min_count": min_count,
+		"exact_count": exact_count,
 		"tooltip": tooltip,
 		"shortcut": shortcut,
 		"handler": handler,
@@ -573,22 +592,19 @@ func _build() -> Array[Dictionary]:
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
-		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Cuts an edge between the selected vertices.", KEY_K, _ids_op.bind("connect_vertices")),
+		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Splits a shared face between two non-adjacent vertices.", KEY_K, _ids_op.bind("connect_vertices"), 2),
 
 		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _operation_op.bind(2)),
-		_row("bridge_edges", "Bridge", "CurveIn", edge, 2, "Builds a face between two open edges.", KEY_G, _ids_op.bind("bridge_edges")),
-		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Cuts a new edge between edge midpoints.", KEY_K, _ids_op.bind("connect_edges")),
+		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Splits the shared face between the nearest pair of non-adjacent edge endpoints.", KEY_K, _ids_op.bind("connect_edges"), 2),
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
-		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes the edge and merges its faces.", KEY_X, _ids_op.bind("dissolve_edges")),
+		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes coplanar internal edges and merges their adjacent faces.", KEY_X, _ids_op.bind("dissolve_edges")),
 		_row("mark_uv_seam", "Mark Seam", "MaterialPreviewCube", edge, 1, "Marks selected edges as UV island boundaries.", 0, _seam_op.bind(true)),
 		_row("clear_uv_seam", "Clear Seam", "Save", edge, 1, "Removes UV seam marks from selected edges.", 0, _seam_op.bind(false)),
 
 		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _operation_op.bind(0)),
 		_row("inset_faces", "Inset", "ToolScale", face, 1, "Shrinks one face, or one connected coplanar face region, inside its shared boundary.", KEY_I, _operation_op.bind(1)),
-		_row("delete_faces", "Delete", "Remove", face, 1, "Deletes the selected faces. A closed solid cannot open.", KEY_DELETE, _ids_op.bind("delete_faces")),
-		_row("flip_faces", "Flip Normals", "QuadMesh", face, 1, "Reverses which way the faces point.", KEY_N, _ids_op.bind("flip_faces")),
-		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each face into four.", KEY_U, _ids_op.bind("subdivide_faces")),
-		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins coplanar faces into one.", KEY_M, _ids_op.bind("merge_faces")),
+		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each selected face into one quad per corner. Selected faces cannot share an edge.", KEY_U, _ids_op.bind("subdivide_faces")),
+		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins one connected coplanar face region into a single face.", KEY_M, _ids_op.bind("merge_faces")),
 		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),

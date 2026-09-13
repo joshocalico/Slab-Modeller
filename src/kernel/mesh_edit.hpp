@@ -22,6 +22,7 @@ public:
 	EdgeId split_face(FaceId p_face, VertexId p_a, VertexId p_b);
 	MeshFault remove_face(FaceId p_face);
 	MeshFault dissolve_edge(EdgeId p_edge);
+	MeshFault merge_face_region(const std::vector<FaceId> &p_faces);
 	MeshFault collapse_edge(EdgeId p_edge);
 	MeshFault append(const Mesh &p_other, bool p_flip);
 	MeshFault replace_with(const Mesh &p_mesh);

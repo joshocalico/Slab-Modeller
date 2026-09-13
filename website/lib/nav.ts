@@ -56,6 +56,7 @@ export const GUIDE_NAV: NavGroup[] = [
       },
       { href: "/guide/how-to/pull-a-wall", label: "Pull a wall" },
       { href: "/guide/how-to/edit-face-regions", label: "Edit face regions" },
+      { href: "/guide/how-to/change-topology", label: "Change topology" },
       { href: "/guide/how-to/punch-a-cavity", label: "Punch a cavity" },
       { href: "/guide/how-to/cut-with-a-plane", label: "Cut with a plane" },
       {

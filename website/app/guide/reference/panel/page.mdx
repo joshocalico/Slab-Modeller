@@ -92,17 +92,16 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | --- | --- | --- |
 | Weld | 2 vertices | Merges vertices closer than **Weld distance**. |
 | Collapse | 2 vertices | Collapses the selection to one vertex. |
-| Connect | 2 vertices | Cuts an edge between the selected vertices. |
+| Connect | Exactly 2 non-adjacent vertices on one face | Splits the face with a new edge and keeps the two vertices selected. |
 
 ## Edge
 
 | Command | Needs | Result |
 | --- | --- | --- |
 | Bevel | 1 edge | Opens a preview with a draggable purple width arc. **Bevel width** sets the exact width. |
-| Bridge | 2 edges | Builds a face between two open edges. |
-| Connect | 2 edges | Cuts a new edge between edge midpoints. |
+| Connect | Exactly 2 edges on one face | Splits the face between the nearest non-adjacent endpoint pair and selects the new edge. |
 | Loop Cut | Edge mode | Previews cuts through a quad strip. Click to slide, wheel to change count, type a percentage, Enter to apply. |
-| Dissolve | 1 edge | Removes the edge and merges its faces. |
+| Dissolve | Coplanar internal edges | Removes the edges, merges their faces, and clears the removed-edge selection. |
 | Select Loop | 1 edge | Follows the edge loop around the solid. |
 | Select Ring | 1 edge | Follows the parallel edges across quads. |
 | Mark Seam | 1 edge | Marks selected edges as UV island boundaries. |
@@ -114,10 +113,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | --- | --- | --- |
 | Extrude | 1 face | Opens a preview with a draggable cyan normal arrow. A connected selection moves as one region and builds walls only around its boundary. |
 | Inset | 1 face | Opens a preview with a draggable gold boundary-width marker for one face or a connected coplanar selection. |
-| Delete | 1 face | Deletes the selected faces. |
-| Flip Normals | 1 face | Reverses which way the faces point. |
-| Subdivide | 1 face | Splits each face into four. |
-| Merge | 2 faces | Joins coplanar faces into one. |
+| Subdivide | Faces that do not share an edge | Builds one quad for every corner: four from a quad and three from a triangle. All result faces stay selected. |
+| Merge | A connected coplanar face region with one simple boundary | Joins the region regardless of selection order, keeps the first selected face's material and UV values, and selects the merged face. |
 | Set Material | 1 face | Assigns the active material chip to the faces. |
 | Apply UV | 1 face | Writes the UV scale, offset, and rotation fields. |
 | UV Larger | 1 face | Doubles the UV scale and applies it. |
@@ -128,6 +125,8 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need two. The first
 | Unwrap | 1 face | Unfolds the selected region at the requested density using marked and automatic seams. |
 
 Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
+
+See [Change topology](/guide/how-to/change-topology) for the selection rules and undo results of Connect, Dissolve, Subdivide, and Merge.
 
 ## Surface Paint
 

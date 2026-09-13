@@ -549,6 +549,135 @@ MeshFault MeshEdit::dissolve_edge(EdgeId p_edge) {
 	return fault;
 }
 
+MeshFault MeshEdit::merge_face_region(const std::vector<FaceId> &p_faces) {
+	fault = MeshFault{};
+	if (p_faces.size() < 2) {
+		fault.code = MeshError::INVALID_SELECTION;
+		return fault;
+	}
+	std::unordered_map<uint32_t, bool> selected;
+	for (const FaceId id : p_faces) {
+		if (!work.alive(id)) {
+			fault.code = MeshError::STALE_HANDLE;
+			fault.slot = id.slot;
+			return fault;
+		}
+		if (!selected.emplace(id.slot, true).second) {
+			fault.code = MeshError::INVALID_SELECTION;
+			fault.slot = id.slot;
+			return fault;
+		}
+	}
+
+	std::vector<HalfEdgeIdx> boundary;
+	std::vector<HalfEdgeIdx> internal;
+	std::vector<VertexIdx> region_vertices;
+	std::unordered_map<uint32_t, bool> seen_vertices;
+	for (const FaceId id : p_faces) {
+		std::vector<HalfEdgeIdx> loop;
+		if (!loop_of(id, loop)) {
+			return fault;
+		}
+		for (const HalfEdgeIdx he : loop) {
+			const VertexIdx origin = work.half_edges[he.i].origin;
+			if (seen_vertices.emplace(origin.i, true).second) {
+				region_vertices.push_back(origin);
+			}
+			const HalfEdgeIdx twin = work.half_edges[he.i].twin;
+			const FaceIdx other = twin.i == INVALID_IDX ? FaceIdx{ INVALID_IDX } : work.half_edges[twin.i].face;
+			if (other.i != INVALID_IDX && selected.find(other.i) != selected.end()) {
+				internal.push_back(he);
+			} else {
+				boundary.push_back(he);
+			}
+		}
+	}
+	if (boundary.size() < 3) {
+		fault.code = MeshError::INVALID_SELECTION;
+		return fault;
+	}
+
+	std::unordered_map<uint32_t, HalfEdgeIdx> by_origin;
+	std::unordered_map<uint32_t, int> arrivals;
+	for (const HalfEdgeIdx he : boundary) {
+		const uint32_t origin = work.half_edges[he.i].origin.i;
+		const HalfEdgeIdx twin = work.half_edges[he.i].twin;
+		if (twin.i == INVALID_IDX || !work._he_live(twin.i) || !by_origin.emplace(origin, he).second) {
+			fault.code = MeshError::INVALID_SELECTION;
+			fault.slot = p_faces[0].slot;
+			return fault;
+		}
+		arrivals[work.half_edges[twin.i].origin.i]++;
+	}
+	for (const auto &entry : by_origin) {
+		if (arrivals[entry.first] != 1) {
+			fault.code = MeshError::INVALID_SELECTION;
+			fault.slot = p_faces[0].slot;
+			return fault;
+		}
+	}
+	std::vector<HalfEdgeIdx> ordered;
+	std::unordered_map<uint32_t, bool> seen_boundary;
+	HalfEdgeIdx cursor = boundary[0];
+	for (size_t guard = 0; guard < boundary.size(); guard++) {
+		if (!seen_boundary.emplace(cursor.i, true).second) {
+			fault.code = MeshError::INVALID_SELECTION;
+			fault.slot = p_faces[0].slot;
+			return fault;
+		}
+		ordered.push_back(cursor);
+		const HalfEdgeIdx twin = work.half_edges[cursor.i].twin;
+		const uint32_t destination = work.half_edges[twin.i].origin.i;
+		const auto next = by_origin.find(destination);
+		if (next == by_origin.end()) {
+			fault.code = MeshError::INVALID_SELECTION;
+			return fault;
+		}
+		cursor = next->second;
+	}
+	if (cursor.i != boundary[0].i || ordered.size() != boundary.size()) {
+		fault.code = MeshError::INVALID_SELECTION;
+		fault.slot = p_faces[0].slot;
+		return fault;
+	}
+	std::vector<IVec3> points;
+	for (const VertexIdx vertex : region_vertices) {
+		points.push_back(work.vertices[vertex.i].pos);
+	}
+	if (!_planar(points)) {
+		fault.code = MeshError::DEGENERATE_FACE;
+		fault.slot = p_faces[0].slot;
+		return fault;
+	}
+
+	const FaceIdx keep{ p_faces[0].slot };
+	for (size_t i = 0; i < ordered.size(); i++) {
+		HalfEdge &edge = work.half_edges[ordered[i].i];
+		edge.face = keep;
+		edge.next = ordered[(i + 1) % ordered.size()];
+		work.vertices[edge.origin.i].out = ordered[i];
+	}
+	work.faces[keep.i].he = ordered[0];
+	for (const HalfEdgeIdx he : internal) {
+		free_half_edge(he);
+	}
+	for (size_t i = 1; i < p_faces.size(); i++) {
+		free_face(FaceIdx{ p_faces[i].slot });
+	}
+	std::unordered_map<uint32_t, bool> used_vertices;
+	for (uint32_t i = 0; i < work.half_edges.size(); i++) {
+		if (work._he_live(i)) {
+			used_vertices[work.half_edges[i].origin.i] = true;
+		}
+	}
+	for (const VertexIdx vertex : region_vertices) {
+		if (used_vertices.find(vertex.i) == used_vertices.end()) {
+			free_vertex(vertex);
+		}
+	}
+	return fault;
+}
+
 MeshFault MeshEdit::collapse_edge(EdgeId p_edge) {
 	fault = MeshFault{};
 	if (!work.alive(p_edge)) {

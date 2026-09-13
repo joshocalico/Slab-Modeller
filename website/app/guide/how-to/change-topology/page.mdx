@@ -1,0 +1,47 @@
+export const metadata = { title: "Change topology" };
+
+# Change topology
+
+Use Connect and Subdivide to add editable edges and faces. Use Dissolve and Merge to simplify a coplanar surface. Every successful command is one undo action. While you keep editing the same solid in the same mode, Undo restores both the prior topology and its selection.
+
+## Connect two vertices
+
+1. Press <kbd>2</kbd> for Vertex mode.
+2. Select exactly two non-adjacent vertices on the same face.
+3. Click **Connect**, or press <kbd>K</kbd>.
+
+Slab splits the face between the two vertices and keeps those vertices selected. You stay in Vertex mode. Adjacent vertices already share an edge, so they cannot produce another one.
+
+## Connect two edges
+
+1. Press <kbd>3</kbd> for Edge mode.
+2. Select exactly two edges that belong to the same face.
+3. Click **Connect**, or press <kbd>K</kbd>.
+
+Slab compares the edges' endpoints and cuts between the nearest pair that is not already adjacent. The cut does not use the edge midpoints. The new edge becomes selected.
+
+## Dissolve internal edges
+
+1. In Edge mode, select one or more internal edges between coplanar faces.
+2. Click **Dissolve**, or press <kbd>X</kbd>.
+
+Slab removes those edges and merges the coplanar faces around them. The removed edges clear from the selection.
+
+## Subdivide faces
+
+1. Press <kbd>4</kbd> for Face mode.
+2. Select faces that do not share an edge.
+3. Click **Subdivide**, or press <kbd>U</kbd>.
+
+Slab builds one quad for every corner of each source face. A quad becomes four quads. A triangle becomes three quads. All result faces stay selected. Subdivide refuses a selection in which two source faces share an edge.
+
+## Merge a face region
+
+1. In Face mode, select an edge-connected region of coplanar faces.
+2. Click **Merge**, or press <kbd>M</kbd>.
+
+Slab joins the region into one face. The first selected face supplies the merged face's material and UV values; changing the order of the remaining selection does not affect the result. The merged face becomes selected.
+
+The region must have one simple outer boundary. Merge refuses a ring of selected faces that encloses an unselected hole.
+
+These commands preserve a closed solid. To make an opening through a solid, use [Subtract](/guide/how-to/punch-a-cavity). To hollow a capped region without opening the shell, [inset and extrude inward](/guide/how-to/edit-face-regions#hollow-a-divided-cap).

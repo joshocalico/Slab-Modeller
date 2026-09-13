@@ -34,27 +34,6 @@ bool _edges_alive(const Mesh &p_mesh, const std::vector<EdgeId> &p_edges) {
 	return true;
 }
 
-EdgeId _unique_shared_edge(const Mesh &p_mesh, FaceId p_a, FaceId p_b) {
-	std::vector<EdgeId> ea;
-	std::vector<EdgeId> eb;
-	p_mesh.face_edges(p_a, ea);
-	p_mesh.face_edges(p_b, eb);
-	EdgeId found;
-	int hits = 0;
-	for (const EdgeId a : ea) {
-		for (const EdgeId b : eb) {
-			if (a.slot == b.slot && a.gen == b.gen) {
-				found = a;
-				hits++;
-			}
-		}
-	}
-	if (hits != 1) {
-		return EdgeId{};
-	}
-	return found;
-}
-
 int32_t _snap_coord(int32_t p_v, int32_t p_step) {
 	if (p_step <= 0) {
 		return p_v;
@@ -81,26 +60,21 @@ MeshFault set_face_material(MeshEdit &p_edit, const std::vector<FaceId> &p_faces
 }
 
 MeshFault merge_faces(MeshEdit &p_edit, const std::vector<FaceId> &p_faces) {
+	if (!p_edit.last_fault().ok()) {
+		return p_edit.last_fault();
+	}
 	if (p_faces.size() < 2) {
 		return _bad(MeshError::INVALID_SELECTION);
 	}
 	if (!faces_alive(p_edit.scratch(), p_faces)) {
 		return _bad(MeshError::STALE_HANDLE);
 	}
-	FaceId keep = p_faces[0];
-	for (size_t i = 1; i < p_faces.size(); i++) {
-		if (!p_edit.scratch().alive(keep) || !p_edit.scratch().alive(p_faces[i])) {
-			return _bad(MeshError::STALE_HANDLE);
-		}
-		const EdgeId shared = _unique_shared_edge(p_edit.scratch(), keep, p_faces[i]);
-		if (shared.gen == 0) {
-			return _bad(MeshError::INVALID_SELECTION, p_faces[i].slot);
-		}
-		const MeshFault dissolved = p_edit.dissolve_edge(shared);
-		if (!dissolved.ok()) {
-			return dissolved;
-		}
+	MeshEdit staged(p_edit.scratch());
+	const MeshFault merged = staged.merge_face_region(p_faces);
+	if (!merged.ok()) {
+		return merged;
 	}
+	p_edit = std::move(staged);
 	return p_edit.last_fault();
 }
 

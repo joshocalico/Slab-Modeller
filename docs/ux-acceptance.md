@@ -18,20 +18,28 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 - Mode buttons leave active tools even when choosing the current mode. Surface Paint accepts 1–4 to return to modelling, and Godot framing with F passes through real viewport keyboard input.
 - The guide contents column has been checked in Chrome at 1151, 1440, and 800 px. The narrow desktop outline wraps without clipping; the smaller layout uses collapsible contents.
 
+- Topology editing now keeps output selections: Subdivide selects all resulting faces, Merge selects the surviving face, Edge Connect selects its new edge, and Dissolve clears removed edges. Undo restores selection only for the same solid and mode. Rendered editor tests cover both edit chains and folded Merge recovery.
+- Merge rebuilds a connected coplanar region from its outer boundary, including all four Subdivide quads and their internal centre. Kernel tests cover reordered regions, material preservation, and atomic folded/disconnected/holed refusals.
+- Unsupported panel promises have been removed: Bridge duplicated Connect; Delete Face and Flip Normals had no verified useful closed-solid workflow. Their native APIs remain. The guide now describes supported topology operations and opening solids through Subtract.
+- A copied addon was installed into a fresh project, used to create a 6 by 1 by 6 box through editor controls, saved, and reopened in another editor process. Dimensions, editability, and collision survived. The installation guide documents this verified macOS path and distinguishes unverified platforms.
+- At 320 and 390 px, panel and keyboard references have no page-wide horizontal overflow; wide tables scroll locally, and navigation/contents disclosures work.
+
 ## Remaining acceptance work
 
 | Area | Evidence still required |
 | --- | --- |
-| First use | Follow installation and every core tutorial from a clean project. Check save, reopen, collision, and player interaction. |
+| First use | Complete every core tutorial from a clean project; basic copied-addon creation/save/reopen is verified. Check save, reopen, collision, and player interaction. |
 | Tool discovery | Exercise creation, selection, topology, surface editing, and recovery without relying on internal names or hidden state. Check material creation and assignment across several solids. |
 | Tool consistency | Audit modal ownership, native gizmo overlap, typed input, focus, shortcuts, tool switching, cancellation, refusal recovery, and repeat operations across all tools. |
-| Topology tools | Document and test selection constraints, resulting selection, undo units, and refusals for Connect, Bridge, Dissolve, Delete, Flip Normals, Merge, and Subdivide. |
+| Topology tools | Extend rendered acceptance to vertex Connect, Weld/Collapse, concave faces and larger multi-material regions. Verify the documented topology guide as a complete user workflow. |
 | Materials and UVs | Author a scene with several materials, seams, unwrap, precise UV placement, pixel strokes, texture persistence, and reversible edits. Resolve overlapping legacy UV controls and the Surface Paint workspace. |
 | Complex modelling | Build and play a substantial level in the editor with enclosed rooms, curved geometry, thin details, booleans, loops, bevels, platforms, and interaction. Diagnose z-fighting rather than hiding it. |
 | Documentation | Replace outdated captures, cross-check every command contract, validate links, and inspect desktop and narrow-screen layouts. Verify small phone widths and every long reference page; the right-hand contents column is checked at 1151 and 1440 px. |
 | Release readiness | Reopen saved examples, verify editable source and generated output, run all gates, and record limitations honestly. No claim of parity until the full workflow is verified. |
 
 ## Repeatable evidence
+
+`scripts/slab-install-verify` copies the addon to a disposable project and runs separate rendered creation/save and reopen passes. `project/tests/topology_editor_smoke.gd` exercises Subdivide/Merge and Connect/Dissolve through real panel clicks. Run it with `scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd`.
 
 `scripts/slab-verify` covers the kernel, extension, focused GDScript suites, and editor initialization. `scripts/slab-native-gizmo-verify` covers real native transform input. `project/tests/panel_editor_smoke.gd` covers the primary operation buttons and the room tutorial in a dedicated rendered editor, without saving the fixture. `project/tests/paint_editor_smoke.gd` checks canvas gestures in a rendered editor without saving the lab scene. Run it with `scripts/godot --editor --path project --script res://tests/paint_editor_smoke.gd`. The commands and evidence formats are described in [Native gizmo verification](native-gizmo-verification.md).
 

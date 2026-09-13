@@ -674,12 +674,16 @@ func _settings_block() -> Control:
 	_settings_fields.name = "SettingsFields"
 	_settings_fields.add_theme_constant_override("h_separation", 10)
 	_settings_fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_settings_fields)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 6)
+	content.add_child(_settings_fields)
+	scroll.add_child(content)
 	_settings.add_child(scroll)
 	_settings_chips = HFlowContainer.new()
 	_settings_chips.name = "MaterialChips"
 	_settings_chips.add_theme_constant_override("h_separation", 6)
-	_settings.add_child(_settings_chips)
+	content.add_child(_settings_chips)
 	return _settings
 
 

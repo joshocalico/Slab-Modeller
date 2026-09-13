@@ -28,6 +28,8 @@ Inset a face, then extrude the inner cap to hollow a room. Keep the cap above th
 
 Do not punch an opening by driving a face into itself. Cut a hole with Subtract.
 
+Slab derives face orientation from the closed solid. There is no ordinary modelling command for flipping one face's normal because that would break the solid's consistent boundary orientation.
+
 ## Read a refused edit
 
 Slab keeps the last valid mesh when an edit fails. The red diagnostic lines belong to the rejected attempt, so they can appear where the face would have moved even though the solid itself did not change.
