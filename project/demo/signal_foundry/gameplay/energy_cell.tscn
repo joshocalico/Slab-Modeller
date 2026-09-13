@@ -54,4 +54,3 @@ text = "ENERGY CELL"
 font_size = 36
 outline_size = 8
 billboard = 1
-no_depth_test = true

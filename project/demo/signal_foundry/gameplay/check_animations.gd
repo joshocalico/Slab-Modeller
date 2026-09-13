@@ -145,6 +145,7 @@ func run() -> void:
 	player.position = Vector3(-3, 2, -3)
 	var hazard: Area3D = hazard_scene.instantiate()
 	world.add_child(hazard)
+	expect(not hazard.get_node("Label3D").no_depth_test, "hazard label respects scene depth")
 	hazard.footprint_size = Vector2(24, 1)
 	var hazard_shape: BoxShape3D = hazard.get_node("CollisionShape3D").shape
 	var hazard_mesh: BoxMesh = hazard.get_node("Visual/Mesh").mesh

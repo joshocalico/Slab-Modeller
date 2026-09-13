@@ -8,6 +8,7 @@ var animation_time := 0.0
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
+	$Label3D.text = checkpoint_title.to_upper()
 
 
 func _process(delta: float) -> void:

@@ -71,4 +71,3 @@ text = "EXIT\n3 CELLS"
 font_size = 34
 outline_size = 8
 billboard = 1
-no_depth_test = true
