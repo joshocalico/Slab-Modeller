@@ -34,8 +34,11 @@ func _initialize() -> void:
 	passed = passed and Gizmo.face_fill_indices(points, Vector3.ZERO).is_empty()
 	var mesh := Gizmo.face_fill_mesh(points, -normal)
 	var arrays := mesh.surface_get_arrays(0) if mesh != null else []
+	var mesh_vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] if not arrays.is_empty() else PackedVector3Array()
 	var mesh_normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL] if not arrays.is_empty() else PackedVector3Array()
-	passed = passed and mesh_normals.size() == indices.size()
+	passed = passed and mesh_vertices.size() == indices.size() and mesh_normals.size() == indices.size()
+	for i in mesh_vertices.size():
+		passed = passed and mesh_vertices[i].is_equal_approx(points[indices[i]] - normal * Gizmo.FACE_FILL_BIAS)
 	for mesh_normal in mesh_normals:
 		passed = passed and mesh_normal.is_equal_approx(-normal)
 	passed = passed and Gizmo.face_fill_mesh(points, Vector3.ZERO) == null

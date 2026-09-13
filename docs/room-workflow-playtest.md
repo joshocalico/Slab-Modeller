@@ -33,7 +33,7 @@ Chrome smoke passed 41 cases, including visibility and restoration checks. The f
 - The generic transform gizmo overlaps the operation handle. Clearing Slab's subgizmo selection merely moves the native gizmo back to the object pivot. That attempted fix failed a native replay and was reverted. No supported visibility hook was found in the exposed editor API.
 - Fixed in the rendered-preview pass below: the proposed surface now replaces the source display during a valid operation.
 - Fixed in the follow-up pass: Slab's status and boolean operand labels now follow selected-node renames immediately. Native rename to MaintenanceBayRenameCheck updated the status without reselection; Undo restored MaintenanceBay in both the tree and Slab. The test rename was undone and the scene saved without a scene diff. Smoke coverage also checks that renaming an unselected solid preserves current feedback.
-- The native doorway authoring replay and local entrance playtest are complete. The bay still has no final materials, roof, or gameplay interaction. The full route from the level's normal spawn remains untested.
+- The native doorway authoring replay and local entrance playtest are complete. The bay now has a first material pass, but still needs a roof and gameplay interaction. The full route from the level's normal spawn remains untested.
 
 The room tutorial now covers installed-addon prerequisites and exact cutter placement using the Inspector, instead of relying on an unspecified wall and drag direction.
 
@@ -68,3 +68,11 @@ The picking pass also corrects perspective interpolation: the world point tested
 Temporarily moved Player through the Inspector to (28, 0.4, 16.2), facing +Z with Y rotation 180 degrees. Ran the current scene from Godot's toolbar. Enabled F3 diagnostics, started autorun with T, and jumped with Space. The player crossed the hazard strip and entered the bay. Diagnostics reported feet (28.00, 0.77, 22.25), floor YES, and floor body MaintenanceBay/__body. Stopped autorun and turned around to inspect the doorway from inside.
 
 This demonstrates a jump approach through the entrance and standing on the room's collision floor. It does not prove every tread is walkable without jumping, an exit crossing, or the complete gameplay route. Closed the running game and restored Player to (3, 0.4, 3.5), Y rotation -90 degrees, through the Inspector. Saved and verified the scene file matches HEAD exactly.
+
+## Material authoring and selection fill
+
+Used Surface Paint in the native editor to assign brick to the bay, then limestone to its interior floor. Saved and reloaded the scene read-only: 23 faces use brick and one uses limestone. The room retains 24 faces and volume 24.0376685485244; the entrance steps retain their saved position and volume.
+
+Selecting all faces exposed a checker pattern where the selection tint shared the rendered wall surface. Offset the fill vertices 0.001 m along the face normal, retaining depth testing and exact geometry for outlines and edits. After restarting Godot, selected all 24 faces with X-ray off and orbited from above to the doorway, then inspected close and oblique views. The tint remained uniform, without the earlier checker pattern. The regression covers concave faces and reversed winding; the full slab-verify passed all gates.
+
+Surface Paint also swallowed keypad orbit commands. Leaving Paint restored orbit immediately. This interrupts material authoring and needs a separate input-routing fix.

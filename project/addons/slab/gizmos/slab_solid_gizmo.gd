@@ -24,6 +24,7 @@ const WIRE_XRAY := "wire_xray"
 const HOT_XRAY := "hot_xray"
 const HOVER_XRAY := "hover_xray"
 const SELECTION_SUBGIZMO := 0
+const FACE_FILL_BIAS := 0.001
 
 var _selection: RefCounted
 var _undo: Object
@@ -338,7 +339,7 @@ static func face_fill_mesh(corners: PackedVector3Array, normal: Vector3) -> Arra
 	normal = normal.normalized()
 	for i in face_fill_indices(corners, normal):
 		st.set_normal(normal)
-		st.add_vertex(corners[i])
+		st.add_vertex(corners[i] + normal * FACE_FILL_BIAS)
 	return st.commit()
 
 
