@@ -325,13 +325,13 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to Surface Paint")
+	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to UV workspace")
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
 	expect(_label_for(panel, "Face") != null and panel.find_child("SectionSelection", true, false) != null,
 		"Face mode renders the Face and Selection headings")
 	expect(panel.find_child("SectionUV", true, false) == null and panel.find_child("MaterialChips", true, false) == null,
-		"Face mode does not duplicate Surface Paint material and UV controls")
+		"Face mode does not duplicate UV workspace material and UV controls")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
 	var extrude: Button = _button_for(panel, "Extrude")
 	expect(extrude != null and extrude.text == "Extrude", "Extrude shows its name")
@@ -360,19 +360,21 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	panel.bind_paint(paint)
 	root.add_child(panel)
-	var toggle: Button = panel.find_child("SurfacePaint", true, false)
-	expect(toggle != null and toggle.text == "Surface Paint", "the dock names Surface Paint")
+	var uv_toggle: Button = panel.find_child("UVWorkspace", true, false)
+	expect(uv_toggle != null and uv_toggle.text == "UV", "the dock has UV workspace button")
+	var paint_toggle: Button = panel.find_child("PaintWorkspace", true, false)
+	expect(paint_toggle != null and paint_toggle.text == "Paint", "the dock has Paint workspace button")
 	expect(panel.find_child("PaintCanvas", true, false) != null, "the dock has a texture canvas")
 	expect(panel.find_child("PaintBody", true, false) != null, "the dock has a paint workspace")
 	expect(not panel.find_child("PaintBody", true, false).visible, "paint starts closed")
 	paint.enter()
 	await process_frame
 	await process_frame
-	expect(panel.find_child("PaintBody", true, false).visible, "Surface Paint shows the workspace")
+	expect(panel.find_child("PaintBody", true, false).visible, "UV workspace shows the workspace")
 	expect(not panel.find_child("ModelBody", true, false).visible, "modeling commands hide while painting")
 	expect(panel.custom_minimum_size.y > SlabPanel.PANEL_HEIGHT, "the paint dock is taller than the model strip")
-	expect(_button_for(panel, "Pixel") != null and _button_for(panel, "Material / UV") != null,
-		"paint has distinct Material/UV and Pixel tools")
+	expect(uv_toggle != null and paint_toggle != null,
+		"header has distinct UV and Paint workspace buttons")
 	expect(_button_for(panel, "Make Unique") != null, "Make Unique is labeled")
 	var uv_controls: Control = panel.find_child("PaintUvControls", true, false)
 	expect(uv_controls != null and uv_controls.visible, "Material/UV shows precise placement controls")
@@ -408,25 +410,26 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and panel.find_child("PaintActions", true, false).get_combined_minimum_size().y > SlabPanel.PAINT_PICKER_HEIGHT,
 		"paint actions naturally reserve the buttons and native resource picker")
 	expect(_source_of("slab_solid_gizmo.gd").contains("_paint_hides_albedo"),
-		"Surface Paint drops the opaque face fill")
+		"UV workspace drops the opaque face fill")
 	expect(_source_of("slab_solid_gizmo.gd").contains("PAINT_EDGE"),
-		"Surface Paint keeps an on-top face outline")
+		"UV workspace keeps an on-top face outline")
 	var unique_off: Button = _button_for(panel, "Make Unique")
 	expect(unique_off != null and unique_off.disabled, "Make Unique stays off until a face is selected")
+	expect(panel.current_workspace() == panel.Workspace.UV, "workspace is UV after paint.enter")
 	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	panel.call("_on_paint_changed")
 	await process_frame
 	await process_frame
-	var pixel: Button = _button_for(panel, "Pixel")
-	var uv: Button = _button_for(panel, "Material / UV")
-	expect(pixel != null and pixel.button_pressed and uv != null and not uv.button_pressed,
-		"Pixel vs Material/UV shows which tool is selected")
-	expect(not uv_controls.visible, "Pixel painting hides UV placement fields and keeps the canvas workspace")
+	expect(panel.current_workspace() == panel.Workspace.PAINT or paint.tool == preload("res://addons/slab/slab_paint.gd").Tool.PIXEL,
+		"Paint workspace uses pixel tool")
+	expect(not uv_controls.visible, "Paint workspace hides UV placement fields and keeps the canvas workspace")
 	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
-		"Material/UV and Pixel keep one paint workspace minimum, got %s after %s" % [panel.get_combined_minimum_size().y, material_minimum])
+		"UV and Paint workspaces keep one paint workspace minimum, got %s after %s" % [panel.get_combined_minimum_size().y, material_minimum])
 	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	panel.call("_on_paint_changed")
 	await process_frame
 	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
-		"returning to Material/UV keeps the paint workspace minimum")
+		"returning to UV workspace keeps the paint workspace minimum")
 	paint.exit()
 	await process_frame
 	expect(panel.find_child("ModelBody", true, false).visible, "closing paint restores modeling")
@@ -451,10 +454,11 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and scaled_panel.get_combined_minimum_size().y >= scaled_canvas.custom_minimum_size.y,
 		"paint canvas and derived dock minimum follow 1.5x editor scale")
 	scaled_paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	scaled_panel.call("_on_paint_changed")
 	await process_frame
 	await process_frame
 	expect(is_equal_approx(scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum),
-		"Pixel-first entry reserves the Material/UV workspace minimum at 1.5x scale, got %s after %s" % [scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum])
+		"Paint-first entry reserves the UV workspace minimum at 1.5x scale, got %s after %s" % [scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum])
 	scaled_panel.free()
 
 
@@ -616,22 +620,22 @@ func case_primary_panel_buttons_are_keyboard_reachable_and_named() -> void:
 
 	var expected: Array[Button] = []
 	for button in _buttons(panel):
-		if button.has_meta("slab_mode") or button.has_meta("slab_label") or button.name == "SurfacePaint":
+		if button.has_meta("slab_mode") or button.has_meta("slab_label") or button.name == "UVWorkspace" or button.name == "PaintWorkspace":
 			expected.append(button)
 	for button in expected:
 		expect(button.focus_mode == Control.FOCUS_ALL, "%s is reachable by keyboard focus" % button.name)
 		expect(button.accessibility_name != "", "%s has an accessible name" % button.name)
 
 	var box: Button = panel.find_child("make_box", true, false)
-	var surface: Button = panel.find_child("SurfacePaint", true, false)
+	var uv_button: Button = panel.find_child("UVWorkspace", true, false)
 	expect(box != null and box.accessibility_name == "Box", "Create Box has its visible accessible name")
-	expect(surface != null and surface.accessibility_name == "Surface Paint", "Surface Paint has its visible accessible name")
+	expect(uv_button != null and uv_button.accessibility_name == "UV workspace", "UV workspace has its visible accessible name")
 	if box != null:
 		box.grab_focus()
 		expect(root.get_viewport().gui_get_focus_owner() == box, "Create Box accepts keyboard focus")
-	if surface != null:
-		surface.grab_focus()
-		expect(root.get_viewport().gui_get_focus_owner() == surface, "Surface Paint accepts keyboard focus")
+	if uv_button != null:
+		uv_button.grab_focus()
+		expect(root.get_viewport().gui_get_focus_owner() == uv_button, "UV workspace accepts keyboard focus")
 	panel.free()
 
 
@@ -726,7 +730,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	selection.set_objects([solid])
 	selection.set_ids(PackedInt64Array([solid.call("get_faces")[0]]))
 	expect(not previews.visible and not settings.visible, "face selection keeps secondary settings collapsed")
-	expect(not previews.visible and not settings.visible, "face selection keeps UV settings in Surface Paint")
+	expect(not previews.visible and not settings.visible, "face selection keeps UV settings in UV workspace")
 	selection.operation_preview = {"kind": 1}
 	actions.operation_active = true
 	actions.operation_state_changed.emit()

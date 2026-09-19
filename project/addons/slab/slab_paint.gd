@@ -113,7 +113,10 @@ func enter() -> void:
 		_selection.mode = 3
 	_lock_transform_gizmo()
 	_adopt_selection_material()
-	_report("Surface Paint. Material/UV places textures; Pixel paints albedo.")
+	if tool == Tool.PIXEL:
+		_report("Paint workspace. Brush paints albedo; switch to UV workspace for material placement.")
+	else:
+		_report("UV workspace. Place textures and materials; switch to Paint workspace for pixel painting.")
 
 
 func exit() -> void:
@@ -122,7 +125,7 @@ func exit() -> void:
 	_free_brush()
 	_unlock_transform_gizmo()
 	active = false
-	_report("Surface Paint closed.")
+	_report("Returned to modelling.")
 
 
 func toggle() -> void:
