@@ -35,6 +35,7 @@ for extra in solid_smoke sweep_smoke panel_smoke pick_smoke native_selection_sco
 done
 
 step "subgizmo topology editor smoke" scripts/godot --editor --headless --path project --script res://tests/subgizmo_topology_editor_smoke.gd
+step "topology editor smoke" scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd
 step "panel editor smoke" scripts/godot --editor --path project --script res://tests/panel_editor_smoke.gd
 step "reopen editor smoke" scripts/godot --editor --headless --path project --script res://tests/reopen_editor_smoke.gd
 
