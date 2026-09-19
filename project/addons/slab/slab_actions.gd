@@ -14,8 +14,13 @@ signal operation_segments_changed(value: int)
 signal operation_apply_requested
 signal operation_cancel_requested
 signal operation_state_changed
+signal op_session_started(op_id: String, title: String, fields: Array)
+signal op_session_updated(op_id: String, values: Dictionary, apply_enabled: bool)
+signal op_session_ended(op_id: String, reason: String)
 var operation_active := false
 var operation_amount := 0.5
+var _op_session_id := ""
+var _op_session_apply_enabled := true
 signal loop_requested
 signal loop_settings_changed
 signal loop_values_updated
@@ -130,6 +135,123 @@ func remember_operation_amount(kind: int, value: float) -> void:
 		SlabOperationHandles.Kind.EXTRUDE: extrude_amount = value
 		SlabOperationHandles.Kind.INSET: inset_amount = value
 		SlabOperationHandles.Kind.BEVEL: bevel_amount = value
+
+
+const OP_SESSION_IDS: Array[String] = ["extrude", "inset", "bevel"]
+const OP_SESSION_TITLES: Array[String] = ["Extrude", "Inset", "Bevel"]
+
+
+func _op_session_kind_to_id(kind: int) -> String:
+	if kind >= 0 and kind < OP_SESSION_IDS.size():
+		return OP_SESSION_IDS[kind]
+	return ""
+
+
+func _op_session_id_to_kind(op_id: String) -> int:
+	return OP_SESSION_IDS.find(op_id)
+
+
+func op_session_fields_for(op_id: String) -> Array:
+	match op_id:
+		"extrude":
+			return [{"id": "distance", "label": "Distance", "type": "float", "suffix": "m", "min": EXTRUDE_FLOOR, "max": AMOUNT_CEILING, "step": 0.001}]
+		"inset":
+			return [{"id": "distance", "label": "Distance", "type": "float", "suffix": "m", "min": AMOUNT_FLOOR, "max": AMOUNT_CEILING, "step": 0.001}]
+		"bevel":
+			return [
+				{"id": "distance", "label": "Width", "type": "float", "suffix": "m", "min": AMOUNT_FLOOR, "max": AMOUNT_CEILING, "step": 0.001},
+				{"id": "segments", "label": "Segments", "type": "int", "min": 1, "max": 16, "step": 1}
+			]
+	return []
+
+
+func op_session_active() -> bool:
+	return operation_active and _op_session_id != ""
+
+
+func op_session_id() -> String:
+	return _op_session_id if operation_active else ""
+
+
+func op_session_title() -> String:
+	var kind := _op_session_id_to_kind(_op_session_id)
+	if kind >= 0 and kind < OP_SESSION_TITLES.size():
+		return OP_SESSION_TITLES[kind]
+	return ""
+
+
+func op_session_fields() -> Array:
+	return op_session_fields_for(_op_session_id)
+
+
+func op_session_values() -> Dictionary:
+	if not operation_active:
+		return {}
+	match _op_session_id:
+		"extrude": return {"distance": operation_amount}
+		"inset": return {"distance": operation_amount}
+		"bevel": return {"distance": operation_amount, "segments": bevel_segments}
+	return {}
+
+
+func op_session_apply_enabled() -> bool:
+	return _op_session_apply_enabled
+
+
+func op_session_remembered(op_id: String) -> Dictionary:
+	match op_id:
+		"extrude": return {"distance": extrude_amount}
+		"inset": return {"distance": inset_amount}
+		"bevel": return {"distance": bevel_amount, "segments": bevel_segments}
+	return {}
+
+
+func op_session_set_value(field_id: String, value: Variant) -> void:
+	if not operation_active:
+		return
+	match field_id:
+		"distance":
+			operation_amount_changed.emit(float(value))
+		"segments":
+			operation_segments_changed.emit(int(value))
+
+
+func op_session_apply() -> void:
+	if not operation_active or not _op_session_apply_enabled:
+		return
+	operation_apply_requested.emit()
+
+
+func op_session_cancel() -> void:
+	if not operation_active:
+		return
+	operation_cancel_requested.emit()
+
+
+func notify_op_session_start(kind: int) -> void:
+	_op_session_id = _op_session_kind_to_id(kind)
+	_op_session_apply_enabled = true
+	if _op_session_id != "":
+		var title := op_session_title()
+		var fields: Array = op_session_fields()
+		op_session_started.emit(_op_session_id, title, fields)
+
+
+func notify_op_session_update(apply_enabled: bool) -> void:
+	if _op_session_id == "":
+		return
+	_op_session_apply_enabled = apply_enabled
+	var values: Dictionary = op_session_values()
+	op_session_updated.emit(_op_session_id, values, apply_enabled)
+
+
+func notify_op_session_end(reason: String) -> void:
+	if _op_session_id == "":
+		return
+	var ended_id := _op_session_id
+	_op_session_id = ""
+	_op_session_apply_enabled = true
+	op_session_ended.emit(ended_id, reason)
 
 
 func swap_boolean_operands() -> void:

@@ -13,6 +13,7 @@ const SPIN_WIDTH := 104.0
 const PANEL_HEIGHT := 240.0
 const GRID_SEPARATION := 4.0
 const ACCENT := Color(0.86, 0.72, 0.34)
+const APPLY_PRIMARY := Color(1.0, 0.773, 0.0)  # Brand yellow #FFC500
 const CHIP_SIZE := Vector2(28.0, 28.0)
 const PAINT_PALETTE_HEIGHT := 40.0
 const PAINT_ROW_HEIGHT := 28.0
@@ -144,11 +145,25 @@ func _layout_model() -> void:
 
 
 func _operation_controls() -> Control:
-	var row := HFlowContainer.new()
-	row.name = "OperationHandles"
-	var caption := Label.new()
-	caption.add_theme_font_size_override("font_size", _font(15))
-	row.add_child(caption)
+	var card := VBoxContainer.new()
+	card.name = "OperationHandles"
+	card.add_theme_constant_override("separation", int(_scaled(6)))
+
+	var title := Label.new()
+	title.name = "OpCardTitle"
+	title.add_theme_font_size_override("font_size", _font(16))
+	title.add_theme_color_override("font_color", ACCENT)
+	card.add_child(title)
+
+	var settings_row := HFlowContainer.new()
+	settings_row.name = "OpCardSettings"
+	settings_row.add_theme_constant_override("h_separation", int(_scaled(8)))
+
+	var amount_label := Label.new()
+	amount_label.add_theme_font_size_override("font_size", _font(14))
+	amount_label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	settings_row.add_child(amount_label)
+
 	var amount := SpinBox.new()
 	amount.name = "HandleAmount"
 	amount.min_value = -64.0
@@ -156,96 +171,171 @@ func _operation_controls() -> Control:
 	amount.step = 0.001
 	amount.suffix = "m"
 	amount.custom_minimum_size.x = _scaled(110)
-	amount.add_theme_font_size_override("font_size", _font(15))
-	amount.get_line_edit().add_theme_font_size_override("font_size", _font(15))
-	var pending_text := {"amount": false, "segments": false}
-	var synced := {"amount": NAN, "segments": -1, "kind": -1, "active": false}
-	amount.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventKey and event.pressed and amount.get_line_edit().has_focus():
-			pending_text["amount"] = true)
-	amount.value_changed.connect(func(value: float) -> void: _actions.operation_amount_changed.emit(value))
-	row.add_child(amount)
+	amount.add_theme_font_size_override("font_size", _font(14))
+	amount.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	settings_row.add_child(amount)
+
 	var segment_label := Label.new()
 	segment_label.text = "Segments"
-	segment_label.add_theme_font_size_override("font_size", _font(15))
-	row.add_child(segment_label)
+	segment_label.add_theme_font_size_override("font_size", _font(14))
+	segment_label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	settings_row.add_child(segment_label)
+
 	var segments := SpinBox.new()
 	segments.name = "bevel_segments"
 	segments.min_value = 1
 	segments.max_value = 16
 	segments.step = 1
 	segments.custom_minimum_size.x = _scaled(80)
-	segments.add_theme_font_size_override("font_size", _font(15))
-	segments.get_line_edit().add_theme_font_size_override("font_size", _font(15))
+	segments.add_theme_font_size_override("font_size", _font(14))
+	segments.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	settings_row.add_child(segments)
+
+	card.add_child(settings_row)
+
+	var commit_strip := HBoxContainer.new()
+	commit_strip.name = "OpCardCommit"
+	commit_strip.add_theme_constant_override("separation", int(_scaled(8)))
+
+	var pending_text := {"distance": false, "segments": false}
+	var synced := {"distance": NAN, "segments": -1, "op_id": "", "active": false}
+
+	amount.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventKey and event.pressed and amount.get_line_edit().has_focus():
+			pending_text["distance"] = true)
+	amount.value_changed.connect(func(value: float) -> void:
+		if _actions.op_session_active():
+			_actions.op_session_set_value("distance", value)
+		else:
+			_actions.operation_amount_changed.emit(value))
+
 	segments.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventKey and event.pressed and segments.get_line_edit().has_focus():
 			pending_text["segments"] = true)
-	segments.value_changed.connect(func(value: float) -> void: _actions.operation_segments_changed.emit(int(value)))
-	row.add_child(segments)
-	var apply_button: Button
-	for apply in [true, false]:
-		var button := Button.new()
-		button.text = "Apply" if apply else "Cancel"
-		button.accessibility_name = button.text
-		button.set_meta("slab_label", button.text)
-		button.add_theme_font_size_override("font_size", _font(15))
-		button.tooltip_text = "Commit this preview as one undoable edit. Enter also applies." if apply else "Discard this preview. Escape also cancels."
-		button.accessibility_description = button.tooltip_text
-		button.pressed.connect(func() -> void:
-			button.release_focus()
-			if apply:
-				# SpinBox does not publish a focused LineEdit until it loses focus.
-				# Parse only text the user changed; a programmatic value remains
-				# authoritative even if the editor is still displaying stale text.
-				var amount_pending: bool = pending_text["amount"]
-				var segments_pending: bool = pending_text["segments"]
-				amount.set_block_signals(true)
-				segments.set_block_signals(true)
-				if amount_pending: amount.apply()
-				if segments_pending: segments.apply()
-				var wanted_amount: float = amount.value if amount_pending else _actions.operation_amount
-				var wanted_segments: int = int(segments.value) if segments_pending else _actions.bevel_segments
-				var bevel: bool = _selection.operation_preview.get("kind", 0) == 2
-				amount.set_block_signals(false)
-				segments.set_block_signals(false)
-				if amount_pending: _actions.operation_amount_changed.emit(wanted_amount)
-				if bevel and segments_pending: _actions.operation_segments_changed.emit(wanted_segments)
-				_actions.operation_apply_requested.emit()
-			else: _actions.operation_cancel_requested.emit())
-		row.add_child(button)
-		if apply: apply_button = button
+	segments.value_changed.connect(func(value: float) -> void:
+		if _actions.op_session_active():
+			_actions.op_session_set_value("segments", int(value))
+		else:
+			_actions.operation_segments_changed.emit(int(value)))
+
+	var cancel_button := Button.new()
+	cancel_button.name = "OpCardCancel"
+	cancel_button.text = "Cancel"
+	cancel_button.accessibility_name = "Cancel"
+	cancel_button.set_meta("slab_label", "Cancel")
+	cancel_button.add_theme_font_size_override("font_size", _font(14))
+	cancel_button.tooltip_text = "Discard this preview. Escape also cancels."
+	cancel_button.accessibility_description = cancel_button.tooltip_text
+	cancel_button.pressed.connect(func() -> void:
+		cancel_button.release_focus()
+		_actions.op_session_cancel())
+	commit_strip.add_child(cancel_button)
+
+	var apply_button := Button.new()
+	apply_button.name = "OpCardApply"
+	apply_button.text = "Apply"
+	apply_button.accessibility_name = "Apply"
+	apply_button.set_meta("slab_label", "Apply")
+	apply_button.add_theme_font_size_override("font_size", _font(14))
+	apply_button.tooltip_text = "Commit this preview as one undoable edit. Enter also applies."
+	apply_button.accessibility_description = apply_button.tooltip_text
+	apply_button.pressed.connect(func() -> void:
+		apply_button.release_focus()
+		var distance_pending: bool = pending_text["distance"]
+		var segments_pending: bool = pending_text["segments"]
+		amount.set_block_signals(true)
+		segments.set_block_signals(true)
+		if distance_pending: amount.apply()
+		if segments_pending: segments.apply()
+		var wanted_distance: float = amount.value if distance_pending else _actions.operation_amount
+		var wanted_segments: int = int(segments.value) if segments_pending else _actions.bevel_segments
+		var bevel: bool = _actions.op_session_id() == "bevel"
+		amount.set_block_signals(false)
+		segments.set_block_signals(false)
+		if distance_pending: _actions.op_session_set_value("distance", wanted_distance)
+		if bevel and segments_pending: _actions.op_session_set_value("segments", wanted_segments)
+		_actions.op_session_apply())
+	commit_strip.add_child(apply_button)
+
+	card.add_child(commit_strip)
+
+	var style_apply := func(enabled: bool) -> void:
+		if enabled:
+			var box := StyleBoxFlat.new()
+			box.bg_color = APPLY_PRIMARY
+			box.set_corner_radius_all(3)
+			box.content_margin_left = 10
+			box.content_margin_right = 10
+			box.content_margin_top = 4
+			box.content_margin_bottom = 4
+			apply_button.add_theme_stylebox_override("normal", box)
+			var hover := box.duplicate() as StyleBoxFlat
+			hover.bg_color = APPLY_PRIMARY.lightened(0.1)
+			apply_button.add_theme_stylebox_override("hover", hover)
+			var pressed := box.duplicate() as StyleBoxFlat
+			pressed.bg_color = APPLY_PRIMARY.darkened(0.1)
+			apply_button.add_theme_stylebox_override("pressed", pressed)
+			apply_button.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
+			apply_button.add_theme_color_override("font_hover_color", Color(0.1, 0.1, 0.1))
+			apply_button.add_theme_color_override("font_pressed_color", Color(0.1, 0.1, 0.1))
+		else:
+			apply_button.remove_theme_stylebox_override("normal")
+			apply_button.remove_theme_stylebox_override("hover")
+			apply_button.remove_theme_stylebox_override("pressed")
+			apply_button.remove_theme_color_override("font_color")
+			apply_button.remove_theme_color_override("font_hover_color")
+			apply_button.remove_theme_color_override("font_pressed_color")
+
 	var sync := func() -> void:
-		var active: bool = _actions.operation_active
-		row.visible = (_paint == null or not _paint.active) and active
-		var kind: int = _selection.operation_preview.get("kind", 0)
-		var lifecycle_changed: bool = active != synced["active"] or kind != synced["kind"]
-		if lifecycle_changed or not is_equal_approx(float(synced["amount"]), _actions.operation_amount):
-			pending_text["amount"] = false
+		var active: bool = _actions.op_session_active()
+		var was_visible: bool = card.visible
+		card.visible = (_paint == null or not _paint.active) and active
+		var op_id: String = _actions.op_session_id()
+		var lifecycle_changed: bool = active != synced["active"] or op_id != synced["op_id"]
+
+		if lifecycle_changed or not is_equal_approx(float(synced["distance"]), _actions.operation_amount):
+			pending_text["distance"] = false
 		if lifecycle_changed or int(synced["segments"]) != _actions.bevel_segments:
 			pending_text["segments"] = false
-		caption.text = ["Extrude distance", "Inset distance", "Bevel width"][kind]
-		segment_label.visible = active and kind == 2
-		segments.visible = active and kind == 2
+
+		title.text = _actions.op_session_title()
+		var fields: Array = _actions.op_session_fields()
+		var distance_field: Dictionary = {}
+		for field in fields:
+			if field["id"] == "distance":
+				distance_field = field
+				break
+		amount_label.text = distance_field.get("label", "Distance")
+		segment_label.visible = active and op_id == "bevel"
+		segments.visible = active and op_id == "bevel"
+
 		if not pending_text["segments"]:
 			segments.set_value_no_signal(_actions.bevel_segments)
 		amount.set_block_signals(true)
-		amount.min_value = -64.0 if kind == 0 else 0.001
-		if not pending_text["amount"]:
+		amount.min_value = float(distance_field.get("min", -64.0))
+		amount.max_value = float(distance_field.get("max", 64.0))
+		if not pending_text["distance"]:
 			amount.set_value_no_signal(_actions.operation_amount)
 		amount.set_block_signals(false)
-		synced["amount"] = _actions.operation_amount
+
+		synced["distance"] = _actions.operation_amount
 		synced["segments"] = _actions.bevel_segments
-		synced["kind"] = kind
+		synced["op_id"] = op_id
 		synced["active"] = active
-		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
+
+		var valid: bool = _actions.op_session_apply_enabled()
+		apply_button.disabled = not valid
+		style_apply.call(valid)
+
 		if _settings != null:
 			_settings.visible = _show_settings()
 		_sync_model_chrome()
 		_refresh_buttons()
+
 	_selection.changed.connect(sync)
 	_actions.operation_state_changed.connect(sync)
 	sync.call()
-	return row
+	return card
 
 
 func _show_settings() -> bool:
@@ -650,6 +740,8 @@ func _section_toggle(heading: String, flow: Control) -> Button:
 func _shape_spin(field: Dictionary) -> Control:
 	var key: StringName = field["key"]
 	return _spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
+		if is_equal_approx(_actions.shapes.value_of(key), v):
+			return
 		_actions.shapes.set_value(key, v)
 		_actions.create_settings_changed.emit()
 		_refresh_buttons()
@@ -1785,20 +1877,20 @@ func _make_paint_resize_form() -> VBoxContainer:
 	form.add_child(_paint_resize_aspect)
 	form.add_child(_paint_resize_sampling)
 	var actions := HFlowContainer.new()
-	var apply := Button.new()
-	apply.name = "PaintResizeConfirm"
-	apply.text = "Apply Resize"
-	apply.add_theme_font_size_override("font_size", _font(13))
-	apply.accessibility_name = "Apply image resize"
-	apply.pressed.connect(_apply_paint_resize)
 	var cancel := Button.new()
 	cancel.name = "PaintResizeCancel"
 	cancel.text = "Cancel"
 	cancel.add_theme_font_size_override("font_size", _font(13))
 	cancel.accessibility_name = "Cancel image resize"
 	cancel.pressed.connect(_close_paint_resize_form)
-	actions.add_child(apply)
+	var apply := Button.new()
+	apply.name = "PaintResizeConfirm"
+	apply.text = "Apply Resize"
+	apply.add_theme_font_size_override("font_size", _font(13))
+	apply.accessibility_name = "Apply image resize"
+	apply.pressed.connect(_apply_paint_resize)
 	actions.add_child(cancel)
+	actions.add_child(apply)
 	form.add_child(actions)
 	return form
 
