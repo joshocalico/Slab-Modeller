@@ -154,24 +154,23 @@ func _check_curved_pixel_mip_refresh(world: Node3D) -> void:
 	_check(paint.is_owned(paint.material()), "curved unique material is owned")
 	paint.tool = SlabPaint.Tool.PIXEL
 	_check(paint.begin_stroke(), "curved pixel stroke starts on owned material")
-	var before_center: Color = paint.image().get_pixel(64, 64)
+	var base_before: Color = paint.image().get_pixel(64, 64)
 	paint.dab_uv(Vector2(0.5, 0.5))
 	paint.end_stroke()
-	var after_center: Color = paint.image().get_pixel(64, 64)
-	var color_changed := _color_distance(before_center, after_center) > 0.2
-	_check(color_changed,
-		"curved pixel dab writes to image center: before=%s after=%s" % [before_center, after_center])
+	_check(paint.has_overlay_strokes(), "curved pixel stroke creates overlay strokes")
+	var overlay_center: Color = paint.overlay_image().get_pixel(64, 64)
+	_check(overlay_center.r > 0.4 and overlay_center.a > 0.1,
+		"curved pixel dab writes to overlay center: %s" % overlay_center)
+	var base_after: Color = paint.image().get_pixel(64, 64)
+	_check(base_after.is_equal_approx(base_before),
+		"base image unchanged during overlay painting: before=%s after=%s" % [base_before, base_after])
 	var tex: ImageTexture = paint.texture() as ImageTexture
 	_check(tex != null and tex.get_image() != null and tex.get_image().has_mipmaps(),
 		"curved stroke regenerates mipmaps for viewport display")
-	var mip_level: int = 1
-	var mip_offset: int = paint.image().get_mipmap_offset(mip_level)
-	var mip_width: int = maxi(1, paint.image().get_width() >> mip_level)
-	var mip_height: int = maxi(1, paint.image().get_height() >> mip_level)
-	var mip_center_idx: int = mip_offset + (mip_height / 2 * mip_width + mip_width / 2) * 4
-	var data: PackedByteArray = paint.image().get_data()
-	var mip_center_r: float = float(data[mip_center_idx]) / 255.0
-	_check(mip_center_r > 0.35, "minified mip level shows the painted red: %.3f" % mip_center_r)
+	var composited: Image = tex.get_image()
+	var composited_center: Color = composited.get_pixel(64, 64)
+	_check(composited_center.r > 0.35,
+		"composited texture shows painted red at center: %.3f" % composited_center.r)
 	paint.exit()
 	cylinder.free()
 

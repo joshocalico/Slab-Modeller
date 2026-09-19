@@ -95,6 +95,9 @@ var _paint_texture_px_spin: SpinBox
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
+var _overlay_opacity: SpinBox
+var _flatten_button: Button
+var _channel_label: Label
 var _selection_controls: Control
 var _operation_row: Control
 var _loop_action_group: HBoxContainer
@@ -1467,6 +1470,13 @@ func _brush_column() -> Control:
 	col.custom_minimum_size.x = _scaled(132.0)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", 2)
+	_channel_label = Label.new()
+	_channel_label.name = "ChannelLabel"
+	_channel_label.text = "Albedo"
+	_channel_label.add_theme_font_size_override("font_size", _font(14))
+	_channel_label.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	_channel_label.tooltip_text = "Painting on the Albedo channel."
+	col.add_child(_channel_label)
 	var brush := Label.new()
 	brush.text = "Brush"
 	brush.add_theme_font_size_override("font_size", _font(13))
@@ -1491,6 +1501,23 @@ func _brush_column() -> Control:
 		if _paint:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
+	var layer_label := Label.new()
+	layer_label.text = "Layer"
+	layer_label.add_theme_font_size_override("font_size", _font(13))
+	layer_label.add_theme_color_override("font_color", ACCENT)
+	col.add_child(layer_label)
+	var overlay_opacity_row := _compact_spin("Opacity", 0.0, 1.0, 0.05, 1.0, func(v: float) -> void:
+		if _paint:
+			_paint.overlay_opacity = v
+	, "Overlay layer opacity. Strokes remain non-destructive until Flatten.", &"overlay_opacity")
+	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
+	col.add_child(overlay_opacity_row)
+	_flatten_button = _named_action("Flatten", "MoveDown", "Commit the overlay strokes to the base Albedo as one undoable action.", func() -> void:
+		if _paint:
+			_paint.flatten()
+	)
+	_flatten_button.name = "PaintFlatten"
+	col.add_child(_flatten_button)
 	var overlay := CheckBox.new()
 	overlay.name = "PaintUvOverlay"
 	overlay.text = "Show UV"
@@ -1767,6 +1794,14 @@ func _refresh_paint_chrome() -> void:
 		var allowed: bool = _paint != null and _paint.can_make_unique()
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
+	if _overlay_opacity != null and _paint != null:
+		_overlay_opacity.set_value_no_signal(_paint.overlay_opacity)
+	if _flatten_button != null:
+		var can_flatten: bool = _paint != null and _paint.can_flatten()
+		_flatten_button.disabled = not can_flatten
+		_flatten_button.tooltip_text = "Commit the overlay strokes to the base Albedo as one undoable action." if can_flatten else "Paint strokes on the overlay first."
+	if _channel_label != null:
+		_channel_label.visible = is_paint_workspace
 	_refresh_paint_palette()
 	if _paint != null and _paint.active:
 		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())

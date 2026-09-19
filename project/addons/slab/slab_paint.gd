@@ -50,9 +50,18 @@ var tool: int = Tool.MATERIAL_UV:
 var brush_color := Color(0.86, 0.18, 0.16)
 var brush_radius: float = 8.0
 var brush_opacity: float = 1.0
+var overlay_opacity: float = 1.0:
+	set(value):
+		if is_equal_approx(value, overlay_opacity):
+			return
+		overlay_opacity = clampf(value, 0.0, 1.0)
+		_composite_overlay()
+		changed.emit()
 var dirty: bool = false
 var stroke_active: bool = false
 var _left_gesture_owned := false
+var _overlay_image: Image
+var _overlay_dirty: bool = false
 
 var _undo: Object = null
 var _selection: RefCounted
@@ -122,6 +131,7 @@ func enter() -> void:
 func exit() -> void:
 	_left_gesture_owned = false
 	cancel_stroke()
+	_clear_overlay()
 	_free_brush()
 	_unlock_transform_gizmo()
 	active = false
@@ -137,6 +147,14 @@ func toggle() -> void:
 
 func image() -> Image:
 	return _image
+
+
+func overlay_image() -> Image:
+	return _overlay_image
+
+
+func has_overlay_strokes() -> bool:
+	return _overlay_image != null and not _overlay_image.is_empty() and _overlay_dirty
 
 
 func texture() -> Texture2D:
@@ -486,6 +504,123 @@ func resize_image(width: int, height: int, smooth: bool = true, expected_materia
 	return true
 
 
+func can_flatten() -> bool:
+	return (active and tool == Tool.PIXEL and _material != null and _is_unique(_material)
+		and _image != null and not _image.is_empty() and _solid != null
+		and not stroke_active and not uv_drag_active and has_overlay_strokes())
+
+
+func flatten() -> bool:
+	if not can_flatten():
+		_report("No overlay strokes to flatten.")
+		return false
+	var before_base_png: PackedByteArray = _image.save_png_to_buffer()
+	var before_overlay_png: PackedByteArray = _overlay_image.save_png_to_buffer()
+	var before_overlay_opacity: float = overlay_opacity
+	var mat_id: int = _material.get_instance_id()
+	var solid_id: int = _solid.get_instance_id()
+	_flatten_overlay_to_base()
+	var after_base_png: PackedByteArray = _image.save_png_to_buffer()
+	_image.generate_mipmaps()
+	var after_tex := ImageTexture.create_from_image(_image)
+	_texture = after_tex
+	_material.albedo_texture = after_tex
+	if _undo != null:
+		var do_state := {"base": after_base_png, "overlay": PackedByteArray(), "opacity": 1.0, "mat_id": mat_id, "solid_id": solid_id}
+		var undo_state := {"base": before_base_png, "overlay": before_overlay_png, "opacity": before_overlay_opacity, "mat_id": mat_id, "solid_id": solid_id}
+		_create_undo_action("Slab Flatten Paint Layer", _solid)
+		_undo.add_do_method(_restore_flatten_state.bind(do_state))
+		_undo.add_undo_method(_restore_flatten_state.bind(undo_state))
+		_undo.commit_action(false)
+	_mark_dirty(_material, true)
+	_report("Flattened overlay to Albedo.")
+	image_changed.emit()
+	changed.emit()
+	return true
+
+
+func _restore_flatten_state(state: Dictionary) -> void:
+	var mat_id: int = int(state.get("mat_id", 0))
+	var solid_id: int = int(state.get("solid_id", 0))
+	if _material == null or _solid == null:
+		return
+	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
+		return
+	var base_png: PackedByteArray = state.get("base", PackedByteArray())
+	var overlay_png: PackedByteArray = state.get("overlay", PackedByteArray())
+	var opacity: float = float(state.get("opacity", 1.0))
+	var base_img := Image.new()
+	if base_png.is_empty() or base_img.load_png_from_buffer(base_png) != OK:
+		return
+	_image = base_img
+	if overlay_png.is_empty():
+		_clear_overlay()
+	else:
+		var overlay_img := Image.new()
+		if overlay_img.load_png_from_buffer(overlay_png) == OK:
+			_overlay_image = overlay_img
+			_overlay_dirty = not _is_overlay_empty()
+			overlay_opacity = opacity
+		else:
+			_clear_overlay()
+	_composite_overlay()
+	_mark_dirty(_material, true)
+	changed.emit()
+
+
+func _ensure_overlay() -> void:
+	if _image == null or _image.is_empty():
+		return
+	if _overlay_image == null or _overlay_image.is_empty() or _overlay_image.get_size() != _image.get_size():
+		_overlay_image = Image.create(_image.get_width(), _image.get_height(), false, Image.FORMAT_RGBA8)
+		_overlay_image.fill(Color(0, 0, 0, 0))
+		_overlay_dirty = false
+
+
+func _clear_overlay() -> void:
+	if _overlay_image != null and not _overlay_image.is_empty():
+		_overlay_image.fill(Color(0, 0, 0, 0))
+	_overlay_dirty = false
+
+
+func _flatten_overlay_to_base() -> void:
+	if _overlay_image == null or _overlay_image.is_empty() or _image == null or _image.is_empty():
+		return
+	_blend_images(_image, _overlay_image, overlay_opacity)
+	_clear_overlay()
+
+
+func _blend_images(base: Image, overlay: Image, opacity: float) -> void:
+	if base == null or overlay == null or base.is_empty() or overlay.is_empty():
+		return
+	var w: int = mini(base.get_width(), overlay.get_width())
+	var h: int = mini(base.get_height(), overlay.get_height())
+	for y in range(h):
+		for x in range(w):
+			var src: Color = overlay.get_pixel(x, y)
+			if src.a < 0.001:
+				continue
+			var dst: Color = base.get_pixel(x, y)
+			var a: float = src.a * opacity
+			base.set_pixel(x, y, dst.lerp(Color(src.r, src.g, src.b, 1.0), a))
+
+
+func _composite_overlay() -> void:
+	if _image == null or _image.is_empty():
+		return
+	if _material == null:
+		return
+	var display: Image = Image.create(_image.get_width(), _image.get_height(), false, _image.get_format())
+	display.copy_from(_image)
+	if _overlay_image != null and not _overlay_image.is_empty() and _overlay_dirty:
+		_blend_images(display, _overlay_image, overlay_opacity)
+	display.generate_mipmaps()
+	_texture = ImageTexture.create_from_image(display)
+	_material.albedo_texture = _texture
+	_material.emit_changed()
+	image_changed.emit()
+
+
 func begin_uv_drag() -> void:
 	cancel_uv_drag()
 	if _selection == null or _selection.solid == null or _selection.ids.is_empty():
@@ -559,7 +694,8 @@ func begin_stroke() -> bool:
 	if not _ensure_editable():
 		return false
 	stroke_active = true
-	_stroke_before = _image.save_png_to_buffer()
+	_ensure_overlay()
+	_stroke_before = _overlay_image.save_png_to_buffer() if _overlay_image != null and not _overlay_image.is_empty() else PackedByteArray()
 	_stroke_material = _material
 	_stroke_texture = _texture
 	_stroke_solid = _solid
@@ -584,30 +720,61 @@ func end_stroke() -> void:
 	if not stroke_active:
 		return
 	stroke_active = false
-	if _image == null:
+	if _overlay_image == null or _overlay_image.is_empty():
 		return
-	var after: PackedByteArray = _image.save_png_to_buffer()
+	var after: PackedByteArray = _overlay_image.save_png_to_buffer()
 	if after == _stroke_before:
 		return
-	# EditorUndoRedoManager aborts on Callable.bind(PackedByteArray). Record the
-	# ImageTexture swap with add_do_property, matching Make Unique.
 	if _undo != null and _stroke_material != null:
-		var before_img := Image.new()
-		var after_img: Image = _image.duplicate()
-		if before_img.load_png_from_buffer(_stroke_before) == OK:
-			before_img.generate_mipmaps()
-			if not after_img.has_mipmaps():
-				after_img.generate_mipmaps()
-			var before_tex := ImageTexture.create_from_image(before_img)
-			var after_tex := ImageTexture.create_from_image(after_img)
-			_texture = after_tex
-			_stroke_material.albedo_texture = after_tex
-			_create_undo_action("Slab Paint Stroke", _stroke_solid)
-			_undo.add_do_property(_stroke_material, "albedo_texture", after_tex)
-			_undo.add_undo_property(_stroke_material, "albedo_texture", before_tex)
-			_undo.commit_action(false)
-	_report("Painted albedo.")
+		var before_overlay := Image.new()
+		var after_overlay: Image = _overlay_image.duplicate()
+		var before_overlay_empty := _stroke_before.is_empty()
+		if before_overlay_empty:
+			before_overlay = Image.create(_overlay_image.get_width(), _overlay_image.get_height(), false, Image.FORMAT_RGBA8)
+			before_overlay.fill(Color(0, 0, 0, 0))
+		elif before_overlay.load_png_from_buffer(_stroke_before) != OK:
+			return
+		var mat_id: int = _stroke_material.get_instance_id()
+		var solid_id: int = _stroke_solid.get_instance_id()
+		var do_state := {"png": after_overlay.save_png_to_buffer(), "mat_id": mat_id, "solid_id": solid_id}
+		var undo_state := {"png": before_overlay.save_png_to_buffer(), "mat_id": mat_id, "solid_id": solid_id}
+		_create_undo_action("Slab Paint Stroke", _stroke_solid)
+		_undo.add_do_method(_restore_overlay.bind(do_state))
+		_undo.add_undo_method(_restore_overlay.bind(undo_state))
+		_undo.commit_action(false)
+	_mark_dirty(_material, true)
+	_report("Painted on Albedo overlay.")
 	changed.emit()
+
+
+func _restore_overlay(state: Dictionary) -> void:
+	var mat_id: int = int(state.get("mat_id", 0))
+	var solid_id: int = int(state.get("solid_id", 0))
+	if _material == null or _solid == null:
+		return
+	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
+		return
+	var png_bytes: PackedByteArray = state.get("png", PackedByteArray())
+	_ensure_overlay()
+	if png_bytes.is_empty():
+		_clear_overlay()
+	else:
+		var img := Image.new()
+		if img.load_png_from_buffer(png_bytes) == OK:
+			_overlay_image = img
+			_overlay_dirty = not _is_overlay_empty()
+	_composite_overlay()
+	changed.emit()
+
+
+func _is_overlay_empty() -> bool:
+	if _overlay_image == null or _overlay_image.is_empty():
+		return true
+	var data: PackedByteArray = _overlay_image.get_data()
+	for i in range(3, data.size(), 4):
+		if data[i] > 0:
+			return false
+	return true
 
 
 func cancel_stroke() -> void:
@@ -615,7 +782,13 @@ func cancel_stroke() -> void:
 		return
 	stroke_active = false
 	if not _stroke_before.is_empty():
-		apply_png(_stroke_before, _stroke_material, _stroke_texture)
+		var img := Image.new()
+		if img.load_png_from_buffer(_stroke_before) == OK:
+			_overlay_image = img
+			_overlay_dirty = not _is_overlay_empty()
+	elif _overlay_image != null:
+		_clear_overlay()
+	_composite_overlay()
 	_report("Paint stroke cancelled.")
 
 
@@ -648,6 +821,8 @@ func save_png(path: String) -> int:
 	if _image == null:
 		_report("Nothing to save.")
 		return ERR_DOES_NOT_EXIST
+	if has_overlay_strokes():
+		flatten()
 	_ensure_dir(path.get_base_dir())
 	var err: int = _image.save_png(path)
 	if err != OK:
@@ -792,29 +967,22 @@ func _face_paint_target(solid: Node3D, face: int) -> Dictionary:
 
 
 func _dab_at(pixel: Vector2) -> void:
-	if _image != null and _image.is_compressed():
-		_image.decompress()
-	if _image != null and _image.get_format() != Image.FORMAT_RGBA8:
-		_image.convert(Image.FORMAT_RGBA8)
-	if _texture == null or not (_texture is ImageTexture):
-		_texture = ImageTexture.create_from_image(_image)
+	_ensure_overlay()
+	if _overlay_image == null or _overlay_image.is_empty():
+		return
 	if _last_pixel.x < 0.0:
-		SlabPaintRaster.stamp(_image, pixel, brush_radius, brush_color, brush_opacity)
+		SlabPaintRaster.stamp(_overlay_image, pixel, brush_radius, brush_color, brush_opacity)
 	else:
-		SlabPaintRaster.stroke(_image, _last_pixel, pixel, brush_radius, brush_color, brush_opacity)
+		SlabPaintRaster.stroke(_overlay_image, _last_pixel, pixel, brush_radius, brush_color, brush_opacity)
 	_last_pixel = pixel
-	_image.generate_mipmaps()
-	(_texture as ImageTexture).set_image(_image)
-	if _material != null:
-		_material.albedo_texture = _texture
-		_material.emit_changed()
-	_mark_dirty(_material, true)
-	image_changed.emit()
+	_overlay_dirty = true
+	_composite_overlay()
 
 
 func rebind() -> void:
 	cancel_stroke()
 	cancel_uv_drag()
+	_clear_overlay()
 	if _selection != null and _selection.solid != null:
 		_actions.clamp_material_slot()
 		var mats: Array = _selection.solid.get("materials")
@@ -888,17 +1056,24 @@ func _bind_from_selection() -> void:
 	var mats: Array = _solid.get("materials")
 	var src: Variant = mats[_slot] if _slot >= 0 and _slot < mats.size() else null
 	if src is StandardMaterial3D:
-		_material = src
-		_image = _image_from_material(src)
-		_sync_texture_resolution_from_artwork(src, _image)
-		if src.albedo_texture is ImageTexture and _is_unique(src):
-			_texture = src.albedo_texture
-			(_texture as ImageTexture).set_image(_image)
+		var same_material: bool = src == _material
+		var preserve_base: bool = same_material and _image != null and not _image.is_empty() and has_overlay_strokes()
+		if preserve_base:
+			_sync_texture_resolution_from_artwork(src, _image)
+			_composite_overlay()
+			dirty = _is_dirty(_material)
 		else:
-			_texture = ImageTexture.create_from_image(_image)
-			if _is_unique(src):
-				src.albedo_texture = _texture
-		dirty = _is_dirty(_material)
+			_material = src
+			_image = _image_from_material(src)
+			_sync_texture_resolution_from_artwork(src, _image)
+			if src.albedo_texture is ImageTexture and _is_unique(src):
+				_texture = src.albedo_texture
+				(_texture as ImageTexture).set_image(_image)
+			else:
+				_texture = ImageTexture.create_from_image(_image)
+				if _is_unique(src):
+					src.albedo_texture = _texture
+			dirty = _is_dirty(_material)
 	else:
 		_material = null
 		_image = _filled(DEFAULT_SIZE, Color(0.72, 0.55, 0.38))
@@ -1060,6 +1235,7 @@ func _bind_editable(solid: Node3D, slot: int, mat: StandardMaterial3D, img: Imag
 	_material = mat
 	_image = img
 	_texture = tex
+	_clear_overlay()
 	mat.albedo_texture = tex
 	if _actions != null and img != null and not img.is_empty():
 		_actions.uv_texture_resolution = img.get_width()
