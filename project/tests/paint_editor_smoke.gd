@@ -41,7 +41,13 @@ func _run() -> void:
 			selection.set_ids(PackedInt64Array([id]))
 	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint")
 	await _click(_button_named(panel, "UV"))
-	for i in 3: await process_frame
+	# Wait for paint workspace layout to propagate after entering UV mode.
+	for i in 10: await process_frame
+	# Debug layout widths for CI diagnostics
+	var _paint_inspector: Control = panel.find_child("PaintInspector", true, false)
+	var _paint_split: Control = panel.find_child("PaintWorkspaceSplit", true, false)
+	if _paint_inspector and _paint_split:
+		print("LAYOUT: panel=%.0f split=%.0f inspector=%.0f" % [panel.get_global_rect().size.x, _paint_split.get_global_rect().size.x, _paint_inspector.get_global_rect().size.x])
 	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
 		"uv_entry_hides_native_gizmo_via_edit_lock")
 	_check(panel.current_workspace() == panel.Workspace.UV, "uv_button_enters_uv_workspace")
@@ -54,6 +60,11 @@ func _run() -> void:
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
+	# Wait for EditorResourcePicker to finish layout (first-frame width can be < 200)
+	for i in 30:
+		if picker.get_global_rect().size.x >= 200.0:
+			break
+		await process_frame
 	var resource_button_width := 0.0
 	var resource_button: Button
 	for child in picker.find_children("*", "Button", true, false):
@@ -261,6 +272,8 @@ func _run() -> void:
 	await create_timer(0.5).timeout
 	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_uv")
 	await _click(_button_named(panel, "Paint"))
+	# Wait for paint workspace layout to propagate
+	for i in 10: await process_frame
 	_check(panel.current_workspace() == panel.Workspace.PAINT, "paint_button_enters_paint_workspace")
 	var paint_workspace: Button = panel.find_child("PaintWorkspace", true, false)
 	_check(paint_workspace.button_pressed, "paint_workspace_button_shows_pressed")
@@ -274,6 +287,8 @@ func _run() -> void:
 	var resize_before_data: PackedByteArray = solid.get("data")
 	var resize_before_size: Vector2i = paint.image().get_size()
 	await _click(_button_named(panel, "Resize…"))
+	# Wait for async _reveal_paint_resize_form to complete (ensure_control_visible)
+	for i in 5: await process_frame
 	var resize_form: VBoxContainer = panel.find_child("PaintResizeForm", true, false)
 	_check(resize_form != null and resize_form.is_visible_in_tree(), "owned Pixel artwork reveals the inline Resize form")
 	var resize_width: SpinBox = resize_form.find_child("PaintResizeWidth", true, false)
@@ -316,7 +331,6 @@ func _run() -> void:
 	_check(flatten_button != null and flatten_button.is_visible_in_tree(),
 		"Pixel workspace has Flatten button")
 	_check(flatten_button.disabled, "Flatten is disabled without overlay strokes")
-	var canvas: Control = panel.find_child("PaintCanvas", true, false)
 	var fitted: Rect2 = canvas.image_rect()
 	var image_center: Vector2 = canvas.global_position + fitted.get_center()
 	_click_at(panel, image_center)

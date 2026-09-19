@@ -15,6 +15,8 @@ var orientation: int = Orientation.WORLD
 var custom_pivot_world := Vector3.ZERO
 var xray: bool = false
 var active_id: int = 0
+var isolated: bool = false
+var _hidden_solids: Dictionary = {}
 
 
 func configure_pivot(value: int, position: Variant = null) -> void:
@@ -39,6 +41,44 @@ func set_xray(value: bool) -> void:
 	xray = value
 	set_hover(null, 0)
 	settings_changed.emit()
+
+
+func enter_isolation(scene_root: Node) -> bool:
+	if objects.is_empty() or scene_root == null:
+		return false
+	if isolated:
+		return true
+	_hidden_solids.clear()
+	var target_set: Dictionary = {}
+	for obj in objects:
+		if is_instance_valid(obj):
+			target_set[obj] = true
+	for node in scene_root.find_children("*", SOLID_CLASS, true, false):
+		if not target_set.has(node) and node.visible:
+			_hidden_solids[node] = true
+			node.visible = false
+	isolated = true
+	settings_changed.emit()
+	return true
+
+
+func exit_isolation() -> void:
+	if not isolated:
+		return
+	for node in _hidden_solids:
+		if is_instance_valid(node):
+			node.visible = true
+	_hidden_solids.clear()
+	isolated = false
+	settings_changed.emit()
+
+
+func toggle_isolation(scene_root: Node) -> bool:
+	if isolated:
+		exit_isolation()
+		return false
+	return enter_isolation(scene_root)
+
 
 const SOLID_CLASS := "SlabSolid"
 

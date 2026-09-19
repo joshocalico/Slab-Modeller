@@ -529,8 +529,8 @@ func flatten() -> bool:
 		var do_state := {"base": after_base_png, "overlay": PackedByteArray(), "opacity": 1.0, "mat_id": mat_id, "solid_id": solid_id}
 		var undo_state := {"base": before_base_png, "overlay": before_overlay_png, "opacity": before_overlay_opacity, "mat_id": mat_id, "solid_id": solid_id}
 		_create_undo_action("Slab Flatten Paint Layer", _solid)
-		_undo.add_do_method(_restore_flatten_state.bind(do_state))
-		_undo.add_undo_method(_restore_flatten_state.bind(undo_state))
+		_add_do_method(_restore_flatten_state, do_state)
+		_add_undo_method(_restore_flatten_state, undo_state)
 		_undo.commit_action(false)
 	_mark_dirty(_material, true)
 	_report("Flattened overlay to Albedo.")
@@ -739,8 +739,8 @@ func end_stroke() -> void:
 		var do_state := {"png": after_overlay.save_png_to_buffer(), "mat_id": mat_id, "solid_id": solid_id}
 		var undo_state := {"png": before_overlay.save_png_to_buffer(), "mat_id": mat_id, "solid_id": solid_id}
 		_create_undo_action("Slab Paint Stroke", _stroke_solid)
-		_undo.add_do_method(_restore_overlay.bind(do_state))
-		_undo.add_undo_method(_restore_overlay.bind(undo_state))
+		_add_do_method(_restore_overlay, do_state)
+		_add_undo_method(_restore_overlay, undo_state)
 		_undo.commit_action(false)
 	_mark_dirty(_material, true)
 	_report("Painted on Albedo overlay.")
@@ -951,6 +951,20 @@ func _create_undo_action(label: String, solid: Node3D) -> void:
 		_undo.create_action(label, UndoRedo.MERGE_DISABLE, solid)
 	else:
 		_undo.create_action(label, UndoRedo.MERGE_DISABLE)
+
+
+func _add_do_method(method: Callable, arg: Variant) -> void:
+	if _undo is EditorUndoRedoManager:
+		_undo.add_do_method(method.get_object(), method.get_method(), arg)
+	else:
+		_undo.add_do_method(method.bind(arg))
+
+
+func _add_undo_method(method: Callable, arg: Variant) -> void:
+	if _undo is EditorUndoRedoManager:
+		_undo.add_undo_method(method.get_object(), method.get_method(), arg)
+	else:
+		_undo.add_undo_method(method.bind(arg))
 
 
 func _face_paint_target(solid: Node3D, face: int) -> Dictionary:

@@ -6,10 +6,13 @@ const FONT_SIZE := 15
 var _selection: RefCounted
 var _custom: HBoxContainer
 var _metrics: RefCounted
+var _isolate: Button
+var _scene_root_getter: Callable
 
-func setup(selection: RefCounted, metrics: RefCounted = null) -> void:
+func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable()) -> void:
 	_selection = selection
 	_metrics = metrics if metrics != null else preload("res://addons/slab/slab_metrics.gd").at_scale(1.0)
+	_scene_root_getter = scene_root_getter
 	name = "SelectionControls"
 	add_theme_constant_override("h_separation", 8)
 	_choice("Pivot", ["Selection centre", "Active element", "Custom"], selection.pivot_mode,
@@ -26,6 +29,15 @@ func setup(selection: RefCounted, metrics: RefCounted = null) -> void:
 	_style_text(xray)
 	xray.toggled.connect(func(value: bool) -> void: _selection.set_xray(value))
 	add_child(xray)
+	_isolate = Button.new()
+	_isolate.name = "IsolateSelection"
+	_isolate.toggle_mode = true
+	_isolate.button_pressed = selection.isolated
+	_sync_isolate_label()
+	_isolate.tooltip_text = "Hide non-selected solids to focus on the current selection. Toggle or press Escape to exit."
+	_style_text(_isolate)
+	_isolate.pressed.connect(_on_isolate_pressed)
+	add_child(_isolate)
 	_custom = HBoxContainer.new()
 	_custom.name = "CustomPivot"
 	_custom.visible = selection.pivot_mode == 2
@@ -65,6 +77,24 @@ func _sync() -> void:
 		var field: SpinBox = _custom.get_node("Pivot" + "XYZ"[axis])
 		if not is_equal_approx(field.value, _selection.custom_pivot_world[axis]):
 			field.set_value_no_signal(_selection.custom_pivot_world[axis])
+	if _isolate != null:
+		_isolate.set_pressed_no_signal(_selection.isolated)
+		_sync_isolate_label()
+		_isolate.disabled = _selection.objects.is_empty()
+
+
+func _sync_isolate_label() -> void:
+	if _isolate == null:
+		return
+	_isolate.text = "Exit Isolate" if _selection.isolated else "Isolate"
+
+
+func _on_isolate_pressed() -> void:
+	var scene_root: Node = null
+	if _scene_root_getter.is_valid():
+		scene_root = _scene_root_getter.call()
+	_selection.toggle_isolation(scene_root)
+	_sync_isolate_label()
 
 func _choice(label_text: String, choices: Array, selected: int, callback: Callable) -> void:
 	var label := Label.new()
