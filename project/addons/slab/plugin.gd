@@ -312,9 +312,13 @@ func _on_selected_topology_changed() -> void:
 func _refresh_gizmos() -> void:
 	if _session == null:
 		return
-	for node in _session.gizmo_targets():
+	var selection_solid: Node3D = _selection.solid
+	var targets: Array[Node3D] = _session.gizmo_targets()
+	for node in targets:
 		if is_instance_valid(node):
 			node.update_gizmos()
+	if selection_solid != null and is_instance_valid(selection_solid) and selection_solid not in targets:
+		selection_solid.update_gizmos()
 	_sync_subgizmo()
 	update_overlays()
 
@@ -369,7 +373,8 @@ func _sync_subgizmo() -> void:
 	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:
 		_subgizmo_solid.clear_subgizmo_selection()
 	for gizmo in solid.get_gizmos():
-		if gizmo.get_plugin() != _solid_gizmo:
+		var gizmo_plugin: EditorNode3DGizmoPlugin = gizmo.get_plugin()
+		if gizmo_plugin != _solid_gizmo and (gizmo_plugin == null or gizmo_plugin.get_gizmo_name() != _solid_gizmo.get_gizmo_name()):
 			continue
 		solid.set_subgizmo_selection(gizmo, SolidGizmo.SELECTION_SUBGIZMO, _solid_gizmo._get_subgizmo_transform(gizmo, SolidGizmo.SELECTION_SUBGIZMO))
 		_subgizmo_token = token
