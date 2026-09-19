@@ -379,8 +379,7 @@ func _sync_subgizmo(override_solid: Node3D = null) -> void:
 		solid.update_gizmos()
 		gizmos = solid.get_gizmos()
 	for gizmo in gizmos:
-		var gizmo_plugin: EditorNode3DGizmoPlugin = gizmo.get_plugin()
-		if gizmo_plugin == null or gizmo_plugin.get_gizmo_name() != "SlabSolid":
+		if gizmo.get_plugin() != _solid_gizmo:
 			continue
 		solid.set_subgizmo_selection(gizmo, SolidGizmo.SELECTION_SUBGIZMO, _solid_gizmo._get_subgizmo_transform(gizmo, SolidGizmo.SELECTION_SUBGIZMO))
 		_subgizmo_token = token
