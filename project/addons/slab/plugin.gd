@@ -310,14 +310,16 @@ func _on_selected_topology_changed() -> void:
 
 
 func _refresh_gizmos() -> void:
-	var selection_solid: Node3D = _selection.solid
-	if selection_solid == null:
+	var selection_solid: Node3D = null
+	if is_instance_valid(_selection.solid):
+		selection_solid = _selection.solid
+	if selection_solid == null and is_instance_valid(_topology_solid):
 		selection_solid = _topology_solid
 	if _session != null:
 		for node in _session.gizmo_targets():
 			if is_instance_valid(node):
 				node.update_gizmos()
-	if selection_solid != null and is_instance_valid(selection_solid):
+	if selection_solid != null:
 		selection_solid.update_gizmos()
 	_sync_subgizmo(selection_solid)
 	update_overlays()
@@ -363,10 +365,14 @@ func _handle_label_style() -> StyleBoxFlat:
 
 
 func _sync_subgizmo(override_solid: Node3D = null) -> void:
-	var solid: Node3D = override_solid if override_solid != null else _selection.solid
-	if solid == null:
+	var solid: Node3D = null
+	if override_solid != null:
+		solid = override_solid
+	elif is_instance_valid(_selection.solid):
+		solid = _selection.solid
+	if solid == null and is_instance_valid(_topology_solid):
 		solid = _topology_solid
-	if solid == null or not is_instance_valid(solid) or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
+	if solid == null or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
 		_clear_subgizmo()
 		return
 	var token: String = "%s:%d:%s:%d:%d:%d:%s" % [solid.get_instance_id(), _selection.mode, ",".join(_id_tokens(_selection.ids)), _selection.pivot_mode, _selection.orientation, _selection.active_id, _selection.custom_pivot_world]

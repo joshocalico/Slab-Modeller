@@ -99,16 +99,41 @@ func _run() -> void:
 	_check(not disclosure.button_pressed and not settings.visible, "keyboard_collapses_selection_commands")
 	await _click(disclosure)
 	var amount: SpinBox = panel.find_child("HandleAmount", true, false)
+	var session_events := {"started": [], "updated": [], "ended": []}
+	actions.op_session_started.connect(func(op_id: String, title: String, fields: Array) -> void:
+		session_events["started"].append({"op_id": op_id, "title": title, "fields": fields}))
+	actions.op_session_updated.connect(func(op_id: String, values: Dictionary, apply_enabled: bool) -> void:
+		session_events["updated"].append({"op_id": op_id, "values": values, "apply_enabled": apply_enabled}))
+	actions.op_session_ended.connect(func(op_id: String, reason: String) -> void:
+		session_events["ended"].append({"op_id": op_id, "reason": reason}))
 	await _click(_button_named(panel.find_child("Commands", true, false), "Extrude"))
 	_check(actions.operation_active and solid.get("data") == before, "extrude_button_opens_preview")
 	_check(is_equal_approx(amount.value, 0.5), "extrude_starts_with_its_own_default_distance")
+	_check(session_events["started"].size() == 1 and session_events["started"][0]["op_id"] == "extrude",
+		"op_session_started_emitted_with_extrude_id")
+	_check(session_events["started"][0]["title"] == "Extrude", "op_session_started_has_extrude_title")
+	_check(session_events["started"][0]["fields"].size() == 1 and session_events["started"][0]["fields"][0]["id"] == "distance",
+		"op_session_started_has_distance_field")
+	_check(actions.op_session_active() and actions.op_session_id() == "extrude", "op_session_getters_return_active_state")
+	var cancel_btn: Button = panel.find_child("OpCardCancel", true, false)
+	var apply_btn: Button = panel.find_child("OpCardApply", true, false)
+	_check(cancel_btn != null and apply_btn != null, "op_card_has_named_commit_buttons")
+	_check(cancel_btn.get_global_rect().position.x < apply_btn.get_global_rect().position.x,
+		"op_card_cancel_left_apply_right")
+	_check(not apply_btn.disabled and apply_btn.has_theme_stylebox_override("normal"),
+		"valid_apply_has_primary_styling")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-preview"}, "after")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-doc-panel-preview", "capture_rect": panel.get_global_rect()}, "after")
 	amount.value = -4.0
 	await create_timer(0.2).timeout
 	_check(_button_named(preview, "Apply").disabled, "refused_preview_disables_apply")
+	_check(not apply_btn.has_theme_stylebox_override("normal"), "invalid_apply_loses_primary_styling")
+	var last_update: Dictionary = session_events["updated"][-1] if session_events["updated"].size() > 0 else {}
+	_check(last_update.get("apply_enabled", true) == false, "op_session_updated_with_apply_enabled_false")
 	await _click(_button_named(preview, "Cancel"))
 	_check(solid.get("data") == before, "refused_preview_preserves_mesh")
+	_check(session_events["ended"].size() == 1 and session_events["ended"][0]["reason"] == "cancel",
+		"op_session_ended_with_cancel_reason")
 	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
 	_check(actions.operation_active and not settings.visible, "preview_has_one_settings_area")
 	_check(is_equal_approx(amount.value, 0.5), "inset_does_not_inherit_extrude_distance")
@@ -124,9 +149,14 @@ func _run() -> void:
 	await _click(_button_named(panel.find_child("Commands", true, false), "Inset"))
 	_check(is_equal_approx(amount.value, 0.45), "cancelled_inset_remembers_its_distance")
 	await _type_spin_text(amount, "0.25")
+	var ended_before_apply: int = session_events["ended"].size()
 	await _click(_button_named(preview, "Apply"))
 	_check(is_equal_approx(actions.inset_amount, 0.25), "inset_apply_uses_pending_distance")
 	_check(not actions.operation_active and solid.get("data") != before, "apply_commits_preview")
+	_check(session_events["ended"].size() == ended_before_apply + 1 and session_events["ended"][-1]["reason"] == "apply",
+		"op_session_ended_with_apply_reason")
+	_check(actions.op_session_remembered("inset").get("distance", 0.0) == 0.25,
+		"op_session_remembered_returns_last_applied_value")
 	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
 	_check(solid.get("data") == before, "undo_restores_original_mesh")
@@ -187,16 +217,37 @@ func _boolean_swap(editor: Object, panel: Control, selection: RefCounted, manage
 	await process_frame
 
 func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manager: EditorUndoRedoManager) -> void:
+	var native_selection: Object = editor.get_selection()
+	native_selection.clear()
+	selection.set_ids(PackedInt64Array())
+	await process_frame
 	await _click(_mode(panel, 0))
 	await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
 	for entry in [["size_x", 4.0], ["size_y", 3.0], ["size_z", 4.0]]:
 		var box: Node = panel.find_child(entry[0], true, false)
 		var field: SpinBox = box.find_children("*", "SpinBox", true, false)[0]
 		field.value = entry[1]
+		field.get_line_edit().release_focus()
+	var scene: Node = editor.get_edited_scene_root()
+	var count_before: int = scene.get_child_count()
+	var create_btn: Button = panel.find_child("CreateShape", true, false)
+	var scroll: ScrollContainer = panel.find_child("SettingsScroll", true, false)
+	if scroll != null and create_btn != null:
+		scroll.ensure_control_visible(create_btn)
 	await process_frame
-	await _click(panel.find_child("CreateShape", true, false))
+	await _click(create_btn)
 	await _confirm_create(editor, Vector3.ZERO)
-	var room: Node3D = editor.get_selection().get_selected_nodes()[0]
+	var selected: Array[Node] = native_selection.get_selected_nodes()
+	for i in 30:
+		if not selected.is_empty() and scene.get_child_count() > count_before:
+			break
+		await process_frame
+		selected = native_selection.get_selected_nodes()
+	_check(scene.get_child_count() > count_before, "tutorial_create_adds_solid_to_scene")
+	_check(not selected.is_empty(), "tutorial_create_selects_box")
+	if selected.is_empty():
+		return
+	var room: Node3D = selected[0]
 	_check(room.call("get_local_aabb").size.is_equal_approx(Vector3(4, 3, 4)), "tutorial_creates_4_by_3_by_4_box")
 	await _click(_mode(panel, 3))
 	var top := 0
@@ -236,12 +287,31 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 	height.get_line_edit().text = "5.25"
 	await _click(panel.find_child("CreateShape", true, false))
 	await _confirm_create(editor, Vector3(8, 0, 0))
-	var first: Node3D = editor.get_selection().get_selected_nodes()[0]
+	var native_selection: Object = editor.get_selection()
+	var selected: Array[Node] = native_selection.get_selected_nodes()
+	for i in 30:
+		if not selected.is_empty():
+			break
+		await process_frame
+		selected = native_selection.get_selected_nodes()
+	_check(not selected.is_empty(), "create_selects_first_cylinder")
+	if selected.is_empty():
+		return
+	var first: Node3D = selected[0]
 	var bounds: AABB = first.call("get_local_aabb")
 	_check(scene.get_child_count() == count + 1 and is_equal_approx(bounds.size.y, 5.25), "create_commits_focused_typed_dimensions")
 	await _click(panel.find_child("CreateShape", true, false))
 	await _confirm_create(editor, Vector3(12, 0, 0))
-	var second: Node3D = editor.get_selection().get_selected_nodes()[0]
+	selected = native_selection.get_selected_nodes()
+	for i in 30:
+		if not selected.is_empty():
+			break
+		await process_frame
+		selected = native_selection.get_selected_nodes()
+	_check(not selected.is_empty(), "create_selects_second_cylinder")
+	if selected.is_empty():
+		return
+	var second: Node3D = selected[0]
 	_check(second != first and scene.get_child_count() == count + 2 and second.call("get_local_aabb") == bounds, "repeat_create_retains_shape_and_dimensions")
 	var settings_scroll: Control = panel.find_child("SettingsScroll", true, false)
 	var create: Control = panel.find_child("CreateShape", true, false)

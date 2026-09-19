@@ -270,6 +270,8 @@ func _run() -> void:
 	var sampling: OptionButton = resize_form.find_child("PaintResizeSampling", true, false)
 	var resize_apply: Button = resize_form.find_child("PaintResizeConfirm", true, false)
 	var resize_cancel: Button = resize_form.find_child("PaintResizeCancel", true, false)
+	_check(resize_cancel.get_global_rect().position.x < resize_apply.get_global_rect().position.x,
+		"paint_resize_cancel_left_apply_right")
 	_check(panel.get("_paint_inspector").get_global_rect().grow(1.0).encloses(resize_apply.get_global_rect())
 		and panel.get("_paint_inspector").get_global_rect().grow(1.0).encloses(resize_cancel.get_global_rect()),
 		"first-open Resize actions scroll fully into the Pixel inspector: %s apply=%s cancel=%s scroll=%s/%s" % [panel.get("_paint_inspector").get_global_rect(), resize_apply.get_global_rect(), resize_cancel.get_global_rect(), panel.get("_paint_inspector").scroll_vertical, panel.get("_paint_inspector").get_v_scroll_bar().max_value])
