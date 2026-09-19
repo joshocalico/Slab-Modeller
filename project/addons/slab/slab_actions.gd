@@ -5,6 +5,7 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabOperationHandles := preload("res://addons/slab/slab_operation_handles.gd")
+const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
 
 signal reported(text: String)
 signal status_reset_requested
@@ -116,6 +117,7 @@ var uv_texture_resolution: int = 1024
 var material_slot: int = 0
 
 var shapes: RefCounted
+var keybind_profiles: RefCounted
 
 var _selection: RefCounted
 var _undo: Object
@@ -268,6 +270,7 @@ func _init(selection: RefCounted = null, undo: Object = null) -> void:
 	_selection = selection if selection != null else SlabSelection.new()
 	_undo = undo
 	shapes = SlabShapes.new()
+	keybind_profiles = SlabKeybindProfiles.new()
 	_rows = _build()
 
 
@@ -361,11 +364,22 @@ func request_create_placement(id: StringName) -> void:
 
 func run_shortcut(keycode: int) -> bool:
 	for row in _rows:
-		if row["shortcut"] != keycode or disabled_reason(row) != "":
+		var active_shortcut: int = shortcut_of(row)
+		if active_shortcut == 0 or active_shortcut != keycode or disabled_reason(row) != "":
 			continue
 		_apply(row, row["handler"].call())
 		return true
 	return false
+
+
+func shortcut_of(row: Dictionary) -> int:
+	var id: String = str(row.get("id", ""))
+	if id == "":
+		return int(row.get("shortcut", 0))
+	var profile_shortcut: int = keybind_profiles.shortcut_for(id)
+	if profile_shortcut != 0:
+		return profile_shortcut
+	return int(row.get("shortcut", 0))
 
 
 func _apply(row: Dictionary, plan: Dictionary) -> void:
