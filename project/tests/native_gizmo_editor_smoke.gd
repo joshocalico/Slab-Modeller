@@ -243,10 +243,13 @@ func _check_paint_empty_gesture(plugin: EditorPlugin, scene: Node, solid: Node3D
 		configured_mode: int, configured_ids: PackedInt64Array) -> void:
 	selection.mode = Selection.Mode.OBJECT
 	selection.set_ids(PackedInt64Array())
+	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint_entry")
 	var paint_button := _button_named(plugin.get("_panel"), "Surface Paint")
 	paint_button.pressed.emit()
 	for i in 3: await process_frame
 	_check(plugin.get("_paint").active, "surface_paint_entered_without_face_ids")
+	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
+		"paint_entry_hides_native_transform_gizmo_via_edit_lock")
 	_check(SlabPick.pick_world_hit(scene, camera, start).is_empty(), "native_gizmo_axis_start_is_outside_geometry")
 	await _native_drag(surface, start, end)
 	_check(solid.get("data") == before, "paint_empty_drag_keeps_exact_mesh_data")
@@ -255,6 +258,7 @@ func _check_paint_empty_gesture(plugin: EditorPlugin, scene: Node, solid: Node3D
 	_check(selection.ids.is_empty(), "paint_empty_drag_selects_nothing")
 	paint_button.pressed.emit()
 	for i in 3: await process_frame
+	_check(not solid.has_meta("_edit_lock_"), "paint_exit_restores_native_transform_gizmo")
 	selection.mode = configured_mode
 	selection.set_ids(configured_ids)
 	for i in 10: await process_frame

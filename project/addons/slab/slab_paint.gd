@@ -80,6 +80,8 @@ var _uv_ids := PackedInt64Array()
 var _brush_node: MeshInstance3D
 var _dirty_ids: Dictionary = {}
 var _pending_scene_saves: Dictionary = {}
+var _locked_solid: Node3D = null
+var _had_prior_lock: bool = false
 
 
 func bind(selection: RefCounted, actions: RefCounted, undo: Object, host: RefCounted = null) -> void:
@@ -109,6 +111,7 @@ func enter() -> void:
 	active = true
 	if _selection != null:
 		_selection.mode = 3
+	_lock_transform_gizmo()
 	_adopt_selection_material()
 	_report("Surface Paint. Material/UV places textures; Pixel paints albedo.")
 
@@ -117,6 +120,7 @@ func exit() -> void:
 	_left_gesture_owned = false
 	cancel_stroke()
 	_free_brush()
+	_unlock_transform_gizmo()
 	active = false
 	_report("Surface Paint closed.")
 
@@ -1158,6 +1162,7 @@ func _on_selection_changed() -> void:
 		return
 	cancel_stroke()
 	cancel_uv_drag()
+	_lock_transform_gizmo()
 	if tool == Tool.PIXEL:
 		_bind_pixel_selection()
 	else:
@@ -1288,6 +1293,38 @@ func _free_brush() -> void:
 	if _brush_node != null and is_instance_valid(_brush_node):
 		_brush_node.queue_free()
 	_brush_node = null
+
+
+func _lock_transform_gizmo() -> void:
+	var target: Node3D = _selection.solid if _selection != null else null
+	if target == _locked_solid:
+		return
+	_unlock_transform_gizmo()
+	if target == null or not is_instance_valid(target):
+		return
+	_locked_solid = target
+	_had_prior_lock = _locked_solid.has_meta("_edit_lock_") and _locked_solid.get_meta("_edit_lock_") == true
+	if not _had_prior_lock:
+		_locked_solid.set_meta("_edit_lock_", true)
+	if _host != null and _host.has_method("refresh_native_selection"):
+		_host.refresh_native_selection(_locked_solid)
+
+
+func _unlock_transform_gizmo() -> void:
+	if _locked_solid == null:
+		return
+	var solid: Node3D = _locked_solid
+	var restore_lock: bool = _had_prior_lock
+	_locked_solid = null
+	_had_prior_lock = false
+	if not is_instance_valid(solid):
+		return
+	if restore_lock:
+		pass
+	elif solid.has_meta("_edit_lock_"):
+		solid.remove_meta("_edit_lock_")
+	if _host != null and _host.has_method("refresh_native_selection"):
+		_host.refresh_native_selection(solid)
 
 
 func _report(text: String) -> void:

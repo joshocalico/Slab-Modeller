@@ -35,3 +35,7 @@ func undo() -> Object:
 
 func inspect_resource(_resource: Resource) -> void:
 	pass
+
+
+func refresh_native_selection(_solid: Node3D) -> void:
+	pass
