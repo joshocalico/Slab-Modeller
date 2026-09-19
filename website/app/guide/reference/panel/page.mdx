@@ -4,14 +4,14 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **Surface Paint** for materials and UVs.
+The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **Surface Paint** for materials and UVs.
 
 Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel in Face mode, with the Selection heading collapsed and Surface Paint available in the header."
-  caption="Default Face mode. Geometry commands stay open. Selection starts collapsed; material and UV controls live in Surface Paint."
+  alt="The Slab panel showing an active Extrude op card with Distance field, Cancel on the left, and yellow Apply on the right."
+  caption="An active op card during Extrude. The card title, Distance field, Cancel, and yellow Apply button replace the idle settings."
 />
 
 The header keeps the current selection visible, for example `1 face · Box`. Long names shorten with an ellipsis; the tooltip contains the full summary. The status line below shows tool instructions, results, and recovery messages without replacing the header selection.
@@ -20,7 +20,7 @@ On a wide panel, settings sit beside the command groups. On a narrow panel, sett
 
 ## Settings
 
-The settings change with the current mode and active command. In Object mode, choose a shape to show its creation fields.
+The settings area scrolls below the Create strip in Object mode. It changes with the current mode and active command. In Object mode, choose a shape to show its creation fields in the Create strip. When exactly two solids are selected, the Boolean operands appear in the scrollable settings below; the Create strip stays visible above.
 
 | Field | When it shows | Role |
 | --- | --- | --- |
@@ -35,8 +35,8 @@ There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting
 
 <Figure
   src="/img/panel-preview.png"
-  alt="The Slab panel during an Extrude preview, with Extrude distance, Apply, and Cancel controls."
-  caption="An active Extrude preview. Adjust Extrude distance, then Apply or Cancel."
+  alt="The Slab panel during an Extrude preview, showing the active op card titled Extrude with Distance field, Cancel on the left, and yellow Apply on the right."
+  caption="The active op card during Extrude. Adjust Distance (negative goes inward), then click Cancel or yellow Apply."
 />
 
 ## Create fields
@@ -209,7 +209,9 @@ In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the gr
 
 ## Extrude, Inset, and Bevel previews
 
-**Extrude** opens **Extrude distance**, **Apply**, and **Cancel**. **Inset** opens **Inset distance**, **Apply**, and **Cancel**. **Bevel** opens **Bevel width**, **Segments**, **Apply**, and **Cancel**. **Segments** ranges from 1 to 16.
+Starting Extrude, Inset, or Bevel replaces the idle settings with an **active op card**. The card shows the operation title (Extrude, Inset, or Bevel), its settings, and **Cancel | Apply** buttons. **Apply** is primary when the current values produce valid geometry.
+
+**Extrude** opens **Extrude distance** (−64 to 64). Positive distance extrudes outward along the face normal; negative distance extrudes inward. **Inset** opens **Inset distance**. **Bevel** opens **Bevel width** and **Segments** (1 to 16).
 
 The 3D view renders the proposed geometry while the original solid remains unchanged. The coloured viewport handle changes the operation's numeric value. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** restores the original display and leaves the solid unchanged. If a value would make invalid geometry, Slab restores the original solid and disables **Apply**.
 
