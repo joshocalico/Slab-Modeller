@@ -19,6 +19,8 @@ var preview_lines := PackedVector3Array()
 var result_ids := PackedInt64Array()
 var error: int = OK
 var _before := PackedByteArray()
+var source_mode: int = -1
+var source_face_ids := PackedInt64Array()
 
 
 func begin(next_kind: int, target: Node3D, selected_ids: PackedInt64Array,
@@ -164,6 +166,8 @@ func cancel() -> void:
 	result_ids.clear()
 	tangent = Vector3.ZERO
 	error = OK
+	source_mode = -1
+	source_face_ids.clear()
 	if is_instance_valid(target):
 		target.call("clear_display_preview")
 

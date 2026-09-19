@@ -308,6 +308,8 @@ static func section_of(row: Dictionary) -> String:
 	if id.begins_with("uv_") or id == "set_face_material":
 		return SECTION_UV
 	var modes: Array = row["modes"]
+	if id == "bevel_edges":
+		return "Edge"
 	if modes.size() > 1:
 		return SECTION_SELECTION
 	if modes[0] == SlabSelection.Mode.OBJECT and row["min_count"] == 0:
@@ -766,6 +768,7 @@ func _build() -> Array[Dictionary]:
 	var vertex: Array = [SlabSelection.Mode.VERTEX]
 	var edge: Array = [SlabSelection.Mode.EDGE]
 	var face: Array = [SlabSelection.Mode.FACE]
+	var edge_or_face: Array = [SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]
 	var elements: Array = [SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]
 
 	var table: Array = []
@@ -787,7 +790,7 @@ func _build() -> Array[Dictionary]:
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
 		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Splits a shared face between two non-adjacent vertices.", KEY_K, _ids_op.bind("connect_vertices"), 2),
 
-		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _operation_op.bind(2)),
+		_row("bevel_edges", "Bevel", "ToolRotate", edge_or_face, 1, "Previews a rounded bevel on selected edges, or on the perimeter of selected faces.", KEY_B, _operation_op.bind(2)),
 		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Splits the shared face between the nearest pair of non-adjacent edge endpoints.", KEY_K, _ids_op.bind("connect_edges"), 2),
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
 		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes coplanar internal edges and merges their adjacent faces.", KEY_X, _ids_op.bind("dissolve_edges")),
