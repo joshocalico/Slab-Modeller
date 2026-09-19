@@ -31,7 +31,7 @@ func _run() -> void:
 	else:
 		_check(scene.get_child_count() == 0, "fresh_project_starts_without_demo_dependencies")
 		await _click(_mode(panel, 0))
-		await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
+		await _click(_button_named(panel.find_child("CreateChips", true, false), "Box"))
 		for entry in [["size_x", 6.0], ["size_y", 1.0], ["size_z", 6.0]]:
 			var spin: SpinBox = panel.find_child(entry[0], true, false).find_children("*", "SpinBox", true, false)[0]
 			spin.value = entry[1]

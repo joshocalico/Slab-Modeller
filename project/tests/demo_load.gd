@@ -37,6 +37,14 @@ func _process(_dt: float) -> bool:
 	_expect(int(box.call("face_count")) == 6, "demo Box reloads 6 faces from data")
 	_expect(int(solid.call("face_count")) == 6, "demo Solid reloads 6 faces from data")
 	_expect(absf(float(box.call("volume")) - 8.0) < 0.01, "demo Box volume is the saved 2x2x2")
+	_expect(box.get("collision_enabled") == true, "demo Box has collision_enabled")
+	var box_collider: CollisionShape3D = box.get_node_or_null("__body/__shape")
+	_expect(box_collider != null and box_collider.shape is ConcavePolygonShape3D,
+		"demo Box has runtime collision shape")
+	_expect(solid.get("collision_enabled") == true, "demo Solid has collision_enabled")
+	var solid_collider: CollisionShape3D = solid.get_node_or_null("__body/__shape")
+	_expect(solid_collider != null and solid_collider.shape is ConcavePolygonShape3D,
+		"demo Solid has runtime collision shape")
 	print("box=", box, " faces=", box.call("face_count"), " volume=", box.call("volume"))
 	print("solid=", solid, " faces=", solid.call("face_count"))
 	print("hall=", hall, " points=", hall.get("points") if hall else null)
