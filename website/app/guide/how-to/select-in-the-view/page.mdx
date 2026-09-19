@@ -26,6 +26,12 @@ Shift, Ctrl, or Cmd click adds or removes that element. A double-click on an edg
 
 To select the edges around a face region, select its faces and choose **Select Boundary**. Slab switches to Edge mode and selects the outer edges, excluding edges shared by two selected faces. Selecting every face of a closed solid leaves no boundary.
 
+<Figure
+  src="/img/panel-select-boundary-edges.png"
+  alt="Edge mode after Select Boundary, showing 4 boundary edges selected on a box roof."
+  caption="After selecting a roof face and choosing Select Boundary, the editor switches to Edge mode with the 4 perimeter edges selected."
+/>
+
 ## Move the selection
 
 To edit a light, camera, or another authored node, select it in Godot's Scene tree. Slab clears its solid and element selection, including when that node is a child of a `SlabSolid`. Edit the node with Godot's Inspector and transform tools. Select the solid again to resume modelling.
