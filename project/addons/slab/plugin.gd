@@ -374,7 +374,7 @@ func _sync_subgizmo(override_solid: Node3D = null) -> void:
 		return
 	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:
 		_subgizmo_solid.clear_subgizmo_selection()
-	var gizmos: Array[EditorNode3DGizmo] = solid.get_gizmos()
+	var gizmos: Array = solid.get_gizmos()
 	if gizmos.is_empty():
 		solid.update_gizmos()
 		gizmos = solid.get_gizmos()
