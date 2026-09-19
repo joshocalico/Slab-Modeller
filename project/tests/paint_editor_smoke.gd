@@ -39,7 +39,11 @@ func _run() -> void:
 	for id in solid.call("get_faces"):
 		if solid.call("face_normal", id).y > 0.9:
 			selection.set_ids(PackedInt64Array([id]))
+	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint")
 	await _click(_button_named(panel, "Surface Paint"))
+	for i in 3: await process_frame
+	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
+		"paint_entry_hides_native_gizmo_via_edit_lock")
 	var target_label: Label = panel.get("_paint_face")
 	_check(target_label.text.begins_with("%s · 1 face · " % solid.name), "paint_target_names_solid_and_face_count")
 	var workspace: Button = panel.find_child("SurfacePaint", true, false)
@@ -224,7 +228,9 @@ func _run() -> void:
 	await _extreme_uv_framing(editor, panel, canvas, paint, solid, selection)
 	await _modifier_uv_framing(panel, canvas, paint, solid, selection)
 	await _click(_mode(panel, 3))
+	for i in 3: await process_frame
 	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
+	_check(not solid.has_meta("_edit_lock_"), "paint_exit_restores_native_gizmo")
 	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
 		"leaving_paint_clears_workspace_highlight")
 	await _click(_button_named(panel, "Surface Paint"))
