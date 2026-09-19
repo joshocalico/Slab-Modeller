@@ -30,10 +30,15 @@ var _selection_context: Label
 var _last_report := ""
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
+var _settings_column: VBoxContainer
 var _settings_fields: HFlowContainer
 var _buttons: Dictionary = {}
 var _create_group: ButtonGroup
 var _create_focus: StringName = &"make_box"
+var _create_strip: VBoxContainer
+var _create_chips: HFlowContainer
+var _create_fields: HFlowContainer
+var _create_button: Button
 # Mode.OBJECT is 0, so -1 means the command column has never been built.
 var _built_mode: int = -1
 var _expanded_sections: Dictionary = {}
@@ -122,7 +127,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_model_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_model_body.add_theme_constant_override("separation", 8)
 	_model_body.add_child(_command_scroll())
-	_model_body.add_child(_settings_block())
+	_model_body.add_child(_build_settings_column())
 	_model_body.resized.connect(_layout_model)
 	add_child(_model_body)
 	_paint_body = _paint_block()
@@ -138,10 +143,11 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 
 
 func _layout_model() -> void:
-	var stacked := _model_body.size.x < _scaled(850.0)
+	var stacked: bool = _model_body.size.x < _scaled(850.0)
 	_model_body.vertical = stacked
-	_settings.custom_minimum_size.x = 0.0 if stacked else _scaled(300.0)
-	_settings.size_flags_horizontal = Control.SIZE_FILL
+	if _settings_column != null:
+		_settings_column.custom_minimum_size.x = 0.0 if stacked else _scaled(300.0)
+		_settings_column.size_flags_horizontal = Control.SIZE_FILL
 
 
 func _operation_controls() -> Control:
@@ -341,6 +347,10 @@ func _operation_controls() -> Control:
 func _show_settings() -> bool:
 	if _selection.mode == SlabSelection.Mode.FACE:
 		return not _selection.ids.is_empty() and _actions.snap_align_active and not _actions.operation_active
+	if _selection.mode == SlabSelection.Mode.OBJECT:
+		var has_tool: bool = _actions.snap_align_active or _actions.array_active or _actions.plane_active
+		var has_boolean: bool = _selection.objects.size() == 2
+		return not _actions.operation_active and (has_tool or has_boolean)
 	return not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _selection.ids.size() >= 2 or _actions.snap_align_active)
 
 
@@ -419,6 +429,7 @@ func refresh() -> void:
 		_refresh_settings()
 	_refresh_buttons()
 	_settings.visible = _show_settings()
+	_refresh_create_strip_visibility()
 	_refresh_selection_context()
 	set_status(_last_report if _last_report != "" else _selection.describe())
 	if _paint != null and _paint.active:
@@ -450,8 +461,15 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for child in _command_column.get_children():
 		_command_column.remove_child(child)
 		child.free()
+	for child in _create_chips.get_children():
+		_create_chips.remove_child(child)
+		child.free()
 	for section in sections:
 		var heading: String = section["heading"]
+		if heading == SlabActions.SECTION_CREATE:
+			for row in section["rows"]:
+				_create_chips.add_child(_action_button(row))
+			continue
 		var flow := _section_flow(section["rows"])
 		if heading == SlabActions.SECTION_SELECTION:
 			_command_column.add_child(_section_toggle(heading, flow))
@@ -482,10 +500,19 @@ func _refresh_settings() -> void:
 	for child in _settings_fields.get_children():
 		_settings_fields.remove_child(child)
 		child.queue_free()
+	_refresh_create_strip()
 	var mode: int = _selection.mode
 	if mode == SlabSelection.Mode.OBJECT:
-		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else ("Boolean operands" if _selection.objects.size() == 2 else "New %s" % _create_label())))
-		_settings_title.visible = true
+		var has_tool_active: bool = _actions.snap_align_active or _actions.array_active or _actions.plane_active
+		var has_boolean: bool = _selection.objects.size() == 2 and not has_tool_active
+		if has_tool_active:
+			_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else "Plane Cut")
+			_settings_title.visible = true
+		elif has_boolean:
+			_settings_title.text = "Boolean operands"
+			_settings_title.visible = true
+		else:
+			_settings_title.visible = false
 		if _actions.snap_align_active:
 			_add_snap_align_settings()
 		elif _actions.array_active:
@@ -528,21 +555,8 @@ func _refresh_settings() -> void:
 			_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the preview and keep the original solid.", func() -> void:
 				_actions.plane_cancel_requested.emit()
 			))
-		else:
-			if _selection.objects.size() == 2:
-				_add_boolean_operands()
-				var create_heading := Label.new()
-				create_heading.text = "New %s" % _create_label()
-				create_heading.custom_minimum_size.x = _scaled(240.0)
-				create_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				create_heading.add_theme_font_size_override("font_size", _font(15))
-				create_heading.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
-				_settings_fields.add_child(create_heading)
-			for field in _actions.shapes.fields_for(_create_focus):
-				_settings_fields.add_child(_shape_spin(field))
-			var create := _named_action("Create", "Add", "Preview the selected shape in the viewport, then click or press Enter to place it.", _create_shape)
-			create.name = "CreateShape"
-			_settings_fields.add_child(create)
+		elif has_boolean:
+			_add_boolean_operands()
 	elif mode == SlabSelection.Mode.FACE:
 		if _actions.snap_align_active:
 			_settings_title.text = "Align Face"
@@ -601,6 +615,42 @@ func _add_boolean_operands() -> void:
 	swap.name = "SwapBooleanOperands"
 	operands.add_child(swap)
 	_settings_fields.add_child(operands)
+
+
+func _refresh_create_strip_visibility() -> void:
+	if _create_strip == null:
+		return
+	var mode: int = _selection.mode
+	var is_object_mode: bool = mode == SlabSelection.Mode.OBJECT
+	var painting: bool = _paint != null and _paint.active
+	_create_strip.visible = is_object_mode and not painting
+	if _create_button != null:
+		var tool_blocks_create: bool = _actions.array_active or _actions.plane_active or _actions.snap_align_active
+		_create_button.disabled = tool_blocks_create
+		if tool_blocks_create:
+			_create_button.tooltip_text = "Finish or cancel the active tool first."
+		else:
+			_create_button.tooltip_text = "Preview the selected shape in the viewport, then click or press Enter to place it."
+
+
+func _refresh_create_strip() -> void:
+	if _create_strip == null or _create_fields == null or _create_button == null:
+		return
+	for spin in _spins_under(_create_fields):
+		spin.apply()
+		if not spin.is_inside_tree():
+			spin.value_changed.emit(spin.value)
+	for child in _create_fields.get_children():
+		_create_fields.remove_child(child)
+		child.queue_free()
+	_refresh_create_strip_visibility()
+	var mode: int = _selection.mode
+	var is_object_mode: bool = mode == SlabSelection.Mode.OBJECT
+	var painting: bool = _paint != null and _paint.active
+	if not is_object_mode or painting:
+		return
+	for field in _actions.shapes.fields_for(_create_focus):
+		_create_fields.add_child(_shape_spin(field))
 
 
 func _add_array_settings() -> void:
@@ -863,6 +913,17 @@ func _refresh_selection_context() -> void:
 	_selection_context.tooltip_text = _selection_context.text
 
 
+func _build_settings_column() -> Control:
+	_settings_column = VBoxContainer.new()
+	_settings_column.name = "SettingsColumn"
+	_settings_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_settings_column.add_theme_constant_override("separation", 6)
+	_create_strip = _build_create_strip()
+	_settings_column.add_child(_create_strip)
+	_settings_column.add_child(_settings_block())
+	return _settings_column
+
+
 func _settings_block() -> Control:
 	_settings = VBoxContainer.new()
 	_settings.name = "Settings"
@@ -890,6 +951,27 @@ func _settings_block() -> Control:
 	scroll.add_child(content)
 	_settings.add_child(scroll)
 	return _settings
+
+
+func _build_create_strip() -> VBoxContainer:
+	var strip := VBoxContainer.new()
+	strip.name = "CreateStrip"
+	strip.add_theme_constant_override("separation", int(_scaled(4)))
+	_create_chips = HFlowContainer.new()
+	_create_chips.name = "CreateChips"
+	_create_chips.add_theme_constant_override("h_separation", int(_scaled(GRID_SEPARATION)))
+	_create_chips.add_theme_constant_override("v_separation", int(_scaled(GRID_SEPARATION)))
+	_create_chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip.add_child(_create_chips)
+	_create_fields = HFlowContainer.new()
+	_create_fields.name = "CreateFields"
+	_create_fields.add_theme_constant_override("h_separation", 10)
+	_create_fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip.add_child(_create_fields)
+	_create_button = _named_action("Create", "Add", "Preview the selected shape in the viewport, then click or press Enter to place it.", _create_shape)
+	_create_button.name = "CreateShape"
+	strip.add_child(_create_button)
+	return strip
 
 
 func _spin(label_text: String, min_v: float, max_v: float, step: float, value: float, on_change: Callable, tooltip: String = "", key: StringName = &"") -> Control:
@@ -998,7 +1080,7 @@ func _action_button(row: Dictionary) -> Button:
 
 
 func _create_shape() -> void:
-	for spin in _spins_under(_settings_fields):
+	for spin in _spins_under(_create_fields):
 		spin.apply()
 	_actions.request_create_placement(_create_focus)
 

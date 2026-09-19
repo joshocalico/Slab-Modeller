@@ -66,6 +66,8 @@ func _run() -> void:
 	viewport.push_input(focus)
 	await create_timer(0.5).timeout
 	_check(not preview.visible and not settings.visible, "face_starts_with_geometry_tools")
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
+	_check(create_strip != null and not create_strip.visible, "create_strip_hidden_in_face_mode")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-compact"}, "after")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-doc-panel", "capture_rect": panel.get_global_rect()}, "after")
 	var select_all := InputEventKey.new()
@@ -176,6 +178,7 @@ func _run() -> void:
 	manager.get_history_undo_redo(manager.get_object_history_id(solid)).undo()
 	_check(solid.get("data") == before, "bevel_undo_restores_original_mesh")
 	await _boolean_swap(editor, panel, selection, manager)
+	await _create_strip_tool_blocking(editor, panel, selection, actions)
 	await _room_tutorial(editor, panel, selection, manager)
 	await _create_repeated(editor, panel, manager)
 	print("PANEL_EDITOR_RESULT failures=", failures)
@@ -204,7 +207,12 @@ func _boolean_swap(editor: Object, panel: Control, selection: RefCounted, manage
 	_check(selection.objects == [first, second], "native_two_solid_order_reaches_boolean_panel")
 	_check(panel.find_child("SettingsTitle", true, false).text == "Boolean operands", "native_two_solid_selection_refreshes_boolean_block")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-boolean", "capture_rect": panel.get_global_rect()}, "after")
-	await _click(panel.find_child("SwapBooleanOperands", true, false))
+	var swap_btn: Button = panel.find_child("SwapBooleanOperands", true, false)
+	var settings_scroll: ScrollContainer = panel.find_child("SettingsScroll", true, false)
+	if settings_scroll != null and swap_btn != null:
+		settings_scroll.ensure_control_visible(swap_btn)
+	await process_frame
+	await _click(swap_btn)
 	var native_nodes: Array = native_selection.get_selected_nodes()
 	_check(native_nodes == [second, first] and selection.objects == [second, first], "swap_preserves_two_native_solids_in_displayed_order")
 	await _click(_button_named(panel.find_child("Commands", true, false), "Subtract"))
@@ -216,13 +224,50 @@ func _boolean_swap(editor: Object, panel: Control, selection: RefCounted, manage
 	second.free()
 	await process_frame
 
+
+func _create_strip_tool_blocking(editor: Object, panel: Control, selection: RefCounted, actions: RefCounted) -> void:
+	await _click(_mode(panel, 0))
+	var scene: Node = editor.get_edited_scene_root()
+	var solid: Node3D = scene.get_node_or_null("Box2")
+	if solid == null:
+		_fail("create_strip_tool_blocking test requires Box2")
+		return
+	var native_selection: Object = editor.get_selection()
+	native_selection.clear()
+	native_selection.add_node(solid)
+	selection.set_objects([solid])
+	await process_frame
+	await process_frame
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
+	var create_btn: Button = panel.find_child("CreateShape", true, false)
+	_check(create_strip != null and create_strip.visible, "create_strip_visible_before_array")
+	_check(create_btn != null and not create_btn.disabled, "create_enabled_before_array")
+	await _click(_button_named(panel.find_child("Commands", true, false), "Array"))
+	await process_frame
+	_check(create_strip.visible, "create_strip_visible_during_array")
+	_check(create_btn.disabled, "create_disabled_during_array")
+	_check(create_btn.tooltip_text.begins_with("Finish or cancel"), "create_tooltip_shows_blocking_reason")
+	actions.array_cancel_requested.emit()
+	await process_frame
+	_check(not create_btn.disabled, "create_enabled_after_array_cancel")
+	await _click(_button_named(panel.find_child("Commands", true, false), "Plane Cut"))
+	await process_frame
+	_check(create_strip.visible, "create_strip_visible_during_plane")
+	_check(create_btn.disabled, "create_disabled_during_plane")
+	actions.plane_cancel_requested.emit()
+	await process_frame
+	_check(not create_btn.disabled, "create_enabled_after_plane_cancel")
+
+
 func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manager: EditorUndoRedoManager) -> void:
 	var native_selection: Object = editor.get_selection()
 	native_selection.clear()
 	selection.set_ids(PackedInt64Array())
 	await process_frame
 	await _click(_mode(panel, 0))
-	await _click(_button_named(panel.find_child("Commands", true, false), "Box"))
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
+	_check(create_strip != null and create_strip.visible, "create_strip_visible_in_object_mode")
+	await _click(_button_named(panel.find_child("CreateChips", true, false), "Box"))
 	for entry in [["size_x", 4.0], ["size_y", 3.0], ["size_z", 4.0]]:
 		var box: Node = panel.find_child(entry[0], true, false)
 		var field: SpinBox = box.find_children("*", "SpinBox", true, false)[0]
@@ -232,8 +277,8 @@ func _room_tutorial(editor: Object, panel: Control, selection: RefCounted, manag
 	var count_before: int = scene.get_child_count()
 	var create_btn: Button = panel.find_child("CreateShape", true, false)
 	var scroll: ScrollContainer = panel.find_child("SettingsScroll", true, false)
-	if scroll != null and create_btn != null:
-		scroll.ensure_control_visible(create_btn)
+	_check(create_btn != null and create_btn.is_visible_in_tree(), "create_button_visible_without_scrolling")
+	_check(scroll == null or not scroll.get_global_rect().encloses(create_btn.get_global_rect()), "create_button_outside_settings_scroll")
 	await process_frame
 	await _click(create_btn)
 	await _confirm_create(editor, Vector3.ZERO)
@@ -280,7 +325,7 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 	await _click(_mode(panel, 0))
 	var scene: Node = editor.get_edited_scene_root()
 	var count := scene.get_child_count()
-	await _click(_button_named(panel.find_child("Commands", true, false), "Cylinder"))
+	await _click(_button_named(panel.find_child("CreateChips", true, false), "Cylinder"))
 	_check(scene.get_child_count() == count, "choosing_shape_does_not_create")
 	var height: SpinBox = panel.find_child("size_y", true, false).find_children("*", "SpinBox", true, false)[0]
 	height.get_line_edit().grab_focus()
@@ -313,9 +358,9 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 		return
 	var second: Node3D = selected[0]
 	_check(second != first and scene.get_child_count() == count + 2 and second.call("get_local_aabb") == bounds, "repeat_create_retains_shape_and_dimensions")
-	var settings_scroll: Control = panel.find_child("SettingsScroll", true, false)
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
 	var create: Control = panel.find_child("CreateShape", true, false)
-	_check(settings_scroll.get_global_rect().encloses(create.get_global_rect()), "create_action_fits_available_settings_height")
+	_check(create_strip != null and create_strip.get_global_rect().encloses(create.get_global_rect()), "create_button_in_create_strip_above_scroll")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-create-editor"}, "after")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-create-panel", "capture_rect": panel.get_global_rect()}, "after")
 	var history := manager.get_history_undo_redo(manager.get_object_history_id(second))
