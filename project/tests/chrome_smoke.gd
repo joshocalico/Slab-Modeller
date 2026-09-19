@@ -545,7 +545,7 @@ func case_command_labels_fit_and_wrap() -> void:
 			"%s keeps a hit target, size=%s min=%s" % [label, button.size, button.custom_minimum_size])
 	panel.free()
 	var face := _build_panel(1.0, SlabSelection.Mode.FACE)
-	for label in ["Extrude", "Inset", "Select Coplanar"]:
+	for label in ["Extrude", "Inset", "Select Coplanar", "Select Boundary"]:
 		var button: Button = _button_for(face, label)
 		expect(button != null, "%s is on the Face dock" % label)
 		expect(not button.clip_text, "%s does not clip its caption" % label)

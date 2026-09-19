@@ -131,3 +131,104 @@ func _check_select_boundary() -> void:
 	check(selection.mode == Selection.Mode.EDGE and selection.ids.is_empty(), "all faces produce an empty boundary selection")
 	check(not reports.is_empty() and reports[-1].contains("no boundary edges"), "empty face boundary reports a clear refusal")
 	solid.free()
+
+	_check_select_boundary_flat_multi_face_region()
+	_check_select_boundary_curved_region()
+	_check_select_boundary_then_bevel()
+
+
+func _check_select_boundary_flat_multi_face_region() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(4, 3, 4))
+	var top := 0
+	for face_id in solid.call("get_faces"):
+		if solid.call("face_normal", face_id).y > 0.9:
+			top = face_id
+			break
+	solid.call("subdivide_faces", PackedInt64Array([top]))
+	var selection := Selection.new()
+	selection.set_objects([solid])
+	selection.mode = Selection.Mode.FACE
+	var actions := Actions.new(selection, null)
+
+	var top_faces := PackedInt64Array()
+	for face_id in solid.call("get_faces"):
+		if solid.call("face_normal", face_id).y > 0.9:
+			top_faces.append(face_id)
+	check(top_faces.size() == 4, "subdivided top has four coplanar faces")
+
+	selection.set_ids(top_faces)
+	actions.run("select_boundary")
+	check(selection.mode == Selection.Mode.EDGE, "multi-face boundary switches to Edge mode")
+	check(selection.ids.size() == 8, "flat 4-face region has outer perimeter of 8 edges (each original edge split), not internal cross")
+
+	for edge_id in selection.ids:
+		var incident := PackedInt64Array(solid.call("edge_faces", edge_id))
+		var top_count := 0
+		for f in incident:
+			if top_faces.has(f):
+				top_count += 1
+		check(top_count == 1, "each boundary edge touches exactly one selected face (outer perimeter)")
+	solid.free()
+
+
+func _check_select_boundary_curved_region() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_cylinder", 1.0, 2.0, 8)
+	var selection := Selection.new()
+	selection.set_objects([solid])
+	selection.mode = Selection.Mode.FACE
+	var actions := Actions.new(selection, null)
+
+	var side_faces := PackedInt64Array()
+	for face_id in solid.call("get_faces"):
+		var n: Vector3 = solid.call("face_normal", face_id)
+		if absf(n.y) < 0.1:
+			side_faces.append(face_id)
+	check(side_faces.size() == 8, "8-sided cylinder has 8 side faces")
+
+	selection.set_ids(side_faces)
+	actions.run("select_boundary")
+	check(selection.mode == Selection.Mode.EDGE, "curved region boundary switches to Edge mode")
+	check(selection.ids.size() == 16, "cylinder side band has top and bottom rings = 16 perimeter edges")
+
+	for edge_id in selection.ids:
+		var incident := PackedInt64Array(solid.call("edge_faces", edge_id))
+		var side_count := 0
+		for f in incident:
+			if side_faces.has(f):
+				side_count += 1
+		check(side_count == 1, "each curved boundary edge touches exactly one selected side face")
+	solid.free()
+
+
+func _check_select_boundary_then_bevel() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(4, 3, 4))
+	var top := 0
+	for face_id in solid.call("get_faces"):
+		if solid.call("face_normal", face_id).y > 0.9:
+			top = face_id
+			break
+	var undo := Undo.new()
+	var selection := Selection.new()
+	selection.set_objects([solid])
+	selection.mode = Selection.Mode.FACE
+	var actions := Actions.new(selection, undo)
+
+	selection.set_ids(PackedInt64Array([top]))
+	actions.run("select_boundary")
+	check(selection.mode == Selection.Mode.EDGE and selection.ids.size() == 4,
+		"roof face boundary selects its 4 perimeter edges")
+
+	var boundary_edges := PackedInt64Array(selection.ids)
+	var before: PackedByteArray = solid.get("data")
+	var before_faces: int = solid.call("face_count")
+	solid.call("bevel_edges", boundary_edges, 0.1, 1)
+	var after: PackedByteArray = solid.get("data")
+	check(after != before, "Bevel from boundary edges changes geometry")
+	check(int(solid.call("face_count")) > before_faces, "Bevel adds faces for the rounded perimeter")
+	solid.free()
