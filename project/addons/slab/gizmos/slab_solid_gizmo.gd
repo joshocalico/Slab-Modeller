@@ -74,9 +74,15 @@ func _subgizmos_intersect_ray(_gizmo: EditorNode3DGizmo, _camera: Camera3D, _scr
 
 func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int) -> Transform3D:
 	var solid: Node3D = gizmo.get_node_3d()
-	if solid == null or _selection == null or _selection.solid != solid:
+	if solid == null or _selection == null:
 		return Transform3D.IDENTITY
-	var frame := SlabSelectionFrame.from_selection(_selection)
+	var sel_solid: Node3D = _selection.solid
+	if sel_solid != null and sel_solid != solid:
+		return Transform3D.IDENTITY
+	if sel_solid == null:
+		sel_solid = solid
+	var frame := SlabSelectionFrame.make(sel_solid, _selection.mode, _selection.ids,
+		_selection.pivot_mode, _selection.orientation, _selection.active_id, _selection.custom_pivot_world)
 	var result: Transform3D = frame.get("local", Transform3D.IDENTITY) if frame.get("valid", false) else Transform3D.IDENTITY
 	return result
 

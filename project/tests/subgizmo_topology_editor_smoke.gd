@@ -29,6 +29,7 @@ func _run() -> void:
 	var selection: RefCounted = plugin.get("_selection")
 	editor.get_selection().clear()
 	editor.get_selection().add_node(solid)
+	await process_frame
 	selection.mode = 3
 	var face := _top_face(solid)
 	selection.set_ids(PackedInt64Array([face]))

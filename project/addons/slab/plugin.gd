@@ -310,12 +310,16 @@ func _on_selected_topology_changed() -> void:
 
 
 func _refresh_gizmos() -> void:
-	if _session == null:
-		return
-	for node in _session.gizmo_targets():
-		if is_instance_valid(node):
-			node.update_gizmos()
-	_sync_subgizmo()
+	var selection_solid: Node3D = _selection.solid
+	if selection_solid == null:
+		selection_solid = _topology_solid
+	if _session != null:
+		for node in _session.gizmo_targets():
+			if is_instance_valid(node):
+				node.update_gizmos()
+	if selection_solid != null and is_instance_valid(selection_solid):
+		selection_solid.update_gizmos()
+	_sync_subgizmo(selection_solid)
 	update_overlays()
 
 
@@ -358,8 +362,10 @@ func _handle_label_style() -> StyleBoxFlat:
 	return style
 
 
-func _sync_subgizmo() -> void:
-	var solid: Node3D = _selection.solid
+func _sync_subgizmo(override_solid: Node3D = null) -> void:
+	var solid: Node3D = override_solid if override_solid != null else _selection.solid
+	if solid == null:
+		solid = _topology_solid
 	if solid == null or not is_instance_valid(solid) or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
 		_clear_subgizmo()
 		return
@@ -368,7 +374,11 @@ func _sync_subgizmo() -> void:
 		return
 	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:
 		_subgizmo_solid.clear_subgizmo_selection()
-	for gizmo in solid.get_gizmos():
+	var gizmos: Array = solid.get_gizmos()
+	if gizmos.is_empty():
+		solid.update_gizmos()
+		gizmos = solid.get_gizmos()
+	for gizmo in gizmos:
 		if gizmo.get_plugin() != _solid_gizmo:
 			continue
 		solid.set_subgizmo_selection(gizmo, SolidGizmo.SELECTION_SUBGIZMO, _solid_gizmo._get_subgizmo_transform(gizmo, SolidGizmo.SELECTION_SUBGIZMO))
