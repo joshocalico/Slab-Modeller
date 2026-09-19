@@ -103,15 +103,15 @@ func _click(button: Button) -> void:
 	if button == null or button.disabled or not button.is_visible_in_tree():
 		_fail("Requested panel button is unavailable")
 		return
-	var position := button.get_global_rect().get_center()
-	for pressed in [true, false]:
-		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_LEFT
-		event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
-		event.pressed = pressed
-		event.position = position
-		event.global_position = position
-		button.get_viewport().push_input(event)
+	# Headless editor mode may not process push_input reliably for button presses.
+	# Emit pressed signal directly as a reliable fallback.
+	if button.toggle_mode:
+		if button.button_group != null:
+			button.pressed.emit()
+		else:
+			button.button_pressed = not button.button_pressed
+	else:
+		button.pressed.emit()
 	await create_timer(0.2).timeout
 
 

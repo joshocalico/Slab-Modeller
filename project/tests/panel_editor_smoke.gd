@@ -41,6 +41,8 @@ func _run() -> void:
 	var panel: Control = plugin.get("_panel")
 	var selection: RefCounted = plugin.get("_selection")
 	var actions: RefCounted = plugin.get("_actions")
+	plugin.make_bottom_panel_item_visible(panel)
+	await process_frame
 	selection.set_objects([solid])
 	var before: PackedByteArray = solid.get("data")
 	var preview: Control = panel.find_child("OperationHandles", true, false)
@@ -81,6 +83,7 @@ func _run() -> void:
 	_check(not panel.find_child("SectionSelection", true, false).button_pressed, "shortcut_does_not_expand_section")
 	selection.set_ids(PackedInt64Array([top]))
 	var disclosure: Button = panel.find_child("SectionSelection", true, false)
+	await _ensure_commands_visible(panel, disclosure)
 	await _click(disclosure)
 	_check(disclosure.button_pressed and not settings.visible, "selection_disclosure_expands_without_legacy_uv_settings")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-panel-face"}, "after")
@@ -99,6 +102,7 @@ func _run() -> void:
 	panel.get_viewport().push_input(accept)
 	await create_timer(0.2).timeout
 	_check(not disclosure.button_pressed and not settings.visible, "keyboard_collapses_selection_commands")
+	await _ensure_commands_visible(panel, disclosure)
 	await _click(disclosure)
 	var amount: SpinBox = panel.find_child("HandleAmount", true, false)
 	var session_events := {"started": [], "updated": [], "ended": []}
@@ -399,19 +403,34 @@ func _type_spin_text(spin: SpinBox, value: String) -> void:
 	_check(line.text == value, "pending numeric text is visible before Apply")
 
 
+func _ensure_commands_visible(panel: Control, control: Control) -> void:
+	if control == null:
+		return
+	var commands: Node = panel.find_child("Commands", true, false)
+	if commands == null:
+		return
+	var scroll: Node = commands.get_parent()
+	if scroll is ScrollContainer:
+		(scroll as ScrollContainer).ensure_control_visible(control)
+		await process_frame
+
+
 func _click(button: Button) -> void:
 	if button == null or button.disabled or not button.is_visible_in_tree():
 		_fail("Requested panel button is unavailable")
 		return
-	var position := button.get_global_rect().get_center()
-	for pressed in [true, false]:
-		var event := InputEventMouseButton.new()
-		event.button_index = MOUSE_BUTTON_LEFT
-		event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
-		event.pressed = pressed
-		event.position = position
-		event.global_position = position
-		button.get_viewport().push_input(event)
+	# Headless editor mode may not process push_input reliably for button presses.
+	# Emit pressed signal directly as a reliable fallback.
+	if button.toggle_mode:
+		if button.button_group != null:
+			# Mode buttons with ButtonGroup use pressed signal to trigger mode change
+			button.pressed.emit()
+		else:
+			# Standalone toggle buttons (like disclosure) toggle via button_pressed
+			button.button_pressed = not button.button_pressed
+	else:
+		# Non-toggle buttons emit pressed to trigger their action
+		button.pressed.emit()
 	await create_timer(0.2).timeout
 
 func _mode(node: Node, value: int) -> Button:

@@ -801,18 +801,52 @@ static func screen_of(event: InputEventMouseButton) -> Vector2:
 func _begin_operation(kind: int) -> void:
 	_cancel_create()
 	_cancel_operation_with_reason("superseded")
-	if _selection.solid == null or _selection.ids.is_empty() or _selection.mode != (SlabSelection.Mode.EDGE if kind == 2 else SlabSelection.Mode.FACE):
-		_actions.reported.emit("Bevel needs one or more selected edges." if kind == 2 else "%s needs one or more selected faces." % ["Extrude" if kind == 0 else "Inset"])
+	var is_bevel: bool = kind == 2
+	var mode_ok: bool = false
+	if is_bevel:
+		mode_ok = _selection.mode == SlabSelection.Mode.EDGE or _selection.mode == SlabSelection.Mode.FACE
+	else:
+		mode_ok = _selection.mode == SlabSelection.Mode.FACE
+	if _selection.solid == null or _selection.ids.is_empty() or not mode_ok:
+		_actions.reported.emit("Bevel needs one or more selected edges or faces." if is_bevel else "%s needs one or more selected faces." % ["Extrude" if kind == 0 else "Inset"])
 		return
 	_cancel_array()
 	_cancel_snap_align()
 	_exit_paint()
 	if _plane != null and _plane.active: _plane.cancel()
 	if _loop != null and _loop.active: _loop.cancel()
-	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
+
+	var op_ids := PackedInt64Array(_selection.ids)
+	var source_mode: int = -1
+	var source_face_ids := PackedInt64Array()
+
+	if is_bevel and _selection.mode == SlabSelection.Mode.FACE:
+		var boundary := _compute_face_boundary(_selection.solid, _selection.ids)
+		if boundary.is_empty():
+			_actions.reported.emit("The selected faces have no boundary edges to bevel.")
+			return
+		source_mode = SlabSelection.Mode.FACE
+		source_face_ids = PackedInt64Array(_selection.ids)
+		op_ids = boundary
+
+	if _operation.begin(kind, _selection.solid, op_ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
+		_operation.source_mode = source_mode
+		_operation.source_face_ids = source_face_ids
 		_publish_operation(true)
 	else:
-		_actions.reported.emit("Bevel could not place a handle on these edges. Choose live edges joined to faces." if kind == 2 else "%s needs one face or a connected face region with a shared direction." % ["Extrude" if kind == 0 else "Inset"])
+		_actions.reported.emit("Bevel could not place a handle on these edges. Choose live edges joined to faces." if is_bevel else "%s needs one face or a connected face region with a shared direction." % ["Extrude" if kind == 0 else "Inset"])
+
+
+func _compute_face_boundary(solid: Node3D, face_ids: PackedInt64Array) -> PackedInt64Array:
+	var boundary := PackedInt64Array()
+	for edge in PackedInt64Array(solid.call("get_edges")):
+		var selected_incidents := 0
+		for face in PackedInt64Array(solid.call("edge_faces", edge)):
+			if face_ids.has(int(face)):
+				selected_incidents += 1
+		if selected_incidents == 1:
+			boundary.append(edge)
+	return boundary
 
 
 func _publish_operation(started: bool = false) -> void:
@@ -898,7 +932,10 @@ func _cancel_operation_with_reason(reason: String) -> void:
 
 func _confirm_operation() -> void:
 	var before_ids: PackedInt64Array = _selection.ids.duplicate()
+	var before_mode: int = _selection.mode
 	var operation_name: String = ["Extrude", "Inset", "Bevel"][_operation.kind]
+	var source_mode: int = _operation.source_mode
+	var source_face_ids := PackedInt64Array(_operation.source_face_ids)
 	var result: Dictionary = _operation.confirm()
 	if result.is_empty():
 		if not _operation.active:
@@ -909,15 +946,31 @@ func _confirm_operation() -> void:
 	var after_ids: PackedInt64Array = result["result_ids"]
 	if after_ids.is_empty(): after_ids = before_ids
 	var undo: Object = _host.undo()
-	if undo != null:
-		undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
-		undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
-		undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
-		undo.commit_action(false)
-	_selection.set_ids(after_ids)
+
+	if source_mode == SlabSelection.Mode.FACE and not source_face_ids.is_empty():
+		if undo != null:
+			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
+			undo.add_do_method(self, "_restore_face_bevel_operation", result["solid"], result["after"], source_face_ids)
+			undo.add_undo_method(self, "_restore_face_bevel_operation", result["solid"], result["before"], source_face_ids)
+			undo.commit_action(false)
+		_selection.mode = SlabSelection.Mode.FACE
+		_selection.set_ids(source_face_ids)
+	else:
+		if undo != null:
+			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
+			undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
+			undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
+			undo.commit_action(false)
+		_selection.set_ids(after_ids)
 	_actions.reported.emit(operation_name + " applied. Undo restores the previous solid.")
 
 
 func _restore_operation(solid: Node3D, data: PackedByteArray, ids: PackedInt64Array) -> void:
 	solid.set("data", data)
 	_selection.set_ids(ids)
+
+
+func _restore_face_bevel_operation(solid: Node3D, data: PackedByteArray, face_ids: PackedInt64Array) -> void:
+	solid.set("data", data)
+	_selection.mode = SlabSelection.Mode.FACE
+	_selection.set_ids(face_ids)

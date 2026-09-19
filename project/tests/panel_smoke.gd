@@ -41,6 +41,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
+		"Edge": ["bevel_edges"],
 		"Face": [
 			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "align_face",
 		],
