@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/relay_yard/materials/uv_grid.svg" id="1_5tlgp"]
+
+[resource]
+resource_name = "Uv Grid"
+albedo_texture = ExtResource("1_5tlgp")
+roughness = 0.82

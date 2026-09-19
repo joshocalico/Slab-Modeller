@@ -88,6 +88,12 @@ A fresh native run walked from START through the turbine hall to COURTYARD. At f
 
 Select Coplanar avoided picking 24 side faces individually. Reusing the Brick palette required scrolling down to the palette, then back up to Assign. This is usable but adds travel during repeated material work in the compact dock. The normal camera Focus Selection centred the node's origin without fitting its whole extent, so framing the ring required zoom adjustment and an orthographic view.
 
+## Palette placement follow-up
+
+Moved the loaded-material palette directly below the picker and above Placement/Mapping. In the native 1225 × 768 editor with divider at y=466, Assign remained at y≈582 and the ring palette at y≈655. Both were visible together with three slots. Selected Limestone without scrolling; saving at this point left the scene identical to the committed version. Assign changed the selected 24-face Brick band to Limestone. Native Undo and Save restored the complete scene byte-for-byte.
+
+Switching to Pixel hid the palette and retained divider y=466. The tradeoff is that Rotation and lower Placement controls require scrolling in the compact Material / UV inspector. The material-picking task no longer requires scrolling down past Mapping and back up to Assign.
+
 ## Remaining work
 
 - Give the second-cell route a visible return path to the courtyard doorway.

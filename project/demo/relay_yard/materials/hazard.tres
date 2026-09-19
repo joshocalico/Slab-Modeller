@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/relay_yard/materials/hazard.svg" id="1_ax8pw"]
+
+[resource]
+resource_name = "Hazard"
+albedo_texture = ExtResource("1_ax8pw")
+roughness = 0.82
