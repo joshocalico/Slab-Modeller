@@ -129,7 +129,7 @@ func case_every_declared_field_renders_one_spin() -> void:
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	var spins: Array[SpinBox] = _spins(panel.find_child("Settings", true, false))
+	var spins: Array[SpinBox] = _spins(panel.find_child("CreateFields", true, false))
 	var box_fields: Array[Dictionary] = actions.shapes.fields_for(&"make_box")
 	expect(spins.size() == box_fields.size(), "Object mode starts with the Box fields only, got %d" % spins.size())
 	for field in box_fields:
@@ -482,14 +482,14 @@ func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 
 func case_stair_sits_on_the_create_row() -> void:
 	var panel := _build_panel(1.0)
-	var flow: HFlowContainer = _first_command_row(panel)
-	expect(flow != null, "Object mode has a Create flow")
+	var chips: HFlowContainer = panel.find_child("CreateChips", true, false) as HFlowContainer
+	expect(chips != null, "Object mode has CreateChips flow")
 	var labels: PackedStringArray = PackedStringArray()
-	for child in flow.get_children():
+	for child in chips.get_children():
 		if child is Button:
 			labels.append(String(child.get_meta("slab_label", "")))
-	expect(labels.has("Stair"), "Create lists Stair, got %s" % [labels])
-	expect(labels.find("Stair") == 2, "Stair stays the third Create icon after Box and Plane, got %s" % [labels])
+	expect(labels.has("Stair"), "CreateChips lists Stair, got %s" % [labels])
+	expect(labels.find("Stair") == 2, "Stair stays the third shape chip after Box and Plane, got %s" % [labels])
 	var stair: Button = _button_for(panel, "Stair")
 	expect(stair.icon != null, "Stair has a glyph")
 	panel.focus_create(&"make_stair")
@@ -500,23 +500,33 @@ func case_stair_sits_on_the_create_row() -> void:
 
 func case_create_icons_sit_above_the_settings() -> void:
 	var panel := _build_panel(1.0)
-	var commands: Node = panel.find_child("Commands", true, false)
+	var create_strip: Node = panel.find_child("CreateStrip", true, false)
 	var settings: Node = panel.find_child("Settings", true, false)
-	expect(commands != null and settings != null, "the dock has Commands and Settings")
-	expect(commands.get_parent().get_parent() == settings.get_parent(),
-		"command icons and settings share the model body")
-	expect(commands.get_parent().get_index() < settings.get_index(),
-		"command icons sit above the settings strip")
-	expect(_button_for(panel, "Stair").get_parent().get_parent() == commands,
-		"Stair lives in the command column, not the settings strip")
+	expect(create_strip != null and settings != null, "the dock has CreateStrip and Settings")
+	expect(create_strip.get_parent() == settings.get_parent(),
+		"CreateStrip and Settings share the SettingsColumn")
+	expect(create_strip.get_index() < settings.get_index(),
+		"CreateStrip sits above the Settings block")
+	var stair: Button = _button_for(panel, "Stair")
+	var create_chips: Node = panel.find_child("CreateChips", true, false)
+	expect(stair.get_parent() == create_chips,
+		"Stair lives in CreateChips inside CreateStrip")
 	panel.free()
 
 
 func case_command_labels_fit_and_wrap() -> void:
 	var panel := _build_panel(1.0)
+	var chips: HFlowContainer = panel.find_child("CreateChips", true, false) as HFlowContainer
+	expect(chips != null, "Object mode lays shape chips in CreateChips flow")
 	var flow: HFlowContainer = _first_command_row(panel)
 	expect(flow != null, "Object mode lays commands in a wrapping flow")
-	for label in ["Box", "Cylinder", "Mirror X", "Mirror Y", "Mirror Z", "Center Pivot", "Snap To Grid"]:
+	for label in ["Box", "Cylinder"]:
+		var button: Button = _button_for(panel, label)
+		expect(button != null, "%s is on the Object dock" % label)
+		expect(button.get_parent() == chips, "%s is in CreateChips" % label)
+		expect(not button.clip_text, "%s does not clip its caption" % label)
+		_expect_label_fits(button, label)
+	for label in ["Mirror X", "Mirror Y", "Mirror Z", "Center Pivot", "Snap To Grid"]:
 		var button: Button = _button_for(panel, label)
 		expect(button != null, "%s is on the Object dock" % label)
 		expect(not button.clip_text, "%s does not clip its caption" % label)
@@ -737,25 +747,28 @@ func case_settings_follow_available_dock_width() -> void:
 	for i in 3: await process_frame
 	var body: BoxContainer = panel.find_child("ModelBody", true, false)
 	var commands: Control = panel.find_child("Commands", true, false).get_parent()
-	var settings: Control = panel.find_child("Settings", true, false)
-	expect(not body.vertical and settings.position.x >= commands.size.x,
-		"wide docks place settings beside commands")
+	var settings_column: Control = panel.find_child("SettingsColumn", true, false)
+	expect(not body.vertical and settings_column.position.x >= commands.size.x,
+		"wide docks place settings column beside commands")
 	panel.size.x = 760
 	for i in 3: await process_frame
-	expect(body.vertical and settings.position.y >= commands.position.y + commands.size.y,
-		"narrow docks stack settings below commands")
+	expect(body.vertical and settings_column.position.y >= commands.position.y + commands.size.y,
+		"narrow docks stack settings column below commands")
 	panel.free()
 
 
 func case_object_settings_are_for_the_next_shape() -> void:
 	var panel := _build_panel(1.0)
-	var title: Label = panel.find_child("SettingsTitle", true, false)
-	expect(title != null and title.text == "New Box", "Object mode labels Box fields as New Box, got %s" % (title.text if title else "missing"))
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
+	expect(create_strip != null and create_strip.visible, "Object mode shows CreateStrip above SettingsScroll")
+	var create_fields: Control = panel.find_child("CreateFields", true, false)
+	expect(create_fields != null and create_fields.get_child_count() > 0, "CreateStrip has dimension fields for default shape")
 	var cylinder: Button = panel.find_child("make_cylinder", true, false)
 	cylinder.mouse_entered.emit()
-	expect(title.text == "New Box", "hovering a shape does not replace creation fields")
+	var field_count_before: int = create_fields.get_child_count()
+	expect(create_fields.get_child_count() == field_count_before, "hovering a shape does not replace creation fields")
 	cylinder.pressed.emit()
-	expect(title.text == "New Cylinder", "Cylinder focus relabels the strip, got %s" % title.text)
+	expect(panel.find_child("cylinder_sides", true, false) != null, "Cylinder focus shows Cylinder-specific fields")
 	expect(panel.find_child("CreateShape", true, false) != null, "shape settings have an explicit Create action")
 	panel.free()
 
@@ -769,16 +782,15 @@ func case_mouse_shape_choice_updates_before_notifying_consumers() -> void:
 	await process_frame
 	await process_frame
 	var stair: Button = panel.find_child("make_stair", true, false)
-	var observed := {"title": "", "pressed": false}
+	var observed := {"has_stair_fields": false, "pressed": false}
 	panel.get("_actions").create_settings_changed.connect(func() -> void:
-		observed.title = (panel.find_child("SettingsTitle", true, false) as Label).text
+		observed.has_stair_fields = panel.find_child("stair_steps", true, false) != null
 		observed.pressed = stair.button_pressed
 	)
 	_mouse_click(stair)
-	expect(observed.title == "New Stair" and observed.pressed,
+	expect(observed.has_stair_fields and observed.pressed,
 		"mouse Stair choice updates pressed state and settings before notifying consumers")
-	expect((panel.find_child("SettingsTitle", true, false) as Label).text == "New Stair"
-		and panel.find_child("stair_steps", true, false) != null,
+	expect(panel.find_child("stair_steps", true, false) != null,
 		"mouse Stair choice displays Stair fields")
 	panel.free()
 
