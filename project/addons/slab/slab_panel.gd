@@ -7,6 +7,7 @@ const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
+const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
 
 enum Workspace { MODELLING, UV, PAINT }
 
@@ -99,6 +100,7 @@ var _brush_color: ColorPickerButton
 var _overlay_opacity: SpinBox
 var _flatten_button: Button
 var _channel_label: Label
+var _keybind_dropdown: OptionButton
 var _selection_controls: Control
 var _operation_row: Control
 var _loop_action_group: HBoxContainer
@@ -910,6 +912,9 @@ func _header() -> Control:
 	_paint_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
 	_paint_toggle.pressed.connect(_toggle_paint_workspace)
 	row.add_child(_paint_toggle)
+	row.add_child(VSeparator.new())
+	_keybind_dropdown = _build_keybind_dropdown()
+	row.add_child(_keybind_dropdown)
 	_selection_context = Label.new()
 	_selection_context.name = "SelectionContext"
 	_selection_context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -929,6 +934,43 @@ func _refresh_selection_context() -> void:
 		return
 	_selection_context.text = _selection.compact_description()
 	_selection_context.tooltip_text = _selection_context.text
+
+
+func _build_keybind_dropdown() -> OptionButton:
+	var dropdown := OptionButton.new()
+	dropdown.name = "KeybindProfile"
+	dropdown.focus_mode = Control.FOCUS_ALL
+	dropdown.add_theme_font_size_override("font_size", _font(13))
+	dropdown.custom_minimum_size.x = _scaled(140.0)
+	dropdown.tooltip_text = "Choose a keyboard shortcut profile. Slab is the default; Familiar profiles remap common modelling shortcuts."
+	dropdown.accessibility_name = "Keyboard profile"
+	dropdown.accessibility_description = dropdown.tooltip_text
+	if _actions != null and _actions.keybind_profiles != null:
+		for label in _actions.keybind_profiles.all_profile_labels():
+			dropdown.add_item(label)
+		dropdown.select(_actions.keybind_profiles.profile())
+		dropdown.item_selected.connect(_on_keybind_profile_changed)
+		_actions.keybind_profiles.profile_changed.connect(func(_p: int) -> void:
+			_on_profile_updated()
+		)
+	return dropdown
+
+
+func _on_keybind_profile_changed(index: int) -> void:
+	if _actions == null or _actions.keybind_profiles == null:
+		return
+	_actions.keybind_profiles.set_profile(index)
+	_on_profile_updated()
+
+
+func _on_profile_updated() -> void:
+	var conflicts: Array[String] = []
+	if _actions != null and _actions.keybind_profiles != null:
+		conflicts = _actions.keybind_profiles.conflicts_with_godot()
+	if not conflicts.is_empty():
+		var conflict_msg := "Conflicts with Godot: " + ", ".join(conflicts)
+		_actions.reported.emit(conflict_msg)
+	_refresh_buttons()
 
 
 func _build_settings_column() -> Control:
@@ -1963,7 +2005,7 @@ func _tooltip_of(row: Dictionary) -> String:
 	var body: String = _actions.tooltip_of(row)
 	if body != "":
 		lines.append(body)
-	var shortcut: int = row["shortcut"]
+	var shortcut: int = _actions.shortcut_of(row)
 	if shortcut != 0:
 		lines.append("Shortcut %s." % OS.get_keycode_string(shortcut))
 	return "\n".join(lines)

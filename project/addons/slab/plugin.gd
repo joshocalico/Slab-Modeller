@@ -38,6 +38,7 @@ func _enter_tree() -> void:
 	_session = SlabViewport.new(_host)
 	_selection = _session.state()
 	_actions = SlabActions.new(_selection, get_undo_redo())
+	_actions.keybind_profiles.bind_editor_settings(EditorInterface.get_editor_settings())
 	_session.bind_actions(_actions)
 	_paint = SlabPaint.new()
 	_paint.bind(_selection, _actions, get_undo_redo(), _host)
