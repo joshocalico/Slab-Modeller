@@ -306,6 +306,40 @@ func _run() -> void:
 	_check(paint.image().get_size() == resize_before_size and paint.material() == resize_material
 		and solid.get("data") == resize_before_data,
 		"Resize Undo restores exact dimensions without changing UV geometry or material identity")
+	var channel_label: Label = panel.find_child("ChannelLabel", true, false)
+	_check(channel_label != null and channel_label.visible and channel_label.text == "Albedo",
+		"Pixel workspace shows Albedo channel label")
+	var overlay_opacity_row: Control = panel.find_child("overlay_opacity", true, false)
+	_check(overlay_opacity_row != null and overlay_opacity_row.is_visible_in_tree(),
+		"Pixel workspace has overlay opacity control")
+	var flatten_button: Button = panel.find_child("PaintFlatten", true, false)
+	_check(flatten_button != null and flatten_button.is_visible_in_tree(),
+		"Pixel workspace has Flatten button")
+	_check(flatten_button.disabled, "Flatten is disabled without overlay strokes")
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	var fitted: Rect2 = canvas.image_rect()
+	var image_center: Vector2 = canvas.global_position + fitted.get_center()
+	_click_at(panel, image_center)
+	await create_timer(0.2).timeout
+	_check(paint.has_overlay_strokes(), "canvas click creates overlay strokes")
+	_check(not flatten_button.disabled, "Flatten enabled after overlay strokes")
+	var base_before_flatten: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	await _click(flatten_button)
+	await create_timer(0.2).timeout
+	var base_after_flatten: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_check(base_after_flatten.r > base_before_flatten.r + 0.05,
+		"Flatten commits overlay to base, before=%s after=%s" % [base_before_flatten, base_after_flatten])
+	_check(not paint.has_overlay_strokes(), "Flatten clears overlay strokes")
+	_check(flatten_button.disabled, "Flatten disabled after flattening")
+	await _history_shortcut(panel, false)
+	var base_after_undo: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_check(base_after_undo.is_equal_approx(base_before_flatten),
+		"Flatten Undo restores base, expected=%s got=%s" % [base_before_flatten, base_after_undo])
+	_check(paint.has_overlay_strokes(), "Flatten Undo restores overlay strokes for re-editing")
+	_check(not flatten_button.disabled, "Flatten enabled after Undo restores overlay")
+	await _history_shortcut(panel, true)
+	_check(not paint.has_overlay_strokes(), "Flatten Redo clears overlay strokes")
+	_check(flatten_button.disabled, "Flatten disabled after Redo")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
 	quit(1 if failures else 0)
@@ -539,3 +573,25 @@ func _modifier_uv_framing(panel: Control, canvas: Control, paint: RefCounted,
 				"rotation modifier uses one degree per logical horizontal pixel")
 	await _click(_button_named(panel, "Fit UV"))
 	_check(solid.get("data") == original, "modifier regression restores original scene data")
+
+
+func _click_at(control: Control, pos: Vector2) -> void:
+	var vp: Viewport = control.get_viewport()
+	if vp == null:
+		return
+	var press := InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.button_mask = MOUSE_BUTTON_MASK_LEFT
+	press.pressed = true
+	press.position = pos
+	press.global_position = pos
+	vp.push_input(press)
+	await create_timer(0.05).timeout
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.button_mask = 0
+	release.pressed = false
+	release.position = pos
+	release.global_position = pos
+	vp.push_input(release)
+	await create_timer(0.15).timeout

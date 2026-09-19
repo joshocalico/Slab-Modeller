@@ -32,12 +32,18 @@ func add_undo_property(object: Object, property: String, value: Variant) -> void
 	_open["undo"] = value
 
 
-func add_do_method(object: Object, method: StringName, arg1: Variant = null, arg2: Variant = null, arg3: Variant = null) -> void:
-	_open["do_ops"].append({ "callable": _method_callable(object, method, arg1, arg2, arg3) })
+func add_do_method(arg1: Variant, arg2: Variant = null, arg3: Variant = null, arg4: Variant = null, arg5: Variant = null) -> void:
+	if arg1 is Callable:
+		_open["do_ops"].append({ "callable": arg1 })
+	else:
+		_open["do_ops"].append({ "callable": _method_callable(arg1, arg2, arg3, arg4, arg5) })
 
 
-func add_undo_method(object: Object, method: StringName, arg1: Variant = null, arg2: Variant = null, arg3: Variant = null) -> void:
-	_open["undo_ops"].append({ "callable": _method_callable(object, method, arg1, arg2, arg3) })
+func add_undo_method(arg1: Variant, arg2: Variant = null, arg3: Variant = null, arg4: Variant = null, arg5: Variant = null) -> void:
+	if arg1 is Callable:
+		_open["undo_ops"].append({ "callable": arg1 })
+	else:
+		_open["undo_ops"].append({ "callable": _method_callable(arg1, arg2, arg3, arg4, arg5) })
 
 
 func _method_callable(object: Object, method: StringName, arg1: Variant, arg2: Variant, arg3: Variant) -> Callable:
