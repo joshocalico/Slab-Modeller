@@ -426,8 +426,10 @@ func _click(button: Button) -> void:
 			# Mode buttons with ButtonGroup use pressed signal to trigger mode change
 			button.pressed.emit()
 		else:
-			# Standalone toggle buttons (like disclosure) toggle via button_pressed
+			# Standalone toggle buttons toggle via button_pressed and emit pressed
+			# for callbacks connected to the pressed signal (e.g. UV/Paint workspace chips).
 			button.button_pressed = not button.button_pressed
+			button.pressed.emit()
 	else:
 		# Non-toggle buttons emit pressed to trigger their action
 		button.pressed.emit()

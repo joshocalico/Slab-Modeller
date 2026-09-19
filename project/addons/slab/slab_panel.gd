@@ -27,6 +27,7 @@ const PAINT_CANVAS_MIN_HEIGHT := 190.0
 var _selection: RefCounted
 var _actions: RefCounted
 var _metrics: RefCounted
+var _scene_root_getter: Callable
 var _status: Label
 var _selection_context: Label
 var _last_report := ""
@@ -106,9 +107,10 @@ var _loop_cancel: Button
 var _named_solids: Array[Node] = []
 
 
-func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
+func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable()) -> void:
 	_selection = selection
 	_actions = actions
+	_scene_root_getter = scene_root_getter
 	_actions.loop_values_updated.connect(_sync_loop_values)
 	_actions.loop_state_changed.connect(_sync_loop_controls)
 	_actions.plane_state_changed.connect(_refresh_settings)
@@ -124,7 +126,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_status = _status_label()
 	add_child(_header())
 	_selection_controls = preload("res://addons/slab/slab_selection_controls.gd").new()
-	_selection_controls.setup(_selection, _metrics)
+	_selection_controls.setup(_selection, _metrics, _scene_root_getter)
 	add_child(_selection_controls)
 	_operation_row = _operation_controls()
 	add_child(_operation_row)
@@ -1104,18 +1106,21 @@ func _create_shape() -> void:
 func _paint_block() -> Control:
 	var body := VBoxContainer.new()
 	body.name = "PaintBody"
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.clip_contents = true
 	body.add_theme_constant_override("separation", 3)
 	body.add_child(_paint_target_row())
 	var split := HBoxContainer.new()
 	split.name = "PaintWorkspaceSplit"
+	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split.add_theme_constant_override("separation", 8)
 	var inspector_scroll := ScrollContainer.new()
 	_paint_inspector = inspector_scroll
 	inspector_scroll.name = "PaintInspector"
 	inspector_scroll.custom_minimum_size.x = _scaled(350.0)
+	inspector_scroll.size_flags_horizontal = Control.SIZE_FILL
 	inspector_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	inspector_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
@@ -1150,6 +1155,7 @@ func _paint_block() -> Control:
 	split.add_child(inspector_scroll)
 	var row := HBoxContainer.new()
 	row.name = "PaintCanvasRow"
+	row.custom_minimum_size.x = _scaled(200.0)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.clip_contents = true
@@ -1686,6 +1692,7 @@ func _on_paint_changed() -> void:
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on
+	custom_minimum_size.x = _scaled(560.0) if on else 0.0
 	custom_minimum_size.y = _scaled(SlabPaint.PAINT_HEIGHT if on else PANEL_HEIGHT)
 	if _status != null:
 		_status.autowrap_mode = TextServer.AUTOWRAP_OFF if on else TextServer.AUTOWRAP_WORD_SMART

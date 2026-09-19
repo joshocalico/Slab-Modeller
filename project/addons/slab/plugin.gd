@@ -49,7 +49,7 @@ func _enter_tree() -> void:
 
 	var metrics: RefCounted = _session.metrics()
 	_panel = SlabPanel.new()
-	_panel.setup(_selection, _actions, metrics)
+	_panel.setup(_selection, _actions, metrics, _host.scene_root)
 	_panel.bind_undo(get_undo_redo())
 	_panel.bind_paint(_paint)
 	add_control_to_bottom_panel(_panel, "Slab")

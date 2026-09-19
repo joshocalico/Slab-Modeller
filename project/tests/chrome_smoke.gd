@@ -86,6 +86,43 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	panel.free()
 
 
+func case_isolate_button_exists_and_toggles() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	var isolate: Button = panel.find_child("IsolateSelection", true, false)
+	expect(isolate != null, "Isolate button exists in SelectionControls")
+	expect(isolate.text == "Isolate", "Initial Isolate button text is 'Isolate'")
+	expect(isolate.toggle_mode, "Isolate button is a toggle")
+	expect(isolate.disabled, "Isolate button is disabled without selection")
+	if ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		var scene := Node3D.new()
+		root.add_child(scene)
+		var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+		solid.name = "IsolateTest"
+		solid.call("make_box", Vector3.ONE)
+		scene.add_child(solid)
+		selection.set_objects([solid])
+		selection.settings_changed.emit()
+		await process_frame
+		expect(not isolate.disabled, "Isolate button is enabled with selection")
+		expect(isolate.text == "Isolate", "Button text is 'Isolate' before isolation")
+		selection.enter_isolation(scene)
+		selection.settings_changed.emit()
+		await process_frame
+		expect(isolate.text == "Exit Isolate", "Button text changes to 'Exit Isolate' during isolation")
+		expect(isolate.button_pressed, "Isolate button shows pressed during isolation")
+		selection.exit_isolation()
+		selection.settings_changed.emit()
+		await process_frame
+		expect(isolate.text == "Isolate", "Button text returns to 'Isolate' after exit")
+		expect(not isolate.button_pressed, "Isolate button shows unpressed after exit")
+		scene.free()
+	panel.free()
+
+
 func case_loop_cut_controls_preserve_edge_settings() -> void:
 	var panel := _build_panel(1.0, SlabSelection.Mode.EDGE)
 	root.add_child(panel)
