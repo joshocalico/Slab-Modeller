@@ -40,15 +40,16 @@ func _run() -> void:
 		if solid.call("face_normal", id).y > 0.9:
 			selection.set_ids(PackedInt64Array([id]))
 	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint")
-	await _click(_button_named(panel, "Surface Paint"))
+	await _click(_button_named(panel, "UV"))
 	for i in 3: await process_frame
 	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
-		"paint_entry_hides_native_gizmo_via_edit_lock")
+		"uv_entry_hides_native_gizmo_via_edit_lock")
+	_check(panel.current_workspace() == panel.Workspace.UV, "uv_button_enters_uv_workspace")
 	var target_label: Label = panel.get("_paint_face")
 	_check(target_label.text.begins_with("%s · 1 face · " % solid.name), "paint_target_names_solid_and_face_count")
-	var workspace: Button = panel.find_child("SurfacePaint", true, false)
-	_check(workspace.button_pressed and workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
-		"paint_workspace_remains_highlighted_while_hovered")
+	var uv_workspace: Button = panel.find_child("UVWorkspace", true, false)
+	_check(uv_workspace.button_pressed and uv_workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
+		"uv_workspace_remains_highlighted_while_hovered")
 	await _click(_button_named(panel, "Make Unique"))
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
@@ -229,11 +230,12 @@ func _run() -> void:
 	await _modifier_uv_framing(panel, canvas, paint, solid, selection)
 	await _click(_mode(panel, 3))
 	for i in 3: await process_frame
-	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_paint")
-	_check(not solid.has_meta("_edit_lock_"), "paint_exit_restores_native_gizmo")
-	_check(not workspace.button_pressed and workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
-		"leaving_paint_clears_workspace_highlight")
-	await _click(_button_named(panel, "Surface Paint"))
+	_check(not paint.active and selection.mode == 3, "same_face_mode_button_leaves_uv")
+	_check(not solid.has_meta("_edit_lock_"), "uv_exit_restores_native_gizmo")
+	_check(not uv_workspace.button_pressed and uv_workspace.get_theme_stylebox("normal").bg_color != panel.ACCENT,
+		"leaving_uv_clears_workspace_highlight")
+	_check(panel.current_workspace() == panel.Workspace.MODELLING, "leaving_uv_returns_to_modelling_workspace")
+	await _click(_button_named(panel, "UV"))
 	await _click(_mode(panel, 2))
 	_check(not paint.active and selection.mode == 2 and panel.get("_model_body").visible, "edge_button_returns_to_modelling")
 	await _click(_mode(panel, 3))
@@ -244,7 +246,7 @@ func _run() -> void:
 	_check(plugin.get("_actions").operation_active, "mode_transition_fixture_has_preview")
 	await _click(_mode(panel, 3))
 	_check(not plugin.get("_actions").operation_active and solid.get("data") == after, "same_mode_cancels_preview_without_edit")
-	await _click(_button_named(panel, "Surface Paint"))
+	await _click(_button_named(panel, "UV"))
 	var viewport: SubViewport = editor.get_editor_viewport_3d(0)
 	solid.position += Vector3(15, 0, 0)
 	var camera_before: Transform3D = viewport.get_camera_3d().global_transform
@@ -257,8 +259,12 @@ func _run() -> void:
 	surface.grab_focus()
 	surface.get_viewport().push_input(frame)
 	await create_timer(0.5).timeout
-	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_painting")
-	await _click(_button_named(panel, "Pixel"))
+	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_uv")
+	await _click(_button_named(panel, "Paint"))
+	_check(panel.current_workspace() == panel.Workspace.PAINT, "paint_button_enters_paint_workspace")
+	var paint_workspace: Button = panel.find_child("PaintWorkspace", true, false)
+	_check(paint_workspace.button_pressed, "paint_workspace_button_shows_pressed")
+	_check(not uv_workspace.button_pressed, "uv_workspace_button_not_pressed_in_paint")
 	var save: Button = _button_named(panel, "Save Paint")
 	var help: Label = panel.find_child("PaintHelp", true, false)
 	_check(save.visible and actions_row.get_global_rect().grow(1.0).encloses(save.get_global_rect()), "pixel_save_fits_complete_action_wrapper")

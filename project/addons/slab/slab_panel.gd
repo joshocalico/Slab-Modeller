@@ -8,6 +8,8 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 
+enum Workspace { MODELLING, UV, PAINT }
+
 const BUTTON_HEIGHT := 36.0
 const SPIN_WIDTH := 104.0
 const PANEL_HEIGHT := 240.0
@@ -45,8 +47,10 @@ var _expanded_sections: Dictionary = {}
 var _settings_title: Label
 var _undo_hook: Object = null
 var _paint: RefCounted
+var _workspace: int = Workspace.MODELLING
 var _model_body: BoxContainer
 var _paint_body: Control
+var _uv_toggle: Button
 var _paint_toggle: Button
 var _paint_canvas: Control
 var _paint_brush: Control
@@ -877,20 +881,29 @@ func _header() -> Control:
 	row.add_child(strip)
 	strip.setup(_selection, true, _metrics)
 	row.add_child(VSeparator.new())
+	_uv_toggle = Button.new()
+	_uv_toggle.name = "UVWorkspace"
+	_uv_toggle.text = "UV"
+	_uv_toggle.toggle_mode = true
+	_uv_toggle.focus_mode = Control.FOCUS_ALL
+	_uv_toggle.tooltip_text = "Open the UV workspace for unwrapping and material placement. Escape closes it."
+	_uv_toggle.accessibility_name = "UV workspace"
+	_uv_toggle.accessibility_description = _uv_toggle.tooltip_text
+	_uv_toggle.add_theme_font_size_override("font_size", _font(15))
+	_uv_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	_uv_toggle.pressed.connect(_toggle_uv_workspace)
+	row.add_child(_uv_toggle)
 	_paint_toggle = Button.new()
-	_paint_toggle.name = "SurfacePaint"
-	_paint_toggle.text = "Surface Paint"
+	_paint_toggle.name = "PaintWorkspace"
+	_paint_toggle.text = "Paint"
 	_paint_toggle.toggle_mode = true
 	_paint_toggle.focus_mode = Control.FOCUS_ALL
-	_paint_toggle.tooltip_text = "Open the Surface Paint workspace. Escape closes it."
-	_paint_toggle.accessibility_name = "Surface Paint"
+	_paint_toggle.tooltip_text = "Open the pixel Paint workspace. Escape closes it."
+	_paint_toggle.accessibility_name = "Paint workspace"
 	_paint_toggle.accessibility_description = _paint_toggle.tooltip_text
 	_paint_toggle.add_theme_font_size_override("font_size", _font(15))
 	_paint_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
-	_paint_toggle.pressed.connect(func() -> void:
-		if _paint != null:
-			_paint.toggle()
-	)
+	_paint_toggle.pressed.connect(_toggle_paint_workspace)
 	row.add_child(_paint_toggle)
 	_selection_context = Label.new()
 	_selection_context.name = "SelectionContext"
@@ -1578,25 +1591,71 @@ func _paint_caption(heading: String, text: String) -> Label:
 
 
 func _sync_model_chrome() -> void:
-	var painting: bool = _paint != null and _paint.active
-	var modelling: bool = not painting and not _actions.operation_active
+	var in_workspace: bool = _workspace != Workspace.MODELLING
+	var modelling: bool = not in_workspace and not _actions.operation_active
 	if _selection_controls != null:
 		_selection_controls.visible = modelling
 	if _model_body != null:
 		_model_body.visible = modelling
 
 
+func _toggle_uv_workspace() -> void:
+	if _workspace == Workspace.UV:
+		_exit_workspace()
+	else:
+		_enter_workspace(Workspace.UV)
+
+
+func _toggle_paint_workspace() -> void:
+	if _workspace == Workspace.PAINT:
+		_exit_workspace()
+	else:
+		_enter_workspace(Workspace.PAINT)
+
+
+func _enter_workspace(ws: int) -> void:
+	if _paint == null:
+		return
+	_workspace = ws
+	if ws == Workspace.UV:
+		_paint.tool = SlabPaint.Tool.MATERIAL_UV
+	else:
+		_paint.tool = SlabPaint.Tool.PIXEL
+	if not _paint.active:
+		_paint.enter()
+	else:
+		_on_paint_changed()
+
+
+func _exit_workspace() -> void:
+	_workspace = Workspace.MODELLING
+	if _paint != null and _paint.active:
+		_paint.exit()
+	else:
+		_on_paint_changed()
+
+
+func current_workspace() -> int:
+	return _workspace
+
+
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
 	if not on:
+		_workspace = Workspace.MODELLING
 		_close_paint_resize_form()
+	else:
+		_workspace = Workspace.PAINT if _paint.tool == SlabPaint.Tool.PIXEL else Workspace.UV
 	add_theme_constant_override("separation", 3 if on else 6)
 	_sync_model_chrome()
 	if _operation_row != null:
 		_operation_row.visible = not on and _actions.operation_active
+	if _uv_toggle != null:
+		_uv_toggle.set_pressed_no_signal(_workspace == Workspace.UV)
+		_style_tool(_uv_toggle, _workspace == Workspace.UV)
 	if _paint_toggle != null:
-		_paint_toggle.set_pressed_no_signal(on)
-		_style_tool(_paint_toggle, on)
+		_paint_toggle.set_pressed_no_signal(_workspace == Workspace.PAINT)
+		_style_tool(_paint_toggle, _workspace == Workspace.PAINT)
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on
@@ -1624,14 +1683,16 @@ func _refresh_paint_chrome() -> void:
 		_selection_context.text = _paint_face.text
 		_selection_context.tooltip_text = _paint_face.text
 	var mat_text := "none"
+	var is_uv_workspace: bool = _workspace == Workspace.UV
+	var is_paint_workspace: bool = _workspace == Workspace.PAINT
 	if _paint != null:
-		var mat: Variant = _paint.material() if _paint.is_pixel() else _paint.brush_material()
+		var mat: Variant = _paint.material() if is_paint_workspace else _paint.brush_material()
 		mat_text = _paint.material_label(mat, _paint.slot())
 		if mat == null:
 			mat_text = "none"
 		if mat is StandardMaterial3D and _paint.is_owned(mat):
 			mat_text += " (unique)"
-	_paint_mat.text = "%s: %s" % ["Texture" if _paint != null and _paint.is_pixel() else "Brush", mat_text]
+	_paint_mat.text = "%s: %s" % ["Texture" if is_paint_workspace else "Brush", mat_text]
 	_paint_mat.clip_text = true
 	_paint_mat.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_paint_mat.tooltip_text = _paint_mat.text
@@ -1639,57 +1700,54 @@ func _refresh_paint_chrome() -> void:
 	_paint_dirty.visible = false
 	_paint_dirty.clip_text = true
 	_paint_dirty.tooltip_text = _paint_dirty.text
-	var pixel: bool = _paint != null and _paint.is_pixel()
-	_paint_assign.visible = not pixel
-	_paint_sample.visible = not pixel
-	_paint_picker_wrap.visible = not pixel
-	_paint_palette.visible = not pixel
-	_paint_save.visible = pixel
+	_paint_assign.visible = is_uv_workspace
+	_paint_sample.visible = is_uv_workspace
+	_paint_picker_wrap.visible = is_uv_workspace
+	_paint_palette.visible = is_uv_workspace
+	_paint_save.visible = is_paint_workspace
 	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
-	_paint_resize.visible = pixel
+	_paint_resize.visible = is_paint_workspace
 	_paint_resize.disabled = _paint == null or not _paint.can_resize_image()
 	_paint_resize.tooltip_text = "Choose Width, Height, and resampling for the owned paint image." if not _paint_resize.disabled else "Make Unique before resizing this image."
-	_paint_help.visible = pixel
+	_paint_help.visible = is_paint_workspace
 	_paint_help.text = _pixel_help_text()
 	_paint_help.tooltip_text = _paint_help.text
-	if _paint_tool_uv != null and _paint != null:
-		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
-		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
-	if _paint_tool_pixel != null and _paint != null:
-		_paint_tool_pixel.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.PIXEL)
-		_style_tool(_paint_tool_pixel, _paint.tool == SlabPaint.Tool.PIXEL)
+	if _paint_tool_uv != null:
+		_paint_tool_uv.visible = false
+	if _paint_tool_pixel != null:
+		_paint_tool_pixel.visible = false
 	if _paint_uv_hint != null:
 		var preview_caption: String = _paint.brush_preview_caption() if _paint != null else ""
 		_paint_uv_hint.text = preview_caption if preview_caption != "" else SlabPaint.uv_canvas_hint()
 		_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, SlabPaint.uv_canvas_hint()] if preview_caption != "" else ""
-		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
+		_paint_uv_hint.visible = is_uv_workspace
 	if _paint_fit_uv != null:
-		_paint_fit_uv.visible = _paint != null and not _paint.is_pixel()
+		_paint_fit_uv.visible = is_uv_workspace
 	if _paint_uv_controls != null:
-		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
+		_paint_uv_controls.visible = is_uv_workspace
 	if _paint_brush != null:
-		_paint_brush.visible = _paint != null and _paint.is_pixel()
+		_paint_brush.visible = is_paint_workspace
 	if _paint_inspector != null:
-		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if pixel else 350.0)
+		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if is_paint_workspace else 350.0)
 	if _paint_inspector_fields != null:
-		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if pixel else 342.0)
+		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if is_paint_workspace else 342.0)
 	if _paint_mapping_grid != null:
-		_paint_mapping_grid.columns = 1 if pixel else 2
+		_paint_mapping_grid.columns = 1 if is_paint_workspace else 2
 	if _paint_mapping_title != null:
-		_paint_mapping_title.text = "Image" if pixel else "Mapping"
+		_paint_mapping_title.text = "Image" if is_paint_workspace else "Mapping"
 	if _paint_mapping_state != null:
 		_paint_mapping_state.text = _paint_mapping_summary()
-		_paint_mapping_state.visible = not pixel
+		_paint_mapping_state.visible = is_uv_workspace
 	if _paint_density_row != null:
-		_paint_density_row.visible = not pixel
+		_paint_density_row.visible = is_uv_workspace
 	if _paint_unwrap != null:
-		_paint_unwrap.visible = not pixel
+		_paint_unwrap.visible = is_uv_workspace
 	var pixel_has_artwork := false
-	if pixel and _paint != null:
+	if is_paint_workspace and _paint != null:
 		var pixel_material: Variant = _paint.material()
 		pixel_has_artwork = pixel_material is StandardMaterial3D and pixel_material.albedo_texture != null
 	if _paint_texture_px_label != null:
-		_paint_texture_px_label.text = "Texture px" if not pixel or pixel_has_artwork else "New image px"
+		_paint_texture_px_label.text = "Texture px" if is_uv_workspace or pixel_has_artwork else "New image px"
 		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique."
 	if _paint_texture_px_spin != null:
 		_paint_texture_px_spin.editable = not pixel_has_artwork

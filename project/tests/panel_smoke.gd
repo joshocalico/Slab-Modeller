@@ -125,7 +125,7 @@ func _check_mode_sections(actions: RefCounted, rows: Array[Dictionary]) -> void:
 				_expect(section["fields"].is_empty(), "the %s section carries no fields" % heading)
 	for row in rows:
 		_expect(placed.has(row["id"]) or SlabActions.section_of(row) == SlabActions.SECTION_UV,
-			"%s is shown in modelling or reserved for Surface Paint" % row["id"])
+			"%s is shown in modelling or reserved for UV workspace" % row["id"])
 	_expect(SlabActions.section_of(actions.find("select_loop")) == "Edge", "Select Loop is an Edge row")
 	_expect(SlabActions.section_of(actions.find("select_ring")) == "Edge", "Select Ring is an Edge row")
 

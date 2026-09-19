@@ -244,7 +244,7 @@ func _check_paint_empty_gesture(plugin: EditorPlugin, scene: Node, solid: Node3D
 	selection.mode = Selection.Mode.OBJECT
 	selection.set_ids(PackedInt64Array())
 	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint_entry")
-	var paint_button := _button_named(plugin.get("_panel"), "Surface Paint")
+	var paint_button := _button_named(plugin.get("_panel"), "UV")
 	paint_button.pressed.emit()
 	for i in 3: await process_frame
 	_check(plugin.get("_paint").active, "surface_paint_entered_without_face_ids")

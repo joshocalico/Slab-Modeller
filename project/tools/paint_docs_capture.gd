@@ -49,7 +49,7 @@ func _run() -> void:
 			best_y = centre.y
 			top = face
 	selection.set_ids(PackedInt64Array([top]))
-	await _click(_button_named(panel, "Surface Paint"))
+	await _click(_button_named(panel, "UV"))
 	await create_timer(0.4).timeout
 	_check(panel.get("_paint").selected_uv_loops().size() == 1, "saved roof top face is active in Material/UV")
 	await _write_panel(editor, panel, MATERIAL_OUT)
