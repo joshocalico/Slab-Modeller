@@ -50,7 +50,7 @@ The initial native study moved actual controls beside the canvas. At the same do
 
 Production uses compact mode tabs above both columns, one selected-face/material summary in the Slab header, and Brush or Texture identity beside the actions. The native Signal Foundry replay entered Paint with the divider at Y=466 and a UV canvas approximately 561 by 186 screen pixels. Compared with the earlier stacked layout, the modelling view gained 57 pixels of height and the UV canvas gained 51. Pixel uses a narrower inspector and keeps the same dock height. These measurements describe this editor size and saved dock position, not a fixed layout on every display.
 
-The inspector owns scrolling. Its action and UV sections use natural container heights; nested fixed-height scroll sections clipped the loaded picker and Apply buttons on initial entry. Material palette chips and Pixel's lower brush controls require a short scroll at the compact height. This is an accepted limitation of this checkpoint, not evidence that all controls fit at once. The study script now captures and checks the production layout rather than reparenting controls.
+The inspector owns scrolling. Its action and UV sections use natural container heights; nested fixed-height scroll sections clipped the loaded picker and Apply buttons on initial entry. The material palette sits with the picker; lower Placement and Mapping fields and Pixel's lower brush controls require scrolling at the compact height. This is an accepted limitation of this checkpoint, not evidence that all controls fit at once. The study script now captures and checks the production layout rather than reparenting controls.
 
 Native acceptance covered first entry, typed Rotation 15 without Enter followed by Apply UV, a UV canvas drag, Make Unique, Pixel canvas painting, scrolling to Opacity and Show UV, and returning to Face mode. Undo and Save restored Signal Foundry with no scene diff. The full verifier passed.
 
@@ -79,3 +79,9 @@ Fit UV should use the selected mapping's actual bounds and retain a margin aroun
 A line fits its nonzero dimension. A point-only mapping uses a one-tile view rather than dividing by zero. These cases must not change mesh data or create history. Pixel image zoom remains a separate interaction.
 
 Scale and rotation modifier drags use editor-scaled screen distance from the initial press. A horizontal drag of 180 logical pixels turns UVs 180 degrees; for scaling, that distance adds 100 percent on the corresponding axis. Moving retains UV-space displacement so the mapping follows the pointer. This separates view magnification from modifier sensitivity without changing the existing gesture assignments. Check held modifiers, cancellation, exact history, and the same drag at different zooms before accepting the interaction.
+
+## Keep the palette beside assignment
+
+The courtyard ring pass required choosing Brick from a palette below Mapping, then scrolling back to Assign. Material / UV now orders its inspector as material actions and picker, loaded palette, Placement, then Mapping. In the native compact dock, the three ring slots and Assign are visible together. Choosing a palette chip remains a preview; Assign performs the edit.
+
+This moves some Placement fields below the compact viewport. They remain in the same inspector scroll area. Pixel hides the palette and retains its previous layout. Judge this tradeoff by repeated material assignment, then explicit placement work, rather than requiring all controls to fit at once.

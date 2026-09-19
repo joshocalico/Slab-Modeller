@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://demo/relay_yard/materials/timber.svg" id="1_ipd4j"]
+
+[resource]
+resource_name = "Timber"
+albedo_texture = ExtResource("1_ipd4j")
+roughness = 0.82
