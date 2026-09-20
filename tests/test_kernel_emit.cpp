@@ -362,6 +362,9 @@ SLAB_TEST(emit_normals_follow_the_full_oriented_loop_after_a_union_cut) {
 		const int32_t ic = out.indices[i + 2];
 		const godot::Vector3 geometric = (out.verts[size_t(ib)] - out.verts[size_t(ia)]).cross(
 				out.verts[size_t(ic)] - out.verts[size_t(ia)]);
+		if (geometric.length_squared() == 0.0f) {
+			continue;
+		}
 		const godot::Vector3 emitted = out.normals[size_t(ia)];
 		expect(emitted.length_squared() > 0.99f, "every emitted doorway normal is a unit vector");
 		expect(geometric.dot(emitted) < 0.0f, "every emitted triangle winds against its face normal");

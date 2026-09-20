@@ -118,10 +118,9 @@ int _loop_sign(const std::vector<IVec3> &p_loop, int p_axis) {
 	return 0;
 }
 
-void _push_tri(std::vector<int32_t> &r_indices, const std::vector<IVec3> &p_loop, int32_t p_a, int32_t p_b, int32_t p_c) {
-	if (_zero_normal(p_loop[size_t(p_a)], p_loop[size_t(p_b)], p_loop[size_t(p_c)])) {
-		return;
-	}
+void _push_tri(std::vector<int32_t> &r_indices, const std::vector<IVec3> &, int32_t p_a, int32_t p_b, int32_t p_c) {
+	// Keep slivers. A dropped zero-area triangle opens three half-edges that
+	// still exist on the neighbouring faces.
 	r_indices.push_back(p_a);
 	r_indices.push_back(p_c);
 	r_indices.push_back(p_b);
@@ -138,6 +137,9 @@ void triangulate_loop(const std::vector<IVec3> &p_loop, std::vector<int32_t> &r_
 	const int axis = _loop_axis(p_loop);
 	const int sign = _loop_sign(p_loop, axis);
 	if (sign == 0) {
+		for (int32_t i = 1; i + 1 < int32_t(n); i++) {
+			_push_tri(r_indices, p_loop, 0, i, i + 1);
+		}
 		return;
 	}
 	bool convex = true;
@@ -172,6 +174,7 @@ void triangulate_loop(const std::vector<IVec3> &p_loop, std::vector<int32_t> &r_
 			const int o = _o2(a, b, c, axis);
 			if (o == 0) {
 				if (_on_closed_seg_2d(b, a, c, axis)) {
+					_push_tri(r_indices, p_loop, ia, ib, ic);
 					idx.erase(idx.begin() + i);
 					cut = true;
 					break;

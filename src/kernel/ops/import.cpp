@@ -43,6 +43,112 @@ bool _zero_area(const IVec3 &p_a, const IVec3 &p_b, const IVec3 &p_c) {
 	return nx == 0 && ny == 0 && nz == 0;
 }
 
+bool _zero_area_loop(const std::vector<IVec3> &p_loop) {
+	if (p_loop.size() < 3) {
+		return false;
+	}
+	for (size_t i = 1; i + 1 < p_loop.size(); i++) {
+		if (!_zero_area(p_loop[0], p_loop[i], p_loop[i + 1])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+// Emit can drop a collinear face, leaving a T-junction hole whose boundary is
+// a zero-area cycle. Pair those slivers so Promote does not call a closed
+// solid open. Cycles with area stay holes.
+bool _recover_sliver_holes(std::map<std::pair<IVec3, IVec3>, int> &p_directed, std::vector<std::vector<IVec3>> &r_loops) {
+	std::vector<std::pair<IVec3, IVec3>> unmatched;
+	std::map<std::pair<IVec3, IVec3>, bool> seen_undirected;
+	for (const auto &kv : p_directed) {
+		IVec3 a = kv.first.first;
+		IVec3 b = kv.first.second;
+		if (b < a) {
+			const IVec3 tmp = a;
+			a = b;
+			b = tmp;
+		}
+		if (!seen_undirected.emplace(std::pair<IVec3, IVec3>{ a, b }, true).second) {
+			continue;
+		}
+		const auto forward = p_directed.find({ a, b });
+		const auto back = p_directed.find({ b, a });
+		const int n_forward = forward == p_directed.end() ? 0 : forward->second;
+		const int n_back = back == p_directed.end() ? 0 : back->second;
+		if (n_forward + n_back != 1) {
+			continue;
+		}
+		if (n_forward == 1) {
+			unmatched.push_back({ a, b });
+		} else {
+			unmatched.push_back({ b, a });
+		}
+	}
+	if (unmatched.empty()) {
+		return false;
+	}
+
+	std::vector<bool> used(unmatched.size(), false);
+	auto next_from = [&](const IVec3 &p_from) -> int {
+		for (size_t i = 0; i < unmatched.size(); i++) {
+			if (!used[i] && unmatched[i].first == p_from) {
+				return int(i);
+			}
+		}
+		return -1;
+	};
+
+	std::vector<std::vector<IVec3>> slivers;
+	size_t consumed = 0;
+	while (consumed < unmatched.size()) {
+		int start_i = -1;
+		for (size_t i = 0; i < unmatched.size(); i++) {
+			if (!used[i]) {
+				start_i = int(i);
+				break;
+			}
+		}
+		if (start_i < 0) {
+			break;
+		}
+		std::vector<IVec3> cycle;
+		IVec3 start = unmatched[size_t(start_i)].first;
+		IVec3 cur = start;
+		bool closed = false;
+		for (size_t guard = 0; guard < unmatched.size() + 2; guard++) {
+			const int edge_i = next_from(cur);
+			if (edge_i < 0) {
+				break;
+			}
+			used[size_t(edge_i)] = true;
+			consumed++;
+			cycle.push_back(cur);
+			cur = unmatched[size_t(edge_i)].second;
+			if (cur == start) {
+				closed = true;
+				break;
+			}
+		}
+		if (!closed || cycle.size() < 3 || !_zero_area_loop(cycle)) {
+			return false;
+		}
+		slivers.push_back(std::move(cycle));
+	}
+	if (slivers.empty()) {
+		return false;
+	}
+	for (const std::vector<IVec3> &cycle : slivers) {
+		for (size_t i = 1; i + 1 < cycle.size(); i++) {
+			r_loops.push_back({ cycle[0], cycle[i], cycle[i + 1] });
+			p_directed[{ cycle[0], cycle[i] }] += 1;
+			p_directed[{ cycle[i], cycle[i + 1] }] += 1;
+			p_directed[{ cycle[i + 1], cycle[0] }] += 1;
+		}
+	}
+	return true;
+}
+
 } // namespace
 
 ImportResult import_from_triangles(const std::vector<IVec3> &p_verts, const std::vector<int32_t> &p_indices) {
@@ -72,7 +178,7 @@ ImportResult import_from_triangles(const std::vector<IVec3> &p_verts, const std:
 		const IVec3 a = p_verts[size_t(i0)];
 		const IVec3 b = p_verts[size_t(i1)];
 		const IVec3 c = p_verts[size_t(i2)];
-		if (a == b || b == c || c == a || _zero_area(a, b, c)) {
+		if (a == b || b == c || c == a) {
 			saw_bad_triangle = true;
 			continue;
 		}
@@ -118,6 +224,10 @@ ImportResult import_from_triangles(const std::vector<IVec3> &p_verts, const std:
 		} else if (n_forward + n_back != 2) {
 			non_manifold = true;
 		}
+	}
+
+	if (open && !non_manifold && _recover_sliver_holes(directed, loops)) {
+		open = false;
 	}
 
 	if (open && non_manifold) {

@@ -3,6 +3,8 @@ extends SceneTree
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
+const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
+const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SlabImportMesh := preload("res://addons/slab/slab_import_mesh.gd")
 const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
@@ -23,6 +25,7 @@ func _init() -> void:
 	_check_refuse_empty()
 	_check_refuse_non_manifold()
 	_check_kernel_direct()
+	_check_topo_obj_round_trip()
 	_finish()
 
 
@@ -276,6 +279,122 @@ func _check_kernel_direct() -> void:
 	_expect(int(other.call("face_count")) > 0, "refused import_from_mesh leaves the previous solid intact")
 	solid.free()
 	other.free()
+
+
+func _check_topo_obj_round_trip() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	if not _expect(solid.call("make_box", Vector3(0.65, 1.8, 0.45)) == 0, "how-to-try box builds"):
+		solid.free()
+		return
+
+	var edges: PackedInt64Array = solid.call("get_edges")
+	if not _expect(not edges.is_empty() and solid.call("bevel_edges", PackedInt64Array([edges[0]]), 0.03, 1) == 0, "bevel one edge 0.03"):
+		solid.free()
+		return
+
+	var front: int = _face_facing(solid, Vector3(0, 0, 1))
+	if not _expect(solid.call("extrude_faces", PackedInt64Array([front]), 0.06) == 0, "extrude front face 0.06"):
+		solid.free()
+		return
+
+	front = _face_facing(solid, Vector3(0, 0, 1))
+	if not _expect(solid.call("inset_faces", PackedInt64Array([front]), 0.04) == 0, "inset front face 0.04"):
+		solid.free()
+		return
+
+	var loop_edge: int = PackedInt64Array(solid.call("get_edges"))[0]
+	if not _expect(solid.call("insert_loop", loop_edge, 0.5) == 0, "loop cut Apply"):
+		solid.free()
+		return
+
+	var pair := _connectable_edge_pair(solid)
+	if pair.size() == 2:
+		var connected: int = solid.call("connect_edges", pair)
+		_expect(connected == 0, "connect two edges if available, got %d" % connected)
+
+	_expect(float(solid.call("volume")) > 0.0, "topo'd solid still has volume")
+	_expect(int(solid.call("face_count")) > 0, "topo'd solid still has faces")
+
+	var export_mesh := SlabExportMesh.new()
+	if not _expect(export_mesh.bake([solid]) == OK, "bake topo'd solid"):
+		solid.free()
+		return
+	var path := "user://prs41_how_to_try.obj"
+	if not _expect(SlabExportObj.write(path, export_mesh) == OK, "export Wavefront OBJ"):
+		solid.free()
+		return
+
+	var loaded := SlabImportMesh.load_from_file(path)
+	if not _expect(int(loaded.get("error", -1)) == OK, "import the OBJ"):
+		DirAccess.remove_absolute(path)
+		DirAccess.remove_absolute("user://prs41_how_to_try.mtl")
+		solid.free()
+		return
+	var external: Node3D = loaded.get("mesh")
+	if not _expect(external != null and SlabExternalMesh.is_external_mesh(external), "import stays External"):
+		DirAccess.remove_absolute(path)
+		DirAccess.remove_absolute("user://prs41_how_to_try.mtl")
+		solid.free()
+		return
+	root.add_child(external)
+	solid.free()
+
+	var selection := SlabSelection.new()
+	selection.set_objects([external])
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	_expect(actions.promote_visible(), "PRS-39: Promote is visible for one External")
+	_expect(actions.find("promote_to_solid").get("label", "") == SlabActions.PROMOTE_LABEL, "PRS-39: Promote label is locked")
+	_expect(SlabActions.PROMOTE_LABEL == "Promote to Slab Solid", "PRS-39: Promote label has no ellipsis")
+	var button := _button_for(panel, SlabActions.PROMOTE_LABEL)
+	_expect(button != null and not button.disabled, "PRS-39: Promote button enabled for one External")
+	if button != null:
+		_expect(button.text == "Promote to Slab Solid", "PRS-39: button text has no ellipsis")
+
+	var statuses: Array[String] = []
+	actions.reported.connect(func(text: String) -> void: statuses.append(text))
+	actions.run("promote_to_solid")
+	_expect(not statuses.is_empty() and statuses[0] == SlabActions.PROMOTE_SUCCESS, "Promote succeeds after OBJ round-trip, got: %s" % (statuses[0] if not statuses.is_empty() else ""))
+
+	var promoted: Node3D = selection.solid
+	_expect(promoted != null and SlabSelection.is_solid(promoted), "selection is a SlabSolid after Promote")
+	_expect(not SlabSelection.is_external_mesh(promoted), "promoted node is not External")
+	if promoted != null:
+		_expect(int(promoted.call("vertex_count")) > 0, "Promote unlocks vertices")
+		_expect(int(promoted.call("edge_count")) > 0, "Promote unlocks edges")
+		_expect(int(promoted.call("face_count")) > 0, "Promote unlocks faces")
+		_expect(float(promoted.call("volume")) > 0.0, "promoted solid has volume")
+
+	panel.free()
+	if is_instance_valid(external) and external.get_parent() == null:
+		external.free()
+	if is_instance_valid(promoted):
+		promoted.free()
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute("user://prs41_how_to_try.mtl")
+
+
+func _face_facing(solid: Node3D, direction: Vector3) -> int:
+	var best: int = 0
+	var score := -2.0
+	for id in PackedInt64Array(solid.call("get_faces")):
+		var n: Vector3 = solid.call("face_normal", id)
+		var d: float = n.dot(direction)
+		if d > score:
+			score = d
+			best = id
+	return best
+
+
+func _connectable_edge_pair(solid: Node3D) -> PackedInt64Array:
+	for face in PackedInt64Array(solid.call("get_faces")):
+		var face_edges: PackedInt64Array = solid.call("face_edges", face)
+		if face_edges.size() < 4:
+			continue
+		return PackedInt64Array([face_edges[0], face_edges[2]])
+	return PackedInt64Array()
 
 
 func _flatten(mesh: Mesh) -> Dictionary:

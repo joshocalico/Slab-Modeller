@@ -15,7 +15,9 @@ struct ImportResult {
 };
 
 // Builds a closed Slab mesh from a triangle soup. Refuses empty, open, or
-// non-manifold input without capping holes or otherwise repairing the soup.
+// non-manifold input without capping holes that have area. Zero-area slivers
+// (degenerate faces, or T-junction holes left when emit dropped one) stay
+// legal so a closed SlabSolid can round-trip OBJ export → import → Promote.
 ImportResult import_from_triangles(const std::vector<IVec3> &p_verts, const std::vector<int32_t> &p_indices);
 
 } // namespace ops
