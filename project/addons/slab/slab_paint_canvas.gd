@@ -3,12 +3,15 @@ extends Control
 
 const SlabPaintUv := preload("res://addons/slab/slab_paint_uv.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
+const SlabUVPick := preload("res://addons/slab/slab_uv_pick.gd")
+const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 
 signal painted_pixel(pixel: Vector2)
 signal uv_dragged(delta: Vector2, mode: int)
 signal stroke_started
 signal stroke_ended
 signal stroke_cancelled
+signal uv_element_picked(element_id: int, additive: bool)
 
 const ZOOM_MIN := 0.25
 const ZOOM_MAX := 8.0
@@ -19,7 +22,9 @@ const UV_MODIFIER_DRAG_PIXELS := 180.0
 
 var _paint: RefCounted
 var _metrics: RefCounted
+var _selection: RefCounted
 var _brush := Vector2(-1, -1)
+var _uv_element_mode: bool = false
 var _dragging := false
 var _panning := false
 var _uv_from := Vector2.ZERO
@@ -38,9 +43,10 @@ var show_pixel_uv: bool = false:
 		queue_redraw()
 
 
-func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
+func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted = null) -> void:
 	_paint = paint
 	_metrics = metrics if metrics != null else SlabMetrics.at_scale(1.0)
+	_selection = selection
 	name = "PaintCanvas"
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	clip_contents = true
@@ -54,6 +60,31 @@ func setup(paint: RefCounted, metrics: RefCounted = null) -> void:
 	if _paint != null and _paint.has_signal("changed"):
 		if not _paint.changed.is_connected(_paint_changed):
 			_paint.changed.connect(_paint_changed)
+	if _selection != null and _selection.has_signal("uv_mode_changed"):
+		if not _selection.uv_mode_changed.is_connected(queue_redraw):
+			_selection.uv_mode_changed.connect(queue_redraw)
+	if _selection != null and _selection.has_signal("uv_selection_changed"):
+		if not _selection.uv_selection_changed.is_connected(queue_redraw):
+			_selection.uv_selection_changed.connect(queue_redraw)
+
+
+func bind_selection(selection: RefCounted) -> void:
+	_selection = selection
+	if _selection != null and _selection.has_signal("uv_mode_changed"):
+		if not _selection.uv_mode_changed.is_connected(queue_redraw):
+			_selection.uv_mode_changed.connect(queue_redraw)
+	if _selection != null and _selection.has_signal("uv_selection_changed"):
+		if not _selection.uv_selection_changed.is_connected(queue_redraw):
+			_selection.uv_selection_changed.connect(queue_redraw)
+
+
+func set_uv_element_mode(enabled: bool) -> void:
+	_uv_element_mode = enabled
+	queue_redraw()
+
+
+func is_uv_element_mode() -> bool:
+	return _uv_element_mode
 
 
 func _paint_changed() -> void:
@@ -178,6 +209,13 @@ func _gui_input(event: InputEvent) -> void:
 		if not hits_image(event.position):
 			accept_event()
 			return
+		if is_uv_element_mode() and not _paint.is_pixel():
+			var hit := _pick_uv_at(event.position)
+			if not hit.is_empty():
+				var additive: bool = event.shift_pressed
+				uv_element_picked.emit(int(hit.get("id", 0)), additive)
+			accept_event()
+			return
 		_dragging = true
 		if _paint.is_pixel():
 			_brush = event.position
@@ -271,6 +309,7 @@ func _draw_uv_workspace() -> void:
 			pts.append(_uv_to_canvas(uv))
 		pts.append(pts[0])
 		draw_polyline(pts, Color(0.95, 0.82, 0.28), 2.0, true)
+	_draw_uv_element_selection()
 
 
 func _draw_checker(fitted: Rect2) -> void:
@@ -372,3 +411,78 @@ static func _uv_loops_bounds(loops: Array) -> Rect2:
 		lo = lo.min(bounds.position)
 		hi = hi.max(bounds.end)
 	return Rect2(lo, hi - lo)
+
+
+func _draw_uv_element_selection() -> void:
+	if not is_uv_element_mode() or _paint == null:
+		return
+	var solid: Node3D = _paint.get("_solid")
+	var faces: PackedInt64Array = _selection.ids if _selection != null else PackedInt64Array()
+	if solid == null or faces.is_empty():
+		return
+	
+	var uv_mode: int = _selection.uv_mode
+	var uv_selection: PackedInt64Array = _selection.get_uv_selection()
+	var highlight_color := Color(0.2, 0.85, 0.95, 0.9)
+	var vert_radius := maxf(4.0, _metrics.px(4.0))
+	
+	match uv_mode:
+		SlabSelection.UVMode.UV_VERT:
+			for id in uv_selection:
+				var decoded := SlabUVPick._decode_uv_vert(id)
+				var face: int = decoded["face"]
+				var corner: int = decoded["corner"]
+				var uvs := SlabPaintUv.face_uvs(solid, face)
+				if corner < uvs.size():
+					var canvas_pt := _uv_to_canvas(uvs[corner])
+					draw_circle(canvas_pt, vert_radius, highlight_color)
+			for face in faces:
+				var uvs := SlabPaintUv.face_uvs(solid, face)
+				for i in uvs.size():
+					var canvas_pt := _uv_to_canvas(uvs[i])
+					draw_arc(canvas_pt, vert_radius - 1.0, 0.0, TAU, 16, Color(0.6, 0.6, 0.6, 0.6), 1.0)
+		SlabSelection.UVMode.UV_EDGE:
+			for face in faces:
+				var uvs := SlabPaintUv.face_uvs(solid, face)
+				if uvs.size() < 2:
+					continue
+				for i in uvs.size():
+					var canvas_a := _uv_to_canvas(uvs[i])
+					var canvas_b := _uv_to_canvas(uvs[(i + 1) % uvs.size()])
+					draw_line(canvas_a, canvas_b, Color(0.5, 0.5, 0.5, 0.5), 1.0)
+			for id in uv_selection:
+				var decoded := SlabUVPick._decode_uv_edge(id)
+				var face: int = decoded["face"]
+				var edge_index: int = decoded["edge_index"]
+				var uvs := SlabPaintUv.face_uvs(solid, face)
+				if uvs.size() > edge_index:
+					var canvas_a := _uv_to_canvas(uvs[edge_index])
+					var canvas_b := _uv_to_canvas(uvs[(edge_index + 1) % uvs.size()])
+					draw_line(canvas_a, canvas_b, highlight_color, 3.0)
+		SlabSelection.UVMode.UV_FACE:
+			for id in uv_selection:
+				var uvs := SlabPaintUv.face_uvs(solid, id)
+				if uvs.size() < 3:
+					continue
+				var canvas_poly := PackedVector2Array()
+				for uv in uvs:
+					canvas_poly.append(_uv_to_canvas(uv))
+				var fill_color := Color(highlight_color.r, highlight_color.g, highlight_color.b, 0.25)
+				draw_colored_polygon(canvas_poly, fill_color)
+				canvas_poly.append(canvas_poly[0])
+				draw_polyline(canvas_poly, highlight_color, 2.5, true)
+
+
+func _pick_uv_at(pos: Vector2) -> Dictionary:
+	if _selection == null or _paint == null:
+		return {}
+	var solid: Node3D = _paint.get("_solid")
+	var faces: PackedInt64Array = _selection.ids if _selection != null else PackedInt64Array()
+	if solid == null or faces.is_empty():
+		return {}
+	var uv_to_canvas_func := func(uv: Vector2) -> Vector2: return _uv_to_canvas(uv)
+	return SlabUVPick.pick_uv_element(solid, faces, _selection.uv_mode, pos, uv_to_canvas_func)
+
+
+func uv_to_canvas(uv: Vector2) -> Vector2:
+	return _uv_to_canvas(uv)
