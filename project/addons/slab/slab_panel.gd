@@ -533,10 +533,13 @@ func _font(px: int) -> int:
 func refresh() -> void:
 	_sync_model_chrome()
 	var mode: int = _selection.mode
-	if _built_mode != mode:
-		_rebuild_commands(_actions.command_sections_for(mode))
+	var sections: Array[Dictionary] = _actions.command_sections_for(mode)
+	var mode_changed: bool = _built_mode != mode
+	if mode_changed or not _same_command_ids(sections):
+		_rebuild_commands(sections)
 		_built_mode = mode
-		_refresh_settings()
+		if mode_changed:
+			_refresh_settings()
 	_refresh_buttons()
 	_settings.visible = _show_settings()
 	_refresh_create_strip_visibility()
@@ -558,6 +561,19 @@ func focus_create(id: StringName) -> void:
 		_refresh_settings()
 	_sync_create_pressed()
 	_actions.create_settings_changed.emit()
+
+
+func _same_command_ids(sections: Array[Dictionary]) -> bool:
+	var expected: Dictionary = {}
+	for section in sections:
+		for row in section["rows"]:
+			expected[str(row.get("id", ""))] = true
+	if expected.size() != _buttons.size():
+		return false
+	for id in expected:
+		if not _buttons.has(id):
+			return false
+	return true
 
 
 func _rebuild_commands(sections: Array[Dictionary]) -> void:

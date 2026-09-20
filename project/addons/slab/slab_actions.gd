@@ -9,7 +9,7 @@ const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd
 const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 
 const PROMOTE_FIRST_TOOLTIP := "Convert to a Slab solid first…"
-const PROMOTE_LABEL := "Promote to Slab Solid…"
+const PROMOTE_LABEL := "Promote to Slab Solid"
 const PROMOTE_SUCCESS := "Promoted to Slab solid. Topology tools are available."
 
 signal reported(text: String)
@@ -303,7 +303,7 @@ func command_sections_for(mode: int) -> Array[Dictionary]:
 	for heading in SECTION_ORDER:
 		var rows: Array[Dictionary] = []
 		for row in _rows:
-			if row["modes"].has(mode) and section_of(row) == heading:
+			if section_of(row) == heading and _row_visible_in_mode(row, mode):
 				rows.append(row)
 		if rows.is_empty():
 			continue
@@ -335,6 +335,20 @@ const EXTERNAL_MESH_ALLOWED_ACTIONS: Array[String] = [
 ]
 
 
+func promote_visible() -> bool:
+	if _selection.mode != SlabSelection.Mode.OBJECT:
+		return false
+	return _selection.has_only_external_meshes() and _selection.count() == 1
+
+
+func _row_visible_in_mode(row: Dictionary, mode: int) -> bool:
+	if not row["modes"].has(mode):
+		return false
+	if str(row.get("id", "")) == "promote_to_solid":
+		return promote_visible()
+	return true
+
+
 func disabled_reason(row: Dictionary) -> String:
 	if operation_active:
 		return "Apply or cancel the current preview first."
@@ -342,7 +356,7 @@ func disabled_reason(row: Dictionary) -> String:
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
 	if str(row.get("id", "")) == "promote_to_solid":
-		if not _selection.has_only_external_meshes() or _selection.count() != 1:
+		if not promote_visible():
 			return "Select an External mesh to promote."
 		return ""
 	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):

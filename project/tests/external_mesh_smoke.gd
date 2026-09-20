@@ -324,7 +324,7 @@ func _check_promote_present() -> void:
 	var actions := SlabActions.new(SlabSelection.new())
 	var promote_row := actions.find("promote_to_solid")
 	_expect(not promote_row.is_empty(), "promote_to_solid action exists")
-	_expect(promote_row.get("label", "") == "Promote to Slab Solid…", "Promote label is locked")
+	_expect(promote_row.get("label", "") == "Promote to Slab Solid", "Promote label is locked")
 	_expect("promote_to_solid" in SlabActions.EXTERNAL_MESH_ALLOWED_ACTIONS, "Promote is allowed on External meshes")
 
 

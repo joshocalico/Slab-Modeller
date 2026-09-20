@@ -27,32 +27,60 @@ func _init() -> void:
 
 
 func _check_action_catalog() -> void:
-	var actions := SlabActions.new(SlabSelection.new())
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
 	var row := actions.find("promote_to_solid")
 	_expect(not row.is_empty(), "promote_to_solid action exists")
-	_expect(row.get("label", "") == SlabActions.PROMOTE_LABEL, "label is Promote to Slab Solid…")
+	_expect(row.get("label", "") == SlabActions.PROMOTE_LABEL, "label is Promote to Slab Solid")
+	_expect(SlabActions.PROMOTE_LABEL == "Promote to Slab Solid", "Promote label has no ellipsis")
+	_expect(not str(row.get("label", "")).ends_with("…") and not str(row.get("label", "")).ends_with("..."), "Promote label has no trailing ellipsis")
+	_expect(actions.find("import_mesh").get("label", "") == "Import Mesh...", "Import Mesh keeps its ellipsis")
+	_expect(actions.find("export_solids").get("label", "") == "Export...", "Export keeps its ellipsis")
 	_expect(actions.section_of(row) == "Object", "Promote sits in the Object section")
 	_expect(row.get("min_count", 0) == 1, "Promote needs a selection")
+	_expect(not actions.promote_visible(), "Promote is hidden with no selection")
 
 	var panel := SlabPanel.new()
-	var selection := SlabSelection.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	var button := _button_for(panel, SlabActions.PROMOTE_LABEL)
-	_expect(button != null, "Promote to Slab Solid… button exists in Object mode")
-	if button != null:
-		_expect(not button.clip_text, "Promote button does not clip text")
-	panel.free()
+	_expect(_button_for(panel, SlabActions.PROMOTE_LABEL) == null, "Promote is absent with no selection")
+	_expect(_button_for(panel, "Import Mesh...") != null, "Import Mesh… stays visible with no selection")
 
 	var reason := actions.disabled_reason(row)
-	_expect(reason == "Select an External mesh to promote.", "Promote disabled with no selection, got: %s" % reason)
+	_expect(reason == "Select an External mesh to promote.", "Promote run is refused with no selection, got: %s" % reason)
 
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
 	root.add_child(solid)
 	solid.call("make_box", Vector3.ONE)
 	selection.set_objects([solid])
-	var solid_actions := SlabActions.new(selection)
-	reason = solid_actions.disabled_reason(solid_actions.find("promote_to_solid"))
-	_expect(reason == "Select an External mesh to promote.", "Promote disabled on a SlabSolid, got: %s" % reason)
+	_expect(not actions.promote_visible(), "Promote is hidden on a SlabSolid")
+	_expect(actions.disabled_reason(row) == "Select an External mesh to promote.", "Promote run is refused on a SlabSolid")
+	_expect(_button_for(panel, SlabActions.PROMOTE_LABEL) == null, "Promote is absent on a SlabSolid")
+	_expect(_button_for(panel, "Export...") != null, "Export… stays visible on a SlabSolid")
+
+	var mesh: ArrayMesh = solid.call("build_mesh")
+	var external := SlabExternalMesh.from_mesh(mesh, "box.obj")
+	root.add_child(external)
+	selection.set_objects([external])
+	_expect(actions.promote_visible(), "Promote is visible on one External mesh")
+	_expect(actions.disabled_reason(row) == "", "Promote is enabled on one External mesh")
+	var button := _button_for(panel, SlabActions.PROMOTE_LABEL)
+	_expect(button != null, "Promote to Slab Solid button exists for one External mesh")
+	if button != null:
+		_expect(button.text == "Promote to Slab Solid", "Promote button text has no ellipsis")
+		_expect(not button.disabled, "Promote is enabled for one External mesh")
+		_expect(not button.clip_text, "Promote button does not clip text")
+	_expect(_button_for(panel, "Import Mesh...") != null, "Import Mesh… stays visible with an External selected")
+	_expect(_button_for(panel, "Export...") != null, "Export… stays visible with an External selected")
+
+	var extra := SlabExternalMesh.from_mesh(mesh, "box-b.obj")
+	root.add_child(extra)
+	selection.set_objects([external, extra])
+	_expect(not actions.promote_visible(), "Promote is hidden for two External meshes")
+	_expect(_button_for(panel, SlabActions.PROMOTE_LABEL) == null, "Promote is absent for two External meshes")
+
+	panel.free()
+	extra.free()
+	external.free()
 	solid.free()
 
 
