@@ -24,7 +24,7 @@ func _init() -> void:
 	_check_export_external_mesh()
 	_check_export_round_trip()
 	_check_solid_ops_refuse_external()
-	_check_promote_not_present()
+	_check_promote_present()
 
 	_finish()
 
@@ -162,7 +162,7 @@ func _check_topology_disabled_for_external() -> void:
 			continue
 		var reason := actions.disabled_reason(row)
 		_expect(reason != "", "%s is disabled for external mesh" % op_id)
-		_expect("Promote" in reason or "Slab solid" in reason, "%s shows Promote tooltip, got: %s" % [op_id, reason])
+		_expect(reason == SlabActions.PROMOTE_FIRST_TOOLTIP, "%s shows locked Promote-first tooltip, got: %s" % [op_id, reason])
 
 	var export_row := actions.find("export_solids")
 	_expect(not export_row.is_empty(), "export_solids row exists")
@@ -204,7 +204,7 @@ func _check_mode_strip_disabled_for_external() -> void:
 				break
 	if vertex_button != null:
 		_expect(vertex_button.disabled, "Vertex mode button is disabled for external mesh")
-		_expect("Promote" in vertex_button.tooltip_text, "Vertex button tooltip mentions Promote")
+		_expect(vertex_button.tooltip_text == SlabActions.PROMOTE_FIRST_TOOLTIP, "Vertex button tooltip is locked copy, got: %s" % vertex_button.tooltip_text)
 
 	strip.free()
 	external.free()
@@ -320,10 +320,12 @@ func _check_solid_ops_refuse_external() -> void:
 	external.free()
 
 
-func _check_promote_not_present() -> void:
+func _check_promote_present() -> void:
 	var actions := SlabActions.new(SlabSelection.new())
 	var promote_row := actions.find("promote_to_solid")
-	_expect(promote_row.is_empty(), "promote_to_solid action not present (X4 not in this PR)")
+	_expect(not promote_row.is_empty(), "promote_to_solid action exists")
+	_expect(promote_row.get("label", "") == "Promote to Slab Solid…", "Promote label is locked")
+	_expect("promote_to_solid" in SlabActions.EXTERNAL_MESH_ALLOWED_ACTIONS, "Promote is allowed on External meshes")
 
 
 func _expect(ok: bool, what: String) -> bool:

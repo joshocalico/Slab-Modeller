@@ -3,6 +3,7 @@ extends HBoxContainer
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
 
 const MODE_ICONS: Dictionary = {
 	SlabSelection.Mode.OBJECT: "MeshInstance3D",
@@ -64,7 +65,7 @@ func refresh() -> void:
 		if mode != SlabSelection.Mode.OBJECT:
 			button.disabled = external_only
 			if external_only:
-				button.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+				button.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
 			else:
 				var lines := PackedStringArray()
 				if not _with_labels:

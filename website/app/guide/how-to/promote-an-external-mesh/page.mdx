@@ -1,0 +1,29 @@
+export const metadata = { title: "Promote an External mesh" };
+
+# Promote an External mesh
+
+Use **Promote to Slab Solid…** when an imported mesh is already a closed solid and you want Vertex, Edge, Face, UV, and Paint tools. Import never promotes on its own.
+
+## Idle External mesh
+
+1. Press <kbd>1</kbd> for Object mode.
+2. Import a mesh, or select an existing External mesh.
+3. The header shows a badge: `(External mesh)`.
+4. Vertex, Edge, and Face stay disabled. So do UV and Paint. Their tooltip reads `Convert to a Slab solid first…`
+
+**Import Mesh…** and **Export…** stay available. Object move, rotate, and scale stay available.
+
+## Promote
+
+1. Keep the External mesh selected in Object mode.
+2. Click **Promote to Slab Solid…**. It sits with Import and Export.
+
+On success the badge clears. Topology modes unlock. Status reads `Promoted to Slab solid. Topology tools are available.` Undo puts the External mesh back when the editor can keep that history.
+
+## Refuse
+
+Promote does not repair the mesh. If the soup is empty, open, or non-manifold, the External mesh stays as it is. Status names the reason, for example `Could not promote: mesh is open. External mesh unchanged.` There is no partial convert.
+
+Fix the mesh in the source file, or keep it as External and export it as a triangle mesh.
+
+See [Closed solids](/guide/explanation/closed-solids) for why Slab refuses an open sheet.

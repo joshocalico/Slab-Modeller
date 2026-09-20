@@ -6,6 +6,11 @@ const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabOperationHandles := preload("res://addons/slab/slab_operation_handles.gd")
 const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
+
+const PROMOTE_FIRST_TOOLTIP := "Convert to a Slab solid first…"
+const PROMOTE_LABEL := "Promote to Slab Solid…"
+const PROMOTE_SUCCESS := "Promoted to Slab solid. Topology tools are available."
 
 signal reported(text: String)
 signal status_reset_requested
@@ -325,7 +330,7 @@ static func section_of(row: Dictionary) -> String:
 
 
 const EXTERNAL_MESH_ALLOWED_ACTIONS: Array[String] = [
-	"export_solids", "import_mesh",
+	"export_solids", "import_mesh", "promote_to_solid",
 ]
 
 
@@ -335,8 +340,12 @@ func disabled_reason(row: Dictionary) -> String:
 	var modes: Array = row["modes"]
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
+	if str(row.get("id", "")) == "promote_to_solid":
+		if not _selection.has_only_external_meshes() or _selection.count() != 1:
+			return "Select an External mesh to promote."
+		return ""
 	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):
-		return "Convert to a Slab solid first (Promote — later)."
+		return PROMOTE_FIRST_TOOLTIP
 	var exact: int = row.get("exact_count", 0)
 	if exact > 0 and _selection.count() != exact:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
@@ -722,6 +731,147 @@ func _import_op() -> Dictionary:
 	return { "status": "" }
 
 
+func _promote_op() -> Dictionary:
+	return _run_promote()
+
+
+func _flatten_mesh(mesh: Mesh) -> Dictionary:
+	var vertices := PackedVector3Array()
+	var indices := PackedInt32Array()
+	if mesh == null:
+		return { "vertices": vertices, "indices": indices }
+	for surface_idx in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(surface_idx)
+		if arrays.is_empty():
+			continue
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] if arrays.size() > Mesh.ARRAY_VERTEX else PackedVector3Array()
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays.size() > Mesh.ARRAY_INDEX else PackedInt32Array()
+		var base: int = vertices.size()
+		vertices.append_array(verts)
+		if idx.is_empty():
+			for i in verts.size():
+				indices.append(base + i)
+		else:
+			for i in idx:
+				indices.append(base + i)
+	return { "vertices": vertices, "indices": indices }
+
+
+func _editor_scene_root() -> Node:
+	if not Engine.is_editor_hint():
+		return null
+	return EditorInterface.get_edited_scene_root()
+
+
+func _select_editor_node(node: Node) -> void:
+	if not Engine.is_editor_hint() or node == null or not is_instance_valid(node):
+		return
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(node)
+
+
+func _promote_do(payload: Dictionary) -> void:
+	var parent: Node = payload.get("parent")
+	var solid: Node = payload.get("solid")
+	var external: Node = payload.get("external")
+	var index: int = int(payload.get("index", -1))
+	var root: Node = payload.get("root")
+	if parent == null or solid == null or not is_instance_valid(parent) or not is_instance_valid(solid):
+		return
+	if external != null and is_instance_valid(external) and external.get_parent() == parent:
+		parent.remove_child(external)
+	if solid.get_parent() != parent:
+		parent.add_child(solid)
+		if index >= 0 and index < parent.get_child_count():
+			parent.move_child(solid, index)
+	if root != null and is_instance_valid(root):
+		solid.owner = root
+	_selection.set_objects([solid])
+	_select_editor_node(solid)
+
+
+func _promote_undo(payload: Dictionary) -> void:
+	var parent: Node = payload.get("parent")
+	var solid: Node = payload.get("solid")
+	var external: Node = payload.get("external")
+	var index: int = int(payload.get("index", -1))
+	var root: Node = payload.get("root")
+	if parent == null or external == null or not is_instance_valid(parent) or not is_instance_valid(external):
+		return
+	if solid != null and is_instance_valid(solid) and solid.get_parent() == parent:
+		parent.remove_child(solid)
+	if external.get_parent() != parent:
+		parent.add_child(external)
+		if index >= 0 and index < parent.get_child_count():
+			parent.move_child(external, index)
+	if root != null and is_instance_valid(root):
+		external.owner = root
+	_selection.set_objects([external])
+	_select_editor_node(external)
+
+
+func _run_promote() -> Dictionary:
+	var external: Node3D = _selection.first_external_mesh()
+	if external == null or not SlabExternalMesh.is_external_mesh(external):
+		return { "status": "Select an External mesh to promote." }
+
+	var mesh: Mesh = external.mesh if external is MeshInstance3D else null
+	var arrays: Dictionary = _flatten_mesh(mesh)
+	var vertices: PackedVector3Array = arrays["vertices"]
+	var indices: PackedInt32Array = arrays["indices"]
+	if vertices.is_empty():
+		return { "status": "Could not promote: mesh is empty. External mesh unchanged." }
+
+	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		return { "status": "SlabSolid is not built yet." }
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS) as Node3D
+	if solid == null:
+		return { "status": "SlabSolid is not built yet." }
+
+	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices)
+	var err: int = int(imported.get("error", ERR_INVALID_DATA))
+	if err != OK:
+		var reason: String = str(imported.get("refuse_reason", "non-manifold"))
+		if reason.is_empty():
+			reason = "non-manifold"
+		solid.free()
+		return { "status": "Could not promote: mesh is %s. External mesh unchanged." % reason }
+
+	solid.name = external.name
+	solid.transform = external.transform
+	if external.has_method("get_materials"):
+		solid.set("materials", external.call("get_materials"))
+
+	var parent: Node = external.get_parent()
+	if parent == null or not is_instance_valid(parent):
+		solid.free()
+		return { "status": "Could not promote: External mesh is not in the scene." }
+
+	var root: Node = external.owner
+	if root == null:
+		root = _editor_scene_root()
+	var payload := {
+		"parent": parent,
+		"solid": solid,
+		"external": external,
+		"index": external.get_index(),
+		"root": root,
+	}
+	if _undo != null:
+		var context: Object = root if root != null else parent
+		_undo.create_action("Slab Promote to Slab Solid", UndoRedo.MERGE_DISABLE, context)
+		_undo.add_do_method(self, "_promote_do", payload)
+		_undo.add_undo_method(self, "_promote_undo", payload)
+		if _undo.has_method("add_do_reference"):
+			_undo.add_do_reference(solid)
+		if _undo.has_method("add_undo_reference"):
+			_undo.add_undo_reference(external)
+		_undo.commit_action()
+	else:
+		_promote_do(payload)
+	return { "status": PROMOTE_SUCCESS }
+
+
 func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
@@ -840,6 +990,7 @@ func _build() -> Array[Dictionary]:
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
 		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
 		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh file (OBJ/STL). Non-manifold and open meshes are allowed.", 0, _import_op),
+		_row("promote_to_solid", PROMOTE_LABEL, "QuadMesh", object, 1, "Convert a closed External mesh into an editable Slab solid. Open, empty, or non-manifold meshes are refused.", 0, _promote_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
