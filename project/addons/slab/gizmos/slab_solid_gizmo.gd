@@ -21,6 +21,7 @@ const HOVER := "hover"
 const FILL := "fill"
 const FILL_HOVER := "fill_hover"
 const PAINT_EDGE := "paint_edge"
+const UV_ELEMENT := "uv_element"
 const WIRE := "wire"
 const WIRE_XRAY := "wire_xray"
 const HOT_XRAY := "hot_xray"
@@ -42,6 +43,7 @@ func _init() -> void:
 	create_material(ALIGN_PREVIEW, Color(0.25, 0.9, 1.0, 0.25), false, true)
 	create_material(SNAP_ANCHOR, Color(0.25, 0.95, 1.0), false, true)
 	create_material(UV_SEAM, Color(0.95, 0.2, 0.85), false, true)
+	add_material(UV_ELEMENT, overlay_material(Color(0.2, 0.85, 0.95, 0.35), true, false))
 	add_material(OP_EXTRUDE, overlay_material(Color(0.2, 0.95, 0.85), false, true))
 	add_material(OP_INSET, overlay_material(Color(0.95, 0.72, 0.18), false, true))
 	add_material(OP_BEVEL, overlay_material(Color(0.8, 0.45, 1.0), false, true))
@@ -194,8 +196,25 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 			_draw_element(gizmo, solid, mode, id, false)
 	if hovered:
 		_draw_element(gizmo, solid, mode, _selection.hover_id, true)
+	_draw_uv_element_highlight(gizmo, solid)
 	# Keep operation handles above face fills, hover outlines, and selection wire.
 	_draw_operation_preview(gizmo, solid)
+
+
+func _draw_uv_element_highlight(gizmo: EditorNode3DGizmo, solid: Node3D) -> void:
+	if _selection == null or _paint == null or not _paint.active:
+		return
+	if not _selection.objects.has(solid):
+		return
+	var uv_faces: PackedInt64Array = _selection.uv_related_3d_faces()
+	if uv_faces.is_empty():
+		return
+	for face in uv_faces:
+		if not _selection.ids.has(face):
+			var corners: PackedVector3Array = solid.face_corners(face)
+			var normal: Vector3 = solid.face_normal(face)
+			_draw_face_fill(gizmo, corners, normal, UV_ELEMENT)
+			gizmo.add_lines(_outline(corners), get_material(_line_material(HOT), gizmo), false)
 
 
 func _draw_snap_align_preview(gizmo: EditorNode3DGizmo, solid: Node3D) -> void:

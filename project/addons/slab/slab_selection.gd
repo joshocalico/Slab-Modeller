@@ -7,6 +7,7 @@ signal settings_changed
 signal mode_requested
 
 enum Mode { OBJECT, VERTEX, EDGE, FACE }
+enum UVMode { UV_FACE, UV_EDGE, UV_VERT }
 enum Pivot { SELECTION, ACTIVE, CUSTOM }
 enum Orientation { WORLD, LOCAL, FACE }
 
@@ -23,6 +24,102 @@ enum Falloff { SMOOTH, LINEAR }
 var soft_select: bool = false
 var soft_radius: float = 0.5
 var soft_falloff: int = Falloff.SMOOTH
+
+var uv_mode: int = UVMode.UV_FACE
+
+const UV_MODE_LABELS: Dictionary = {
+	UVMode.UV_VERT: "UV Vert",
+	UVMode.UV_EDGE: "UV Edge",
+	UVMode.UV_FACE: "UV Face",
+}
+
+const UV_MODE_HINTS: Dictionary = {
+	UVMode.UV_VERT: "Select UV vertices on the canvas.",
+	UVMode.UV_EDGE: "Select UV edges on the canvas.",
+	UVMode.UV_FACE: "Select UV faces and islands on the canvas.",
+}
+
+signal uv_mode_changed
+signal uv_selection_changed
+
+var uv_selected_verts := PackedInt64Array()
+var uv_selected_edges := PackedInt64Array()
+var uv_selected_faces := PackedInt64Array()
+
+
+func set_uv_mode(value: int) -> void:
+	if value < UVMode.UV_FACE or value > UVMode.UV_VERT:
+		return
+	if value == uv_mode:
+		return
+	uv_mode = value
+	clear_uv_selection()
+	uv_mode_changed.emit()
+
+
+func clear_uv_selection() -> void:
+	uv_selected_verts = PackedInt64Array()
+	uv_selected_edges = PackedInt64Array()
+	uv_selected_faces = PackedInt64Array()
+	uv_selection_changed.emit()
+
+
+func set_uv_selection(elements: PackedInt64Array) -> void:
+	match uv_mode:
+		UVMode.UV_VERT:
+			uv_selected_verts = elements
+		UVMode.UV_EDGE:
+			uv_selected_edges = elements
+		UVMode.UV_FACE:
+			uv_selected_faces = elements
+	uv_selection_changed.emit()
+
+
+func get_uv_selection() -> PackedInt64Array:
+	match uv_mode:
+		UVMode.UV_VERT:
+			return uv_selected_verts
+		UVMode.UV_EDGE:
+			return uv_selected_edges
+		UVMode.UV_FACE:
+			return uv_selected_faces
+	return PackedInt64Array()
+
+
+func toggle_uv_element(element: int, additive: bool) -> void:
+	var current := get_uv_selection()
+	var next := PackedInt64Array(current)
+	if not additive:
+		next = PackedInt64Array([element]) if element != 0 else PackedInt64Array()
+	else:
+		var at := next.find(element)
+		if at == -1:
+			next.append(element)
+		else:
+			next.remove_at(at)
+	set_uv_selection(next)
+
+
+func uv_selection_count() -> int:
+	return get_uv_selection().size()
+
+
+func uv_related_3d_faces() -> PackedInt64Array:
+	var faces := PackedInt64Array()
+	match uv_mode:
+		UVMode.UV_VERT:
+			for id in uv_selected_verts:
+				var face := id >> 16
+				if not faces.has(face):
+					faces.append(face)
+		UVMode.UV_EDGE:
+			for id in uv_selected_edges:
+				var face := id >> 16
+				if not faces.has(face):
+					faces.append(face)
+		UVMode.UV_FACE:
+			faces = uv_selected_faces
+	return faces
 
 
 func configure_pivot(value: int, position: Variant = null) -> void:

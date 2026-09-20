@@ -8,6 +8,7 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
+const SlabUVModeStrip := preload("res://addons/slab/slab_uv_mode_strip.gd")
 
 enum Workspace { MODELLING, UV, PAINT }
 
@@ -86,6 +87,7 @@ var _paint_picker: Node
 var _paint_uv_hint: Label
 var _paint_fit_uv: Button
 var _paint_uv_controls: Control
+var _uv_mode_strip: Control
 var _paint_mapping_controls: Control
 var _paint_mapping_grid: GridContainer
 var _paint_mapping_title: Label
@@ -1203,7 +1205,7 @@ func _paint_block() -> Control:
 	row.clip_contents = true
 	row.add_theme_constant_override("separation", 8)
 	_paint_canvas = SlabPaintCanvas.new()
-	_paint_canvas.setup(_paint, _metrics)
+	_paint_canvas.setup(_paint, _metrics, _selection)
 	_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_paint_canvas.stroke_started.connect(func() -> void:
 		if _paint:
@@ -1225,6 +1227,7 @@ func _paint_block() -> Control:
 		if _paint:
 			_paint.drag_uv(delta, mode)
 	)
+	_paint_canvas.uv_element_picked.connect(_on_uv_element_picked)
 	_paint_uv_hint = Label.new()
 	_paint_uv_hint.name = "PaintUvHint"
 	_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
@@ -1263,10 +1266,37 @@ func _paint_block() -> Control:
 	_paint_fit_uv.offset_right = -8
 	_paint_fit_uv.offset_bottom = 29
 	_paint_fit_uv.pressed.connect(_paint_canvas.frame_uv)
+	_uv_mode_strip = _build_uv_mode_strip()
+	_paint_canvas.add_child(_uv_mode_strip)
+	_uv_mode_strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_uv_mode_strip.offset_left = 6
+	_uv_mode_strip.offset_top = 32
 	row.add_child(_paint_canvas)
 	split.add_child(row)
 	body.add_child(split)
 	return body
+
+
+func _build_uv_mode_strip() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "UVModeStrip"
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.04, 0.04, 0.04, 0.82)
+	bg.corner_radius_top_left = 3
+	bg.corner_radius_top_right = 3
+	bg.corner_radius_bottom_left = 3
+	bg.corner_radius_bottom_right = 3
+	bg.content_margin_left = 4
+	bg.content_margin_right = 4
+	bg.content_margin_top = 2
+	bg.content_margin_bottom = 2
+	panel.add_theme_stylebox_override("panel", bg)
+	var strip := SlabUVModeStrip.new()
+	strip.name = "UVModeStripButtons"
+	strip.setup(_selection, _metrics)
+	panel.add_child(strip)
+	panel.visible = false
+	return panel
 
 
 func _paint_target_row() -> Control:
@@ -1791,6 +1821,10 @@ func _refresh_paint_chrome() -> void:
 	_paint_sample.visible = is_uv_workspace
 	_paint_picker_wrap.visible = is_uv_workspace
 	_paint_palette.visible = is_uv_workspace
+	if _uv_mode_strip != null:
+		_uv_mode_strip.visible = is_uv_workspace
+	if _paint_canvas != null:
+		_paint_canvas.set_uv_element_mode(is_uv_workspace)
 	_paint_save.visible = is_paint_workspace
 	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
 	_paint_resize.visible = is_paint_workspace
@@ -1805,8 +1839,13 @@ func _refresh_paint_chrome() -> void:
 		_paint_tool_pixel.visible = false
 	if _paint_uv_hint != null:
 		var preview_caption: String = _paint.brush_preview_caption() if _paint != null else ""
-		_paint_uv_hint.text = preview_caption if preview_caption != "" else SlabPaint.uv_canvas_hint()
-		_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, SlabPaint.uv_canvas_hint()] if preview_caption != "" else ""
+		var uv_mode_hint := _uv_mode_hint()
+		if preview_caption != "":
+			_paint_uv_hint.text = preview_caption
+			_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, uv_mode_hint]
+		else:
+			_paint_uv_hint.text = uv_mode_hint
+			_paint_uv_hint.tooltip_text = uv_mode_hint
 		_paint_uv_hint.visible = is_uv_workspace
 	if _paint_fit_uv != null:
 		_paint_fit_uv.visible = is_uv_workspace
@@ -2193,3 +2232,13 @@ func _apply_loop_preview() -> void:
 			for spin in _spins_under(field):
 				spin.apply()
 	_actions.loop_apply_requested.emit()
+
+
+func _on_uv_element_picked(element_id: int, additive: bool) -> void:
+	if _selection == null:
+		return
+	_selection.toggle_uv_element(element_id, additive)
+
+
+func _uv_mode_hint() -> String:
+	return SlabPaint.uv_canvas_hint()
