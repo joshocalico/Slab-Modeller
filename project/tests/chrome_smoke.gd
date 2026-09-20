@@ -558,6 +558,66 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	scaled_panel.free()
 
 
+func case_paint_left_dock_stays_beside_the_canvas() -> void:
+	root.size = Vector2i(1280, 800)
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var paint: RefCounted = preload("res://addons/slab/slab_paint.gd").new()
+	paint.bind(selection, actions, SlabTestUndo.new())
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	panel.bind_paint(paint)
+	root.add_child(panel)
+	panel.theme = ThemeDB.get_default_theme()
+	panel.size = Vector2(1226, preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT)
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	paint.enter()
+	await process_frame
+	await process_frame
+	_expect_paint_dock_clear_of_canvas(panel, "Paint")
+	var flatten: Button = panel.find_child("PaintFlatten", true, false)
+	var color: ColorPickerButton = panel.find_child("BrushColor", true, false)
+	expect(flatten != null and flatten.is_visible_in_tree(), "Paint exposes Flatten")
+	expect(color != null and color.is_visible_in_tree(), "Paint exposes brush Color")
+	if flatten != null:
+		flatten.custom_minimum_size.x = 240.0
+	if color != null:
+		color.custom_minimum_size.x = 240.0
+	panel.call("_refresh_paint_chrome")
+	await process_frame
+	await process_frame
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	expect(inspector.size.x + 0.5 >= 240.0,
+		"the paint dock grows with Flatten and Color instead of clipping them, got %s" % inspector.size.x)
+	_expect_paint_dock_clear_of_canvas(panel, "wide Paint fields")
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	panel.call("_on_paint_changed")
+	await process_frame
+	await process_frame
+	expect(is_equal_approx(inspector.custom_minimum_size.x, SlabPanel.UV_DOCK_MIN_WIDTH),
+		"UV keeps the Mapping dock width, got %s" % inspector.custom_minimum_size.x)
+	expect(panel.find_child("PaintMapping", true, false).visible
+		and panel.find_child("PaintUnwrap", true, false).visible
+		and panel.find_child("PaintPack", true, false).visible
+		and panel.find_child("PaintFitUv", true, false).visible,
+		"UV still exposes Mapping, Unwrap, Pack, and Fit UV")
+	expect(not _rects_overlap(inspector.get_global_rect(), panel.find_child("PaintCanvas", true, false).get_global_rect()),
+		"UV dock stays beside the canvas")
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	panel.call("_on_paint_changed")
+	await process_frame
+	await process_frame
+	_expect_paint_dock_clear_of_canvas(panel, "Paint after UV")
+	paint.exit()
+	await process_frame
+	expect(panel.find_child("ModelBody", true, false).visible, "leaving Paint restores the modelling dock")
+	expect(is_equal_approx(panel.get_combined_minimum_size().y, SlabPanel.PANEL_HEIGHT),
+		"leaving Paint restores the modelling height")
+	expect(panel.find_child("SoftSelect", true, false) != null, "Soft Select is still on the modelling dock")
+	expect(panel.find_child("OperationHandles", true, false) != null, "Op Card host stays on the modelling dock")
+	panel.free()
+
+
 func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
@@ -1304,3 +1364,32 @@ func expect(ok: bool, what: String) -> void:
 	push_error("FAIL " + what)
 	print("FAIL ", what)
 	_fails += 1
+
+
+func _rects_overlap(a: Rect2, b: Rect2) -> bool:
+	return a.grow(-1.0).intersects(b.grow(-1.0))
+
+
+func _expect_paint_dock_clear_of_canvas(panel: Control, label: String) -> void:
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	expect(inspector != null and canvas != null, "%s has a paint dock and canvas" % label)
+	if inspector == null or canvas == null:
+		return
+	expect(canvas.get_global_rect().position.x + 0.5 >= inspector.get_global_rect().end.x,
+		"%s canvas starts after the dock, dock=%s canvas=%s" % [label, inspector.get_global_rect(), canvas.get_global_rect()])
+	expect(not _rects_overlap(inspector.get_global_rect(), canvas.get_global_rect()),
+		"%s dock does not sit under the canvas, dock=%s canvas=%s" % [label, inspector.get_global_rect(), canvas.get_global_rect()])
+	for child_name in ["PaintFlatten", "BrushColor", "brush_radius", "brush_opacity"]:
+		var control: Control = panel.find_child(child_name, true, false) as Control
+		expect(control != null and control.is_visible_in_tree(), "%s shows %s" % [label, child_name])
+		if control == null:
+			continue
+		var field := control.get_global_rect()
+		var dock := inspector.get_global_rect()
+		expect(control.size.x + 0.5 >= control.get_combined_minimum_size().x,
+			"%s %s is not clipped, size=%s min=%s" % [label, child_name, control.size, control.get_combined_minimum_size()])
+		expect(field.position.x + 0.5 >= dock.position.x and field.end.x <= dock.end.x + 1.0,
+			"%s %s stays in the dock column, control=%s dock=%s" % [label, child_name, field, dock])
+		expect(not _rects_overlap(field, canvas.get_global_rect()),
+			"%s %s is not under the canvas, control=%s canvas=%s" % [label, child_name, field, canvas.get_global_rect()])
