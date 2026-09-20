@@ -13,6 +13,8 @@ Use **Promote to Slab Solid…** when an imported mesh is already a closed solid
 
 **Import Mesh…** and **Export…** stay available. Object move, rotate, and scale stay available.
 
+![Idle External mesh — badge and disabled V/E/F with locked tooltip](/img/promote-01-idle.png)
+
 ## Promote
 
 1. Keep the External mesh selected in Object mode.
@@ -20,10 +22,14 @@ Use **Promote to Slab Solid…** when an imported mesh is already a closed solid
 
 On success the badge clears. Topology modes unlock. Status reads `Promoted to Slab solid. Topology tools are available.` Undo puts the External mesh back when the editor can keep that history.
 
+![Promote success — badge cleared, topology tools available](/img/promote-02-success.png)
+
 ## Refuse
 
 Promote does not repair the mesh. If the soup is empty, open, or non-manifold, the External mesh stays as it is. Status names the reason, for example `Could not promote: mesh is open. External mesh unchanged.` There is no partial convert.
 
 Fix the mesh in the source file, or keep it as External and export it as a triangle mesh.
+
+![Promote refuse — External intact, status names the reason](/img/promote-03-refuse.png)
 
 See [Closed solids](/guide/explanation/closed-solids) for why Slab refuses an open sheet.
