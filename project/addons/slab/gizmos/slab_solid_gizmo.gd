@@ -2,6 +2,7 @@
 extends EditorNode3DGizmoPlugin
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
 const SlabSoftSelect := preload("res://addons/slab/slab_soft_select.gd")
@@ -67,7 +68,7 @@ func _get_gizmo_name() -> String:
 
 
 func _has_gizmo(for_node_3d: Node3D) -> bool:
-	return SlabSelection.is_solid(for_node_3d)
+	return SlabSelection.is_slab_object(for_node_3d)
 
 
 func _subgizmos_intersect_ray(_gizmo: EditorNode3DGizmo, _camera: Camera3D, _screen_pos: Vector2) -> int:
@@ -140,7 +141,12 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	gizmo.clear()
 	var solid := gizmo.get_node_3d()
-	if solid == null or not is_instance_valid(solid) or not solid.has_method("get_edges"):
+	if solid == null or not is_instance_valid(solid):
+		return
+	if SlabExternalMesh.is_external_mesh(solid):
+		_redraw_external_mesh(gizmo, solid)
+		return
+	if not solid.has_method("get_edges"):
 		return
 	if _selection != null and _selection.operation_preview.get("solid") == solid and solid.call("has_display_preview"):
 		_draw_operation_preview(gizmo, solid)
@@ -407,3 +413,44 @@ func _selection_origin(solid: Node3D) -> Vector3:
 	if solid == null or _selection == null or _selection.ids.is_empty():
 		return Vector3.ZERO
 	return SlabXform.centroid(solid, _selection.mode, _selection.ids)
+
+
+func _redraw_external_mesh(gizmo: EditorNode3DGizmo, external: Node3D) -> void:
+	if external == null or not SlabExternalMesh.is_external_mesh(external):
+		return
+	var mesh_node: MeshInstance3D = external as MeshInstance3D
+	if mesh_node == null or mesh_node.mesh == null:
+		return
+	var wire := PackedVector3Array()
+	for surface_idx in mesh_node.mesh.get_surface_count():
+		var arrays: Array = mesh_node.mesh.surface_get_arrays(surface_idx)
+		if arrays.is_empty():
+			continue
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] if arrays.size() > Mesh.ARRAY_VERTEX else PackedVector3Array()
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays.size() > Mesh.ARRAY_INDEX else PackedInt32Array()
+		if indices.is_empty():
+			for i in range(0, verts.size(), 3):
+				if i + 2 < verts.size():
+					wire.append(verts[i])
+					wire.append(verts[i + 1])
+					wire.append(verts[i + 1])
+					wire.append(verts[i + 2])
+					wire.append(verts[i + 2])
+					wire.append(verts[i])
+		else:
+			for i in range(0, indices.size(), 3):
+				if i + 2 < indices.size():
+					var i0: int = indices[i]
+					var i1: int = indices[i + 1]
+					var i2: int = indices[i + 2]
+					if i0 < verts.size() and i1 < verts.size() and i2 < verts.size():
+						wire.append(verts[i0])
+						wire.append(verts[i1])
+						wire.append(verts[i1])
+						wire.append(verts[i2])
+						wire.append(verts[i2])
+						wire.append(verts[i0])
+	if not wire.is_empty():
+		gizmo.add_lines(wire, get_material(_line_material(WIRE), gizmo), false)
+	if _selection != null and _selection.objects.has(external):
+		gizmo.add_lines(wire, get_material(_line_material(HOT), gizmo), false)
