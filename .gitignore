@@ -3,6 +3,8 @@
 *.os
 *.o
 *.obj
+# Wavefront meshes in demos (not compiler objects)
+!project/demo/**/*.obj
 *.dblite
 .DS_Store
 compile_commands.json
