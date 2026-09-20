@@ -11,6 +11,7 @@ const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabTestHost := preload("res://tests/slab_test_host.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPanel := preload("res://addons/slab/slab_panel.gd")
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
 
 var _fails := 0
 
@@ -1180,11 +1181,17 @@ func _check_canvas_letterbox_and_press() -> void:
 		if String(button.get_meta("slab_label", "")) == "Repeat ×2": repeat_up = button
 		if String(button.get_meta("slab_label", "")) == "Repeat ÷2": repeat_down = button
 	var repeat_undo_before: int = panel_undo.actions.size()
-	repeat_up.pressed.emit()
+	var repeat_up_hits := {"n": 0}
+	repeat_up.pressed.connect(func() -> void: repeat_up_hits["n"] += 1)
+	await _gui_click(repeat_up)
+	_expect(repeat_up_hits["n"] == 1, "Repeat ×2 viewport mouse click fires pressed")
 	_expect(actions.uv_scale == Vector2(4.0, 6.0) and repeat_u.value == 4.0 and repeat_v.value == 6.0
 		and panel_undo.actions.size() == repeat_undo_before + 1,
 		"Repeat ×2 flushes typed U/V fields and applies one undoable edit")
-	repeat_down.pressed.emit()
+	var repeat_down_hits := {"n": 0}
+	repeat_down.pressed.connect(func() -> void: repeat_down_hits["n"] += 1)
+	await _gui_click(repeat_down)
+	_expect(repeat_down_hits["n"] == 1, "Repeat ÷2 viewport mouse click fires pressed")
 	_expect(actions.uv_scale == Vector2(2.0, 3.0) and repeat_u.value == 2.0 and repeat_v.value == 3.0
 		and panel_undo.actions.size() == repeat_undo_before + 2,
 		"Repeat ÷2 halves both fields and applies one undoable edit, got %s fields %s/%s undo %s" % [actions.uv_scale, repeat_u.value, repeat_v.value, panel_undo.actions.size() - repeat_undo_before])
@@ -1269,6 +1276,17 @@ func _buttons_under(node: Node) -> Array[Button]:
 	for child in node.get_children():
 		out.append_array(_buttons_under(child))
 	return out
+
+
+func _gui_click(button: Button) -> void:
+	if button == null:
+		return
+	SlabTestGui.ensure_scrolled(button)
+	await process_frame
+	SlabTestGui.hover(button)
+	await process_frame
+	SlabTestGui.mouse_click(button)
+	await process_frame
 
 
 func _hover_at(control: Control, pos: Vector2) -> void:
