@@ -43,6 +43,20 @@ Open modules stay legal because a wall is a thin closed box, not a one-sided she
 
 Boolean subtract of a solid wholly inside another punches a watertight cavity. Overlapping clip is refused until it can stay watertight.
 
+## Tutorials
+
+Short silent clips of shipping chrome (PRS-37). Files live in `website/public/videos/v1/` (also mirrored under `docs/videos/v1/`).
+
+1. [Create a solid](website/public/videos/v1/v1-01-create-solid.mp4)
+2. [Extrude, inset, bevel, and loop](website/public/videos/v1/v1-02-extrude-inset-bevel-loop.mp4)
+3. [Soft Select](website/public/videos/v1/v1-03-soft-select.mp4)
+4. [UV unwrap and Fit](website/public/videos/v1/v1-04-uv-unwrap-fit.mp4)
+5. [Surface Paint](website/public/videos/v1/v1-05-surface-paint.mp4)
+6. [Export a mesh](website/public/videos/v1/v1-06-export-mesh.mp4)
+7. [Import an External mesh](website/public/videos/v1/v1-07-import-external.mp4)
+
+The same list is on the [guide](website/app/guide/page.mdx) under Learn by making.
+
 ## Build
 
 ```bash
