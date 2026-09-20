@@ -44,6 +44,18 @@ Fail place craft if the scene looks like a tool demo: paper-thin walls, missing 
 10. annex-06 paint beat shows surface work on the level in frame (rack or architectural face with real strokes / Flatten commit). Not a single dab on a blank white canvas with no place context.
 11. UV Unwrap + Pack + Fit precede paint on painted solids so islands are honest.
 
+Design-locked surface palette (CLAIM 2026-09-21):
+
+* Bay floor: cool worn plate albedo.
+* Loft deck: warm grit albedo (distinct from bay floor).
+* Walls: mid plaster albedo.
+* Ceiling: darker soffit albedo.
+* Rack body: dark chassis albedo + Roughness.
+* Rack bezel: accent albedo + Emission on one indicator face.
+* annex-06 must show place in frame, Flatten commit, dock visible.
+
+Object ops forced by place: doorway via boolean or Extrude+Inset with Op Card; Mirror on rack or shell as craft fits; Stair from Create (non-Box). Unused Object ops are named coverage gaps, never faked.
+
 ### Full V1 coverage (test the product while building the place)
 
 Building the Annex is a full product audit. Exercise every major shipped V1 surface while authoring the place. Do not run a thin create→topo→paint strip and call it Done.
@@ -169,4 +181,4 @@ No merge authority from QA. Do not call PRS-40 Done on a greybox or bare-grey an
 
 ## Notes
 
-Rank: rebuild after Joshua reject of PR #39. Prior greybox brief superseded. Design CLAIMED massing (entrance → entry bay → stair/platform → relay loft) and surface intent (floor / walls+ceiling / loft deck / rack painted or materialled). Capture stems annex-01…08 unchanged.
+Rank: rebuild after Joshua reject of PR #39. Prior greybox brief superseded. Design CLAIMED massing (entrance → entry bay → stair/platform → relay loft) and surface palette (bay plate, loft grit, plaster walls, dark soffit, dark chassis + Roughness, bezel Emission). Capture stems annex-01…08 unchanged.
