@@ -9,6 +9,7 @@ const SlabPick := preload("res://addons/slab/slab_pick.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabPlugin := preload("res://addons/slab/plugin.gd")
 const SlabTestUndo := preload("res://tests/slab_test_undo.gd")
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
 
 const ADDON_DIR := "res://addons/slab"
 
@@ -1162,34 +1163,11 @@ func _chip_count(panel: Node) -> int:
 
 
 func _mouse_click(control: Control) -> void:
-	var rect: Rect2 = control.get_global_rect()
-	var pos: Vector2 = rect.get_center()
-	var vp: Viewport = control.get_viewport()
-	if vp == null:
-		return
-	vp.push_input(_mouse_button(true, pos, pos))
-	vp.push_input(_mouse_button(false, pos, pos))
+	SlabTestGui.mouse_click(control)
 
 
 func _hover(control: Control) -> void:
-	var pos: Vector2 = control.get_global_rect().get_center()
-	var vp: Viewport = control.get_viewport()
-	if vp == null:
-		return
-	var motion := InputEventMouseMotion.new()
-	motion.position = pos
-	motion.global_position = pos
-	vp.push_input(motion)
-
-
-func _mouse_button(pressed: bool, position: Vector2, global_position: Vector2) -> InputEventMouseButton:
-	var event := InputEventMouseButton.new()
-	event.button_index = MOUSE_BUTTON_LEFT
-	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
-	event.pressed = pressed
-	event.position = position
-	event.global_position = global_position
-	return event
+	SlabTestGui.hover(control)
 
 
 func _label_for(node: Node, text: String) -> Label:

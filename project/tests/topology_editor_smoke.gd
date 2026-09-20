@@ -152,7 +152,6 @@ func _check_vertex_connect(editor: Object, plugin: EditorPlugin, panel: Control,
 
 
 func _check_weld_collapse(editor: Object, plugin: EditorPlugin, panel: Control, selection: RefCounted) -> void:
-	# Create a new solid for weld/collapse testing
 	await _click(_mode(panel, 0))
 	await _click(_button_named(panel.find_child("CreateChips", true, false), "Box"))
 	await _click(panel.find_child("CreateShape", true, false))
@@ -161,28 +160,13 @@ func _check_weld_collapse(editor: Object, plugin: EditorPlugin, panel: Control, 
 	var manager: EditorUndoRedoManager = plugin.get_undo_redo()
 	var history := manager.get_history_undo_redo(manager.get_object_history_id(weld_solid))
 
-	# Test Collapse: select two adjacent vertices and collapse them
 	await _click(_mode(panel, 1))
-	var verts: PackedInt64Array = weld_solid.call("get_vertices")
-	_check(verts.size() == 8, "box_has_eight_vertices")
-	if verts.size() < 2:
+	var pair: PackedInt64Array = _adjacent_vertex_pair(weld_solid)
+	_check(pair.size() == 2, "found_two_adjacent_vertices_for_collapse")
+	if pair.size() != 2:
 		return
-	# Find two vertices that share an edge
-	var edges: PackedInt64Array = weld_solid.call("get_edges")
-	var v1: int = 0
-	var v2: int = 0
-	for edge in edges:
-		var ends: PackedVector3Array = weld_solid.call("edge_endpoints", edge)
-		for v in verts:
-			if weld_solid.call("vertex_position", v).is_equal_approx(ends[0]):
-				v1 = v
-			if weld_solid.call("vertex_position", v).is_equal_approx(ends[1]):
-				v2 = v
-		if v1 != 0 and v2 != 0:
-			break
-	_check(v1 != 0 and v2 != 0, "found_two_adjacent_vertices_for_collapse")
-	if v1 == 0 or v2 == 0:
-		return
+	var v1: int = pair[0]
+	var v2: int = pair[1]
 	selection.set_ids(PackedInt64Array([v1, v2]))
 	var collapse_before: PackedByteArray = weld_solid.get("data")
 	var collapse_btn: Button = _button_named(panel, "Collapse")
@@ -194,15 +178,35 @@ func _check_weld_collapse(editor: Object, plugin: EditorPlugin, panel: Control, 
 	history.undo()
 	_check(weld_solid.get("data") == collapse_before, "collapse_undo_restores_original")
 
-	# Test Weld: requires vertices within weld distance (we'll test the button state)
 	selection.set_ids(PackedInt64Array([v1, v2]))
 	var weld_btn: Button = _button_named(panel, "Weld")
-	_check(weld_btn != null, "weld_button_exists")
-	# Weld on adjacent vertices may refuse if they're outside weld radius
-	# The key test is that the button is enabled for vertex selection
-	_check(not weld_btn.disabled, "weld_enabled_for_vertex_selection")
+	_check(weld_btn != null and not weld_btn.disabled, "weld_enabled_for_vertex_selection")
+	var weld_before: PackedByteArray = weld_solid.get("data")
+	await _click(weld_btn)
+	_check(weld_solid.get("data") == weld_before, "default_weld_distance_leaves_distant_neighbours")
+
+	var weld_spin: SpinBox = _amount_spin(panel)
+	_check(weld_spin != null, "weld_distance_spin_exists")
+	if weld_spin != null:
+		weld_spin.value = 2.5
+		await process_frame
+	await _click(weld_btn)
+	_check(weld_solid.get("data") != weld_before and weld_solid.call("get_vertices").size() < 8,
+		"weld_merges_neighbours_when_distance_covers_them")
+	history.undo()
+	_check(weld_solid.get("data") == weld_before, "weld_undo_restores_original")
+
+	var diagonal: PackedInt64Array = _diagonal_vertex_pair(weld_solid)
+	_check(diagonal.size() == 2, "found_diagonal_vertices_for_weld_refusal")
+	if diagonal.size() == 2:
+		selection.set_ids(diagonal)
+		if weld_spin != null:
+			weld_spin.value = 4.0
+			await process_frame
+		await _click(weld_btn)
+		_check(weld_solid.get("data") == weld_before and panel.get("_status").text.contains("pinch"),
+			"weld_refusal_explains_pinch")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-topology-vertex-weld-collapse"}, "after")
-	# Clean up
 	weld_solid.free()
 
 
@@ -243,7 +247,6 @@ func _check_concave_faces(editor: Object, plugin: EditorPlugin, panel: Control, 
 		concave.free()
 		return
 
-	# Test Subdivide on concave face - should work or give clear refusal
 	await _click(_mode(panel, 3))
 	selection.set_ids(PackedInt64Array([top_face]))
 	var concave_before: PackedByteArray = concave.get("data")
@@ -253,10 +256,11 @@ func _check_concave_faces(editor: Object, plugin: EditorPlugin, panel: Control, 
 	var subdivide_worked: bool = concave_after != concave_before
 	var status_text: String = panel.get("_status").text
 	_check(subdivide_worked or status_text.length() > 0, "concave_subdivide_works_or_explains_refusal")
-
-	# Test Inset on concave face - should work
 	if subdivide_worked:
-		var history := manager.get_history_undo_redo(manager.get_object_history_id(concave))
+		_check(int(concave.call("face_count")) > concave_faces_before, "concave_subdivide_adds_faces")
+
+	var history := manager.get_history_undo_redo(manager.get_object_history_id(concave))
+	if subdivide_worked:
 		history.undo()
 	selection.set_ids(PackedInt64Array([top_face]))
 	concave_before = concave.get("data")
@@ -265,7 +269,41 @@ func _check_concave_faces(editor: Object, plugin: EditorPlugin, panel: Control, 
 	amount.value = 0.2
 	await _click(_button_named(panel.find_child("OperationHandles", true, false), "Apply"))
 	concave_after = concave.get("data")
+	status_text = panel.get("_status").text
 	_check(concave_after != concave_before or status_text.length() > 0, "concave_inset_works_or_explains_refusal")
+	if concave_after != concave_before:
+		history.undo()
+		_check(concave.get("data") == concave_before, "concave_inset_undo_restores_original")
+
+	await _click(_mode(panel, 1))
+	var pair: PackedInt64Array = _adjacent_vertex_pair(concave)
+	_check(pair.size() == 2, "concave_has_adjacent_vertices")
+	if pair.size() == 2:
+		selection.set_ids(pair)
+		var collapse_before: PackedByteArray = concave.get("data")
+		var verts_before: int = concave.call("get_vertices").size()
+		var collapse_btn: Button = _button_named(panel, "Collapse")
+		_check(collapse_btn != null and not collapse_btn.disabled, "concave_collapse_enabled")
+		await _click(collapse_btn)
+		_check(concave.get("data") != collapse_before and concave.call("get_vertices").size() < verts_before,
+			"concave_collapse_reduces_vertices")
+		history.undo()
+		_check(concave.get("data") == collapse_before, "concave_collapse_undo_restores_original")
+
+		selection.set_ids(pair)
+		var weld_btn: Button = _button_named(panel, "Weld")
+		var weld_spin: SpinBox = _amount_spin(panel)
+		if weld_spin != null:
+			weld_spin.value = 4.5
+			await process_frame
+		var weld_before: PackedByteArray = concave.get("data")
+		await _click(weld_btn)
+		var weld_changed: bool = concave.get("data") != weld_before
+		status_text = panel.get("_status").text
+		_check(weld_changed or status_text.length() > 0, "concave_weld_merges_or_explains_refusal")
+		if weld_changed:
+			history.undo()
+			_check(concave.get("data") == weld_before, "concave_weld_undo_restores_original")
 	await _capture(editor, {"capture_prefix": "/tmp/slab-topology-concave"}, "after")
 	concave.free()
 
@@ -366,3 +404,51 @@ func _check_multi_material_regions(editor: Object, plugin: EditorPlugin, panel: 
 
 	await _capture(editor, {"capture_prefix": "/tmp/slab-topology-multi-material"}, "after")
 	multi_mat.free()
+
+
+func _adjacent_vertex_pair(solid: Node3D) -> PackedInt64Array:
+	var verts: PackedInt64Array = solid.call("get_vertices")
+	for edge in solid.call("get_edges"):
+		var ends: PackedVector3Array = solid.call("edge_endpoints", edge)
+		var v1 := 0
+		var v2 := 0
+		for v in verts:
+			if solid.call("vertex_position", v).is_equal_approx(ends[0]):
+				v1 = v
+			if solid.call("vertex_position", v).is_equal_approx(ends[1]):
+				v2 = v
+		if v1 != 0 and v2 != 0:
+			return PackedInt64Array([v1, v2])
+	return PackedInt64Array()
+
+
+func _diagonal_vertex_pair(solid: Node3D) -> PackedInt64Array:
+	var top := 0
+	for face in solid.call("get_faces"):
+		if solid.call("face_normal", face).y > 0.9:
+			top = face
+			break
+	if top == 0:
+		return PackedInt64Array()
+	var face_verts := PackedInt64Array()
+	var vertices: PackedInt64Array = solid.call("get_vertices")
+	for edge in solid.call("face_edges", top):
+		var ends: PackedVector3Array = solid.call("edge_endpoints", edge)
+		for v in vertices:
+			var pos: Vector3 = solid.call("vertex_position", v)
+			if pos.is_equal_approx(ends[0]) or pos.is_equal_approx(ends[1]):
+				if not face_verts.has(v):
+					face_verts.append(v)
+	if face_verts.size() < 4:
+		return PackedInt64Array()
+	return PackedInt64Array([face_verts[0], face_verts[2]])
+
+
+func _amount_spin(panel: Control) -> SpinBox:
+	var box: Node = panel.find_child("amount", true, false)
+	if box == null:
+		return null
+	for child in box.get_children():
+		if child is SpinBox:
+			return child
+	return null

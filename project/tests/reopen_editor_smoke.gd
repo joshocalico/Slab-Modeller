@@ -1,5 +1,7 @@
 extends "res://tests/native_gizmo_editor_smoke.gd"
 
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
+
 ## Editor-level reopen test for demo scenes.
 ## Verifies SlabSolid editability after reopen (modelling controls visible).
 ## scripts/godot --editor --path project --script res://tests/reopen_editor_smoke.gd
@@ -103,15 +105,20 @@ func _click(button: Button) -> void:
 	if button == null or button.disabled or not button.is_visible_in_tree():
 		_fail("Requested panel button is unavailable")
 		return
-	# Headless editor mode may not process push_input reliably for button presses.
-	# Emit pressed signal directly as a reliable fallback.
-	if button.toggle_mode:
-		if button.button_group != null:
-			button.pressed.emit()
-		else:
-			button.button_pressed = not button.button_pressed
-	else:
-		button.pressed.emit()
+	SlabTestGui.ensure_scrolled(button)
+	await process_frame
+	SlabTestGui.hover(button)
+	await process_frame
+	var already_latched := button.toggle_mode and button.button_group != null and button.button_pressed
+	var hits := {"n": 0}
+	var on_pressed := func() -> void:
+		hits["n"] += 1
+	button.pressed.connect(on_pressed)
+	SlabTestGui.mouse_click(button)
+	button.pressed.disconnect(on_pressed)
+	if hits["n"] == 0 and not already_latched:
+		_fail("viewport mouse click did not fire pressed on %s" % button.text)
+		return
 	await create_timer(0.2).timeout
 
 

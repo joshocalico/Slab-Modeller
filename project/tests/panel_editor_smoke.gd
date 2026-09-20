@@ -1,5 +1,7 @@
 extends "res://tests/native_gizmo_editor_smoke.gd"
 
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
+
 # Dedicated rendered editor acceptance for panel mode and preview transitions.
 # scripts/godot --editor --path project --script res://tests/panel_editor_smoke.gd
 # Uses actual GUI mouse events. Never saves the scene.
@@ -334,6 +336,8 @@ func _create_repeated(editor: Object, panel: Control, manager: EditorUndoRedoMan
 	var height: SpinBox = panel.find_child("size_y", true, false).find_children("*", "SpinBox", true, false)[0]
 	height.get_line_edit().grab_focus()
 	height.get_line_edit().text = "5.25"
+	height.apply()
+	await process_frame
 	await _click(panel.find_child("CreateShape", true, false))
 	await _confirm_create(editor, Vector3(8, 0, 0))
 	var native_selection: Object = editor.get_selection()
@@ -419,20 +423,20 @@ func _click(button: Button) -> void:
 	if button == null or button.disabled or not button.is_visible_in_tree():
 		_fail("Requested panel button is unavailable")
 		return
-	# Headless editor mode may not process push_input reliably for button presses.
-	# Emit pressed signal directly as a reliable fallback.
-	if button.toggle_mode:
-		if button.button_group != null:
-			# Mode buttons with ButtonGroup use pressed signal to trigger mode change
-			button.pressed.emit()
-		else:
-			# Standalone toggle buttons toggle via button_pressed and emit pressed
-			# for callbacks connected to the pressed signal (e.g. UV/Paint workspace chips).
-			button.button_pressed = not button.button_pressed
-			button.pressed.emit()
-	else:
-		# Non-toggle buttons emit pressed to trigger their action
-		button.pressed.emit()
+	SlabTestGui.ensure_scrolled(button)
+	await process_frame
+	SlabTestGui.hover(button)
+	await process_frame
+	var already_latched := button.toggle_mode and button.button_group != null and button.button_pressed
+	var hits := {"n": 0}
+	var on_pressed := func() -> void:
+		hits["n"] += 1
+	button.pressed.connect(on_pressed)
+	SlabTestGui.mouse_click(button)
+	button.pressed.disconnect(on_pressed)
+	if hits["n"] == 0 and not already_latched:
+		_fail("viewport mouse click did not fire pressed on %s" % button.text)
+		return
 	await create_timer(0.2).timeout
 
 func _mode(node: Node, value: int) -> Button:
