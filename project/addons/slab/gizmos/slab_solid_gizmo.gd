@@ -4,6 +4,7 @@ extends EditorNode3DGizmoPlugin
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
+const SlabSoftSelect := preload("res://addons/slab/slab_soft_select.gd")
 
 const PREVIEW := "loop_preview"
 const ARRAY_PREVIEW := "array_preview"
@@ -31,6 +32,7 @@ var _undo: Object
 var _paint: RefCounted
 var _rest_data := PackedByteArray()
 var _rest_frame := Transform3D.IDENTITY
+var _soft_weights: Dictionary = {}
 
 
 func _init() -> void:
@@ -98,8 +100,20 @@ func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int, xform:
 			_rest_data = PackedByteArray()
 			return
 		_rest_frame = frame["local"]
+		_soft_weights = _compute_soft_weights(solid)
 	solid.set("data", _rest_data)
-	SlabXform.transform(solid, _selection.mode, _selection.ids, xform * _rest_frame.affine_inverse())
+	var delta_xform: Transform3D = xform * _rest_frame.affine_inverse()
+	if _soft_weights.is_empty():
+		SlabXform.transform(solid, _selection.mode, _selection.ids, delta_xform)
+	else:
+		SlabXform.transform_weighted(solid, delta_xform, _soft_weights)
+
+
+func _compute_soft_weights(solid: Node3D) -> Dictionary:
+	if _selection == null or not _selection.soft_select or not _selection.soft_select_allowed():
+		return {}
+	return SlabSoftSelect.compute_weights(solid, _selection.mode, _selection.ids,
+		_selection.soft_radius, _selection.soft_falloff)
 
 
 func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restores: Array, cancel: bool) -> void:
@@ -107,6 +121,7 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 	if solid == null:
 		_rest_data = PackedByteArray()
 		_rest_frame = Transform3D.IDENTITY
+		_soft_weights = {}
 		return
 	if cancel and not _rest_data.is_empty():
 		solid.set("data", _rest_data)
@@ -119,6 +134,7 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 			_undo.commit_action(false)
 	_rest_data = PackedByteArray()
 	_rest_frame = Transform3D.IDENTITY
+	_soft_weights = {}
 
 
 func _redraw(gizmo: EditorNode3DGizmo) -> void:

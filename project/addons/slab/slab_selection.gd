@@ -18,6 +18,12 @@ var active_id: int = 0
 var isolated: bool = false
 var _hidden_solids: Dictionary = {}
 
+enum Falloff { SMOOTH, LINEAR }
+
+var soft_select: bool = false
+var soft_radius: float = 0.5
+var soft_falloff: int = Falloff.SMOOTH
+
 
 func configure_pivot(value: int, position: Variant = null) -> void:
 	if value < Pivot.SELECTION or value > Pivot.CUSTOM:
@@ -41,6 +47,34 @@ func set_xray(value: bool) -> void:
 	xray = value
 	set_hover(null, 0)
 	settings_changed.emit()
+
+
+func set_soft_select(value: bool) -> void:
+	if soft_select == value:
+		return
+	soft_select = value
+	settings_changed.emit()
+
+
+func set_soft_radius(value: float) -> void:
+	value = maxf(0.01, value)
+	if is_equal_approx(soft_radius, value):
+		return
+	soft_radius = value
+	settings_changed.emit()
+
+
+func set_soft_falloff(value: int) -> void:
+	if value < Falloff.SMOOTH or value > Falloff.LINEAR:
+		return
+	if soft_falloff == value:
+		return
+	soft_falloff = value
+	settings_changed.emit()
+
+
+func soft_select_allowed() -> bool:
+	return mode != Mode.OBJECT
 
 
 func enter_isolation(scene_root: Node) -> bool:
