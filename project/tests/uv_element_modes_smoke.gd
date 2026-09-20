@@ -206,6 +206,118 @@ func case_unwrap_pack_fit_workflow() -> void:
 	for face in faces:
 		var attrs: Dictionary = solid.call("face_uv", face)
 		expect(bool(attrs.get("unwrapped", false)), "face %d is marked unwrapped after Unwrap" % face)
+	expect(paint.active, "UV workspace stays active after Unwrap")
+	expect(panel.current_workspace() == SlabPanel.Workspace.UV, "stays in UV workspace after Unwrap")
+	panel.free()
+	solid.free()
+
+
+func case_fit_uv_frames_islands() -> void:
+	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		expect(false, "SlabSolid is built")
+		return
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var faces := PackedInt64Array(solid.call("get_faces"))
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(faces)
+	var undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, undo)
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	panel.bind_paint(paint)
+	root.add_child(panel)
+	paint.enter()
+	await process_frame
+	await process_frame
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	expect(canvas != null, "PaintCanvas exists in UV workspace")
+	actions.uv_pixels_per_meter = 64.0
+	actions.uv_texture_resolution = 1024
+	actions.run("uv_unwrap")
+	await process_frame
+	canvas.set("_uv_pixels_per_unit", 1.0)
+	canvas.set("_uv_pan", Vector2(999.0, 999.0))
+	canvas.set("_uv_center", Vector2(999.0, 999.0))
+	var before_scale: float = canvas.get("_uv_pixels_per_unit")
+	var before_pan: Vector2 = canvas.get("_uv_pan")
+	expect(before_scale == 1.0, "pre-fit scale is 1.0 (forced baseline)")
+	expect(before_pan == Vector2(999.0, 999.0), "pre-fit pan is (999, 999) (forced baseline)")
+	var fit: Button = panel.find_child("PaintFitUv", true, false)
+	expect(fit != null, "Fit UV button exists")
+	fit.pressed.emit()
+	await process_frame
+	var after_scale: float = canvas.get("_uv_pixels_per_unit")
+	var after_pan: Vector2 = canvas.get("_uv_pan")
+	var after_center: Vector2 = canvas.get("_uv_center")
+	expect(after_scale != before_scale, "Fit UV changes _uv_pixels_per_unit (was %s, now %s)" % [before_scale, after_scale])
+	expect(after_pan != before_pan, "Fit UV changes _uv_pan (was %s, now %s)" % [before_pan, after_pan])
+	expect(is_finite(after_scale) and after_scale > 0.0, "Fit UV scale is finite and positive: %s" % after_scale)
+	expect(is_finite(after_center.x) and is_finite(after_center.y), "Fit UV center is finite: %s" % after_center)
+	var loops: Array = paint.selected_uv_loops()
+	expect(loops.size() > 0, "selected_uv_loops returns at least one loop after unwrap")
+	var all_visible := true
+	for loop: PackedVector2Array in loops:
+		for uv: Vector2 in loop:
+			var canvas_pt: Vector2 = canvas.call("_uv_to_canvas", uv)
+			if not Rect2(Vector2.ZERO, canvas.size).grow(2.0).has_point(canvas_pt):
+				all_visible = false
+				break
+		if not all_visible:
+			break
+	expect(all_visible, "Fit UV frames all UV loop corners inside canvas bounds")
+	expect(paint.active, "UV workspace remains active after Fit UV")
+	expect(panel.current_workspace() == SlabPanel.Workspace.UV, "still in UV workspace after Fit UV")
+	panel.free()
+	solid.free()
+
+
+func case_3d_face_selection_frames_uv_canvas() -> void:
+	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		expect(false, "SlabSolid is built")
+		return
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var faces := PackedInt64Array(solid.call("get_faces"))
+	expect(faces.size() >= 2, "box has at least 2 faces for selection change test")
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([faces[0]]))
+	var undo := SlabTestUndo.new()
+	var actions := SlabActions.new(selection, undo)
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	panel.bind_paint(paint)
+	root.add_child(panel)
+	paint.enter()
+	await process_frame
+	await process_frame
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	expect(canvas != null, "PaintCanvas exists")
+	canvas.set("_uv_pixels_per_unit", 1.0)
+	canvas.set("_uv_pan", Vector2(999.0, 999.0))
+	var before_scale: float = canvas.get("_uv_pixels_per_unit")
+	var before_pan: Vector2 = canvas.get("_uv_pan")
+	selection.set_ids(PackedInt64Array([faces[1]]))
+	await process_frame
+	await process_frame
+	await process_frame
+	var after_scale: float = canvas.get("_uv_pixels_per_unit")
+	var after_pan: Vector2 = canvas.get("_uv_pan")
+	var scale_changed: bool = not is_equal_approx(after_scale, before_scale)
+	var pan_changed: bool = not after_pan.is_equal_approx(before_pan)
+	expect(scale_changed or pan_changed, "3D face selection change triggers UV canvas reframe (scale %s->%s, pan %s->%s)" % [before_scale, after_scale, before_pan, after_pan])
+	expect(paint.active, "UV workspace remains active after 3D face selection change")
+	expect(panel.current_workspace() == SlabPanel.Workspace.UV, "still in UV workspace after 3D selection")
 	panel.free()
 	solid.free()
 
