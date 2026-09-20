@@ -4,6 +4,7 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
+const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
 const SlabPanel := preload("res://addons/slab/slab_panel.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 
@@ -20,7 +21,10 @@ func _init() -> void:
 	_check_export_mesh_non_destructive()
 	_check_empty_selection_refuses()
 	_check_obj_produces_parseable_mesh()
+	_check_stl_produces_parseable_geometry()
+	_check_stl_export_non_destructive()
 	_check_export_chrome_exists()
+	_check_stl_filter_available()
 	_check_obj_includes_uvs()
 	_check_multi_solid_export()
 
@@ -118,6 +122,69 @@ func _check_obj_produces_parseable_mesh() -> void:
 	DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute(mtl_path)
 	solid.free()
+
+
+func _check_stl_produces_parseable_geometry() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 3, 2)) == 0, "stl box builds")
+
+	var export_mesh := SlabExportMesh.new()
+	_expect(export_mesh.bake([solid]) == OK, "bake for stl succeeds")
+
+	var path: String = "user://test_export.stl"
+	var err: int = SlabExportStl.write(path, export_mesh)
+	_expect(err == OK, "STL write succeeds")
+
+	var file := FileAccess.open(path, FileAccess.READ)
+	_expect(file != null, "STL file opens")
+	if file != null:
+		var header := file.get_buffer(80)
+		_expect(header.size() == 80, "STL has 80-byte header")
+		_expect(header.get_string_from_ascii().begins_with("Slab"), "STL header contains Slab identifier")
+		var tri_count: int = file.get_32()
+		_expect(tri_count == export_mesh.triangle_count(), "STL triangle count matches bake, got %d expected %d" % [tri_count, export_mesh.triangle_count()])
+		var expected_size: int = 80 + 4 + tri_count * 50
+		file.seek_end(0)
+		var actual_size: int = file.get_position()
+		_expect(actual_size == expected_size, "STL file size is correct binary format, got %d expected %d" % [actual_size, expected_size])
+		file.close()
+
+	DirAccess.remove_absolute(path)
+	solid.free()
+
+
+func _check_stl_export_non_destructive() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 3, 2)) == 0, "stl non-destructive box builds")
+	var before: PackedByteArray = solid.get("data")
+	var face_count_before: int = solid.call("face_count")
+
+	var export_mesh := SlabExportMesh.new()
+	var err: int = export_mesh.bake([solid])
+	_expect(err == OK, "bake for stl succeeds")
+	err = SlabExportStl.write("user://test_nd.stl", export_mesh)
+	_expect(err == OK, "STL write succeeds")
+
+	var after: PackedByteArray = solid.get("data")
+	var face_count_after: int = solid.call("face_count")
+	_expect(before == after, "STL export does not modify solid data")
+	_expect(face_count_before == face_count_after, "STL export does not change face count")
+
+	DirAccess.remove_absolute("user://test_nd.stl")
+	solid.free()
+
+
+func _check_stl_filter_available() -> void:
+	var source := FileAccess.open("res://addons/slab/plugin.gd", FileAccess.READ)
+	_expect(source != null, "plugin.gd opens for filter check")
+	if source == null:
+		return
+	var code: String = source.get_as_text()
+	source.close()
+	_expect(code.contains('add_filter("*.stl"'), "plugin.gd adds *.stl filter")
+	_expect(code.contains('STL (geometry only)'), "plugin.gd uses geometry-only honesty caption for STL")
 
 
 func _check_export_chrome_exists() -> void:
