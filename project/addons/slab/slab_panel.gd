@@ -25,6 +25,10 @@ const PAINT_PICKER_HEIGHT := 64.0
 const PAINT_PICKER_WIDTH := 220.0
 const PAINT_UV_ROW_HEIGHT := 44.0
 const PAINT_CANVAS_MIN_HEIGHT := 190.0
+const PAINT_CANVAS_MIN_WIDTH := 200.0
+const PAINT_DOCK_MIN_WIDTH := 220.0
+const UV_DOCK_MIN_WIDTH := 350.0
+const PAINT_DOCK_GUTTER := 8.0
 
 var _selection: RefCounted
 var _actions: RefCounted
@@ -390,6 +394,43 @@ func _paint_workspace_minimum_height() -> float:
 			height += _paint_body_maximum_tool_minimum_height() if child == _paint_body else (child as Control).get_combined_minimum_size().y
 			count += 1
 	return height + maxf(0, count - 1) * get_theme_constant("separation")
+
+
+func _paint_workspace_minimum_width() -> float:
+	var dock := _paint_left_dock_width(_workspace == Workspace.PAINT)
+	var split_gap := 8.0
+	if _paint_body != null:
+		var split: Control = _paint_body.find_child("PaintWorkspaceSplit", false, false) as Control
+		if split != null:
+			split_gap = float(split.get_theme_constant("separation"))
+	return dock + _scaled(PAINT_CANVAS_MIN_WIDTH) + split_gap
+
+
+func _paint_left_dock_width(is_paint_workspace: bool) -> float:
+	if not is_paint_workspace:
+		return _scaled(UV_DOCK_MIN_WIDTH)
+	var width := _scaled(PAINT_DOCK_MIN_WIDTH)
+	if _paint_brush != null:
+		width = maxf(width, _paint_brush.get_combined_minimum_size().x)
+	if _flatten_button != null:
+		width = maxf(width, _flatten_button.get_combined_minimum_size().x)
+	if _brush_color != null:
+		width = maxf(width, _brush_color.get_combined_minimum_size().x)
+	for key in ["brush_radius", "brush_opacity"]:
+		var row: Node = find_child(key, true, false)
+		if row is Control:
+			width = maxf(width, (row as Control).get_combined_minimum_size().x)
+	return width + _scaled(PAINT_DOCK_GUTTER)
+
+
+func _apply_paint_left_dock_width(is_paint_workspace: bool) -> void:
+	var dock := _paint_left_dock_width(is_paint_workspace)
+	if _paint_inspector != null:
+		_paint_inspector.custom_minimum_size.x = dock
+		_paint_inspector.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		_paint_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if _paint_inspector_fields != null:
+		_paint_inspector_fields.custom_minimum_size.x = maxf(dock - _scaled(PAINT_DOCK_GUTTER), 0.0)
 
 
 func _paint_body_maximum_tool_minimum_height() -> float:
@@ -1276,15 +1317,16 @@ func _paint_block() -> Control:
 	var inspector_scroll := ScrollContainer.new()
 	_paint_inspector = inspector_scroll
 	inspector_scroll.name = "PaintInspector"
-	inspector_scroll.custom_minimum_size.x = _scaled(350.0)
-	inspector_scroll.size_flags_horizontal = Control.SIZE_FILL
+	inspector_scroll.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH)
+	inspector_scroll.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	inspector_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	# Size the dock to its fields. SHOW_NEVER let Flatten / brush overflow under the canvas.
+	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	inspector_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var inspector := VBoxContainer.new()
 	_paint_inspector_fields = inspector
 	inspector.name = "PaintInspectorFields"
-	inspector.custom_minimum_size.x = _scaled(342.0)
+	inspector.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	inspector.add_theme_constant_override("separation", 4)
 	inspector_scroll.add_child(inspector)
 	inspector.add_child(_paint_action_row())
@@ -1312,7 +1354,7 @@ func _paint_block() -> Control:
 	split.add_child(inspector_scroll)
 	var row := HBoxContainer.new()
 	row.name = "PaintCanvasRow"
-	row.custom_minimum_size.x = _scaled(200.0)
+	row.custom_minimum_size.x = _scaled(PAINT_CANVAS_MIN_WIDTH)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.clip_contents = true
@@ -1672,7 +1714,7 @@ func _apply_picker_fonts(node: Node) -> void:
 
 func _brush_column() -> Control:
 	var col := VBoxContainer.new()
-	col.custom_minimum_size.x = _scaled(140.0)
+	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", 2)
 	
@@ -1974,7 +2016,7 @@ func _on_paint_changed() -> void:
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on
-	custom_minimum_size.x = _scaled(560.0) if on else 0.0
+	custom_minimum_size.x = _paint_workspace_minimum_width() if on else 0.0
 	custom_minimum_size.y = _scaled(SlabPaint.PAINT_HEIGHT if on else PANEL_HEIGHT)
 	if _status != null:
 		_status.autowrap_mode = TextServer.AUTOWRAP_OFF if on else TextServer.AUTOWRAP_WORD_SMART
@@ -2052,10 +2094,7 @@ func _refresh_paint_chrome() -> void:
 		_paint_uv_controls.visible = is_uv_workspace
 	if _paint_brush != null:
 		_paint_brush.visible = is_paint_workspace
-	if _paint_inspector != null:
-		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if is_paint_workspace else 350.0)
-	if _paint_inspector_fields != null:
-		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if is_paint_workspace else 342.0)
+	_apply_paint_left_dock_width(is_paint_workspace)
 	if _paint_mapping_grid != null:
 		_paint_mapping_grid.columns = 1 if is_paint_workspace else 2
 	if _paint_mapping_title != null:
@@ -2117,6 +2156,7 @@ func _refresh_paint_chrome() -> void:
 		_delete_layer_button.visible = is_paint_workspace
 	_refresh_paint_palette()
 	if _paint != null and _paint.active:
+		custom_minimum_size.x = _paint_workspace_minimum_width()
 		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
 	update_minimum_size()
 

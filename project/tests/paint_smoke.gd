@@ -1034,6 +1034,53 @@ func _check_canvas_letterbox_and_press() -> void:
 		"Pixel exposes Save Paint for its editable texture")
 	_expect(not _rects_overlap(actions_row.get_global_rect(), canvas.get_global_rect()),
 		"compact Pixel actions do not overlap the larger canvas")
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	var flatten_button: Button = panel.find_child("PaintFlatten", true, false)
+	var brush_color: ColorPickerButton = panel.find_child("BrushColor", true, false)
+	var radius_row: Control = panel.find_child("brush_radius", true, false)
+	var opacity_row: Control = panel.find_child("brush_opacity", true, false)
+	_expect(inspector != null and flatten_button != null and brush_color != null
+		and radius_row != null and opacity_row != null,
+		"Pixel exposes Flatten and the brush Color / Radius / Opacity column")
+	_expect(canvas.get_global_rect().position.x + 0.5 >= inspector.get_global_rect().end.x,
+		"Pixel canvas starts after the dock, dock=%s canvas=%s" % [inspector.get_global_rect(), canvas.get_global_rect()])
+	for paint_field in [flatten_button, brush_color, radius_row, opacity_row]:
+		if paint_field == null:
+			continue
+		var field_rect: Rect2 = paint_field.get_global_rect()
+		var dock_rect: Rect2 = inspector.get_global_rect()
+		_expect(paint_field.is_visible_in_tree()
+			and paint_field.size.x + 0.5 >= paint_field.get_combined_minimum_size().x
+			and field_rect.position.x + 0.5 >= dock_rect.position.x
+			and field_rect.end.x <= dock_rect.end.x + 1.0
+			and not _rects_overlap(field_rect, canvas.get_global_rect()),
+			"Pixel %s is complete and beside the canvas, field=%s dock=%s canvas=%s" % [
+				paint_field.name, field_rect, dock_rect, canvas.get_global_rect()
+			])
+	flatten_button.custom_minimum_size.x = 240.0
+	brush_color.custom_minimum_size.x = 240.0
+	panel.call("_refresh_paint_chrome")
+	await process_frame
+	await process_frame
+	_expect(inspector.size.x + 0.5 >= 240.0,
+		"Pixel dock grows with Flatten and Color instead of letting the canvas cover them, got %s" % inspector.size.x)
+	var wide_flatten := flatten_button.get_global_rect()
+	var wide_color := brush_color.get_global_rect()
+	var wide_dock := inspector.get_global_rect()
+	_expect(canvas.get_global_rect().position.x + 0.5 >= wide_dock.end.x
+		and wide_flatten.position.x + 0.5 >= wide_dock.position.x and wide_flatten.end.x <= wide_dock.end.x + 1.0
+		and wide_color.position.x + 0.5 >= wide_dock.position.x and wide_color.end.x <= wide_dock.end.x + 1.0
+		and not _rects_overlap(wide_flatten, canvas.get_global_rect())
+		and not _rects_overlap(wide_color, canvas.get_global_rect()),
+		"wide Flatten and Color stay in the dock column and clear of the canvas")
+	if inspector is ScrollContainer:
+		(inspector as ScrollContainer).ensure_control_visible(flatten_button)
+	await process_frame
+	_hover_at(panel, flatten_button.get_global_rect().get_center())
+	await process_frame
+	var flatten_hover: Control = panel.get_viewport().gui_get_hovered_control()
+	_expect(flatten_hover == flatten_button or (flatten_hover != null and flatten_button.is_ancestor_of(flatten_hover)),
+		"gui_get_hovered_control on Flatten is Flatten, not the canvas, got %s" % flatten_hover)
 	var pixel_canvas_height := canvas.size.y
 	var pixel_canvas_width := canvas.size.x
 	var pixel_help: Label = panel.find_child("PaintHelp", true, false)
