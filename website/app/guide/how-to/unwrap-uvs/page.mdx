@@ -20,6 +20,10 @@ The UV canvas frames the new layout after Unwrap. Undo and Redo also frame a res
 
 After placement, click **Pack** to re-atlas the existing islands without unfolding them again. The tooltip is `Repack islands without re-unwrapping.` If the islands no longer fit, Pack refuses, leaves the solid unchanged, and asks you to raise **Texture px** or scale down **Placement**.
 
+![UV Mapping chrome with Unwrap, Pack, and Fit UV](/img/pack-01-uv-chrome.png)
+
+![Pack overflow refuse naming Texture px or Placement](/img/pack-02-overflow-refuse.png)
+
 Unwrap resets Repeat U, Repeat V, Offset and Rotation so the requested density is exact. Pack also resets those fields after it bakes the new atlas. Apply placement afterward if an island needs to move, turn or repeat.
 
 Pixel mode hides the UV element strip, Unwrap, and Pack. Soft Select stays with modelling and does not appear in the UV workspace.
