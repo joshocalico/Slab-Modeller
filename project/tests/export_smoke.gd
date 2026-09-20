@@ -5,6 +5,7 @@ const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
+const SlabExportFbx := preload("res://addons/slab/slab_export_fbx.gd")
 const SlabPanel := preload("res://addons/slab/slab_panel.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 
@@ -27,6 +28,9 @@ func _init() -> void:
 	_check_stl_filter_available()
 	_check_obj_includes_uvs()
 	_check_multi_solid_export()
+	_check_fbx_produces_parseable_mesh()
+	_check_fbx_export_non_destructive()
+	_check_fbx_filter_available()
 
 	_finish()
 
@@ -273,6 +277,75 @@ func _check_multi_solid_export() -> void:
 
 	solid_a.free()
 	solid_b.free()
+
+
+func _check_fbx_produces_parseable_mesh() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 3, 2)) == 0, "fbx box builds")
+
+	var export_mesh := SlabExportMesh.new()
+	_expect(export_mesh.bake([solid]) == OK, "bake for fbx succeeds")
+
+	var path: String = "user://test_export.fbx"
+	var err: int = SlabExportFbx.write(path, export_mesh)
+	_expect(err == OK, "FBX write succeeds")
+
+	var file := FileAccess.open(path, FileAccess.READ)
+	_expect(file != null, "FBX file opens")
+	if file != null:
+		var content: String = file.get_as_text()
+		file.close()
+		_expect(content.contains("FBXHeaderExtension"), "FBX has header extension")
+		_expect(content.contains("FBXVersion: 7400"), "FBX is version 7.4")
+		_expect(content.contains("Geometry:"), "FBX has geometry section")
+		_expect(content.contains("Vertices:"), "FBX has vertices data")
+		_expect(content.contains("PolygonVertexIndex:"), "FBX has polygon indices")
+		_expect(content.contains("LayerElementNormal:"), "FBX has normals")
+		_expect(content.contains("LayerElementUV:"), "FBX has UVs")
+		_expect(content.contains("Material::"), "FBX has material nodes")
+		var vertex_data_found: bool = false
+		for line in content.split("\n"):
+			if line.strip_edges().begins_with("Vertices:"):
+				vertex_data_found = true
+				break
+		_expect(vertex_data_found, "FBX contains vertex array declaration")
+
+	DirAccess.remove_absolute(path)
+	solid.free()
+
+
+func _check_fbx_export_non_destructive() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	_expect(solid.call("make_box", Vector3(2, 3, 2)) == 0, "fbx non-destructive box builds")
+	var before: PackedByteArray = solid.get("data")
+	var face_count_before: int = solid.call("face_count")
+
+	var export_mesh := SlabExportMesh.new()
+	var err: int = export_mesh.bake([solid])
+	_expect(err == OK, "bake for fbx succeeds")
+	err = SlabExportFbx.write("user://test_nd.fbx", export_mesh)
+	_expect(err == OK, "FBX write succeeds")
+
+	var after: PackedByteArray = solid.get("data")
+	var face_count_after: int = solid.call("face_count")
+	_expect(before == after, "FBX export does not modify solid data")
+	_expect(face_count_before == face_count_after, "FBX export does not change face count")
+
+	DirAccess.remove_absolute("user://test_nd.fbx")
+	solid.free()
+
+
+func _check_fbx_filter_available() -> void:
+	var source := FileAccess.open("res://addons/slab/plugin.gd", FileAccess.READ)
+	_expect(source != null, "plugin.gd opens for FBX filter check")
+	if source == null:
+		return
+	var code: String = source.get_as_text()
+	source.close()
+	_expect(code.contains('add_filter("*.fbx"'), "plugin.gd adds *.fbx filter")
+	_expect(code.contains('FBX (mesh, UVs, material names)'), "plugin.gd uses honest FBX caption")
 
 
 func _top_face(solid: Node3D) -> int:

@@ -13,6 +13,7 @@ const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd"
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
+const SlabExportFbx := preload("res://addons/slab/slab_export_fbx.gd")
 const SlabImportMesh := preload("res://addons/slab/slab_import_mesh.gd")
 const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
@@ -502,6 +503,7 @@ func _on_export_requested(solids: Array) -> void:
 	_export_dialog.clear_filters()
 	_export_dialog.add_filter("*.obj", "Wavefront OBJ")
 	_export_dialog.add_filter("*.stl", "STL (geometry only)")
+	_export_dialog.add_filter("*.fbx", "FBX (mesh, UVs, material names)")
 	var default_name: String = _export_solids[0].name if _export_solids.size() == 1 else "export"
 	default_name = default_name.replace(" ", "_").to_lower()
 	_export_dialog.current_file = default_name + ".obj"
@@ -522,6 +524,8 @@ func _on_export_file_selected(path: String) -> void:
 	match ext:
 		"stl":
 			err = SlabExportStl.write(path, export_mesh)
+		"fbx":
+			err = SlabExportFbx.write(path, export_mesh)
 		_:
 			err = SlabExportObj.write(path, export_mesh)
 	if err != OK:
