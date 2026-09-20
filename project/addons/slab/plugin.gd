@@ -12,6 +12,7 @@ const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
+const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
 const SweepGizmo := preload("res://addons/slab/gizmos/slab_sweep_gizmo.gd")
@@ -491,6 +492,7 @@ func _on_export_requested(solids: Array) -> void:
 		EditorInterface.get_base_control().add_child(_export_dialog)
 	_export_dialog.clear_filters()
 	_export_dialog.add_filter("*.obj", "Wavefront OBJ")
+	_export_dialog.add_filter("*.stl", "STL (geometry only)")
 	var default_name: String = _export_solids[0].name if _export_solids.size() == 1 else "export"
 	default_name = default_name.replace(" ", "_").to_lower()
 	_export_dialog.current_file = default_name + ".obj"
@@ -507,7 +509,12 @@ func _on_export_file_selected(path: String) -> void:
 		_actions.reported.emit("Export failed: could not bake mesh data.")
 		_export_solids.clear()
 		return
-	err = SlabExportObj.write(path, export_mesh)
+	var ext: String = path.get_extension().to_lower()
+	match ext:
+		"stl":
+			err = SlabExportStl.write(path, export_mesh)
+		_:
+			err = SlabExportObj.write(path, export_mesh)
 	if err != OK:
 		_actions.reported.emit("Export failed: could not write file.")
 		_export_solids.clear()
