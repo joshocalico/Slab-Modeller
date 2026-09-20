@@ -5,6 +5,7 @@ signal changed
 signal hover_changed
 signal settings_changed
 signal mode_requested
+signal isolation_reported(text: String)
 
 enum Mode { OBJECT, VERTEX, EDGE, FACE }
 enum UVMode { UV_FACE, UV_EDGE, UV_VERT }
@@ -18,6 +19,16 @@ var xray: bool = false
 var active_id: int = 0
 var isolated: bool = false
 var _hidden_solids: Dictionary = {}
+var face_isolated: bool = false
+var _face_mask := PackedInt64Array()
+var _face_mask_solid: Node3D = null
+
+const FACE_ISOLATE_ON := "Face isolation on — Esc exits."
+const FACE_ISOLATE_OFF := "Face isolation off — full face visibility restored."
+const FACE_ISOLATE_EXTERNAL := "Face Isolate needs a Slab solid. Promote first. External mesh unchanged."
+const FACE_ISOLATE_NEED_FACE_MODE := "Face Isolate needs Face mode."
+const FACE_ISOLATE_NEED_FACES := "Select faces before isolating them."
+const FACE_ISOLATE_NEED_SOLID := "Select a Slab solid before isolating faces."
 
 enum Falloff { SMOOTH, LINEAR }
 
@@ -211,6 +222,87 @@ func toggle_isolation(scene_root: Node) -> bool:
 	return enter_isolation(scene_root)
 
 
+func face_isolate_refuse_reason() -> String:
+	drop_invalid()
+	if has_any_external_mesh():
+		return FACE_ISOLATE_EXTERNAL
+	if objects.is_empty() or not is_solid(solid):
+		return FACE_ISOLATE_NEED_SOLID
+	if mode != Mode.FACE:
+		return FACE_ISOLATE_NEED_FACE_MODE
+	if ids.is_empty():
+		return FACE_ISOLATE_NEED_FACES
+	return ""
+
+
+func enter_face_isolation() -> Dictionary:
+	var reason := face_isolate_refuse_reason()
+	if reason != "":
+		_report_isolation(reason)
+		return { "ok": false, "status": reason }
+	if face_isolated and _face_mask_solid == solid:
+		_refresh_face_isolation_mask()
+		return { "ok": true, "status": FACE_ISOLATE_ON }
+	exit_face_isolation()
+	_face_mask_solid = solid
+	_face_mask = ids.duplicate()
+	face_isolated = true
+	_apply_face_isolation_display()
+	settings_changed.emit()
+	_report_isolation(FACE_ISOLATE_ON)
+	return { "ok": true, "status": FACE_ISOLATE_ON }
+
+
+func exit_face_isolation() -> Dictionary:
+	if not face_isolated:
+		return { "ok": true, "status": "" }
+	_clear_face_isolation_display()
+	_face_mask = PackedInt64Array()
+	_face_mask_solid = null
+	face_isolated = false
+	settings_changed.emit()
+	_report_isolation(FACE_ISOLATE_OFF)
+	return { "ok": true, "status": FACE_ISOLATE_OFF }
+
+
+func toggle_face_isolation() -> Dictionary:
+	if face_isolated:
+		return exit_face_isolation()
+	return enter_face_isolation()
+
+
+func _refresh_face_isolation_mask() -> void:
+	if not face_isolated:
+		return
+	if _face_mask_solid == null or not is_instance_valid(_face_mask_solid) or solid != _face_mask_solid \
+			or mode != Mode.FACE:
+		exit_face_isolation()
+		return
+	if not ids.is_empty():
+		_face_mask = ids.duplicate()
+		_apply_face_isolation_display()
+
+
+func _apply_face_isolation_display() -> void:
+	if _face_mask_solid == null or not is_instance_valid(_face_mask_solid):
+		return
+	if _face_mask_solid.has_method("set_display_face_mask"):
+		_face_mask_solid.call("set_display_face_mask", _face_mask)
+
+
+func _clear_face_isolation_display() -> void:
+	if _face_mask_solid == null or not is_instance_valid(_face_mask_solid):
+		return
+	if _face_mask_solid.has_method("clear_display_face_mask"):
+		_face_mask_solid.call("clear_display_face_mask")
+
+
+func _report_isolation(text: String) -> void:
+	if text == "":
+		return
+	isolation_reported.emit(text)
+
+
 const SOLID_CLASS := "SlabSolid"
 const EXTERNAL_MESH_CLASS := "SlabExternalMesh"
 
@@ -232,6 +324,8 @@ var mode: int = Mode.OBJECT:
 	set(value):
 		if value == mode or not MODE_LABELS.has(value):
 			return
+		if face_isolated and value != Mode.FACE:
+			exit_face_isolation()
 		mode = value
 		if orientation == Orientation.FACE and mode != Mode.FACE:
 			orientation = Orientation.WORLD
@@ -340,6 +434,14 @@ func set_objects(nodes: Array) -> void:
 			kept.append(solid)
 	if kept == objects:
 		return
+	if face_isolated:
+		var keep_mask := false
+		for obj in kept:
+			if obj == _face_mask_solid:
+				keep_mask = true
+				break
+		if not keep_mask:
+			exit_face_isolation()
 	objects = kept
 	ids = PackedInt64Array()
 	active_id = 0
@@ -360,6 +462,8 @@ func set_ids(value: PackedInt64Array) -> void:
 		return
 	ids = value
 	active_id = ids[ids.size() - 1] if not ids.is_empty() else 0
+	if face_isolated:
+		_refresh_face_isolation_mask()
 	changed.emit()
 
 

@@ -27,6 +27,7 @@
 
 #include <cstring>
 #include <map>
+#include <unordered_set>
 #include <utility>
 
 using namespace godot;
@@ -71,6 +72,11 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_display_preview", "data"), &SlabSolid::set_display_preview);
 	ClassDB::bind_method(D_METHOD("clear_display_preview"), &SlabSolid::clear_display_preview);
 	ClassDB::bind_method(D_METHOD("has_display_preview"), &SlabSolid::has_display_preview);
+	ClassDB::bind_method(D_METHOD("set_display_face_mask", "faces"), &SlabSolid::set_display_face_mask);
+	ClassDB::bind_method(D_METHOD("clear_display_face_mask"), &SlabSolid::clear_display_face_mask);
+	ClassDB::bind_method(D_METHOD("has_display_face_mask"), &SlabSolid::has_display_face_mask);
+	ClassDB::bind_method(D_METHOD("get_display_face_mask"), &SlabSolid::get_display_face_mask);
+	ClassDB::bind_method(D_METHOD("is_display_face_visible", "face"), &SlabSolid::is_display_face_visible);
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
@@ -427,11 +433,53 @@ void SlabSolid::clear_display_preview() {
 	if (!display_preview_active) return;
 	display_preview_active = false;
 	_ensure_children();
-	_assign_display(committed_mesh, committed_surface_slots);
+	_assign_committed_display();
 }
 
 bool SlabSolid::has_display_preview() const {
 	return display_preview_active;
+}
+
+bool SlabSolid::set_display_face_mask(const PackedInt64Array &p_faces) {
+	display_face_mask.clear();
+	for (int i = 0; i < p_faces.size(); i++) {
+		display_face_mask.insert(p_faces[i]);
+	}
+	display_face_mask_active = !display_face_mask.empty();
+	if (!display_preview_active) {
+		_assign_committed_display();
+	}
+	return display_face_mask_active;
+}
+
+void SlabSolid::clear_display_face_mask() {
+	if (!display_face_mask_active && display_face_mask.empty()) {
+		return;
+	}
+	display_face_mask_active = false;
+	display_face_mask.clear();
+	if (!display_preview_active) {
+		_assign_committed_display();
+	}
+}
+
+bool SlabSolid::has_display_face_mask() const {
+	return display_face_mask_active;
+}
+
+PackedInt64Array SlabSolid::get_display_face_mask() const {
+	PackedInt64Array out;
+	out.resize(int64_t(display_face_mask.size()));
+	int64_t i = 0;
+	for (const int64_t id : display_face_mask) {
+		out.set(i, id);
+		i++;
+	}
+	return out;
+}
+
+bool SlabSolid::is_display_face_visible(int64_t p_face) const {
+	return !display_face_mask_active || display_face_mask.count(p_face) > 0;
 }
 
 int SlabSolid::make_box(const Vector3 &p_size) {
@@ -1248,7 +1296,8 @@ void SlabSolid::_rebuild() {
 }
 
 Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
-		PackedVector3Array *r_verts, PackedInt32Array *r_indices) const {
+		PackedVector3Array *r_verts, PackedInt32Array *r_indices,
+		const std::unordered_set<int64_t> *p_face_mask) const {
 	slab::EmitOut emitted;
 	slab::emit_arrays(p_mesh, emitted);
 
@@ -1287,6 +1336,9 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 		std::map<uint32_t, Bucket> buckets;
 		std::vector<uint32_t> order;
 		for (size_t t = 0; t < emitted.provenance.size(); t++) {
+			if (p_face_mask != nullptr && p_face_mask->count(slab::pack(emitted.provenance[t])) == 0) {
+				continue;
+			}
 			const uint32_t slot = t < emitted.slots.size() ? emitted.slots[t] : 0;
 			if (buckets.find(slot) == buckets.end()) {
 				order.push_back(slot);
@@ -1330,7 +1382,11 @@ void SlabSolid::_rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision)
 		committed_mesh = array_mesh;
 		committed_surface_slots = surface_slots;
 	}
-	_assign_display(array_mesh, surface_slots);
+	if (display_preview_active || !display_face_mask_active) {
+		_assign_display(array_mesh, surface_slots);
+	} else {
+		_assign_committed_display();
+	}
 	if (!p_update_collision) return;
 
 	if (collision_enabled && indices.size() >= 3) {
@@ -1348,6 +1404,17 @@ void SlabSolid::_rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision)
 	}
 	collider->set_disabled(!collision_enabled);
 	body->set_visible(collision_enabled);
+}
+
+void SlabSolid::_assign_committed_display() {
+	_ensure_children();
+	if (!display_face_mask_active) {
+		_assign_display(committed_mesh, committed_surface_slots);
+		return;
+	}
+	std::vector<uint32_t> slots;
+	const Ref<ArrayMesh> masked = _build_mesh_from(live_mesh, slots, nullptr, nullptr, &display_face_mask);
+	_assign_display(masked, slots);
 }
 
 void SlabSolid::_assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots) {

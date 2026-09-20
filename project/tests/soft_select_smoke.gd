@@ -260,6 +260,19 @@ func _test_isolate_coexistence() -> void:
 	selection.set_soft_select(false)
 	check(not selection.soft_select, "soft select toggled off")
 	check(selection.isolated, "isolation remains after soft select toggle")
+	var top: int = 0
+	for face in solid.call("get_faces"):
+		if solid.call("face_normal", face).y > 0.9:
+			top = face
+			break
+	selection.set_ids(PackedInt64Array([top]))
+	selection.set_soft_select(true)
+	selection.enter_face_isolation()
+	check(selection.face_isolated and selection.isolated and selection.soft_select,
+		"face isolation coexists with solid Isolate and Soft Select")
+	selection.exit_face_isolation()
+	check(not selection.face_isolated, "exited face isolation")
+	check(selection.isolated and selection.soft_select, "solid Isolate and Soft Select survive Faces exit")
 	selection.exit_isolation()
 	check(not selection.isolated, "exited isolation")
 	scene.free()

@@ -19,6 +19,7 @@
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <unordered_set>
 #include <vector>
 
 namespace godot {
@@ -75,6 +76,11 @@ public:
 	bool set_display_preview(const PackedByteArray &p_data);
 	void clear_display_preview();
 	bool has_display_preview() const;
+	bool set_display_face_mask(const PackedInt64Array &p_faces);
+	void clear_display_face_mask();
+	bool has_display_face_mask() const;
+	PackedInt64Array get_display_face_mask() const;
+	bool is_display_face_visible(int64_t p_face) const;
 
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
@@ -135,13 +141,17 @@ private:
 	StaticBody3D *body = nullptr;
 	CollisionShape3D *collider = nullptr;
 	bool display_preview_active = false;
+	bool display_face_mask_active = false;
+	std::unordered_set<int64_t> display_face_mask;
 
 	void _ensure_children();
 	void _rebuild();
 	void _rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision);
 	void _assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots);
+	void _assign_committed_display();
 	Ref<ArrayMesh> _build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
-			PackedVector3Array *r_verts = nullptr, PackedInt32Array *r_indices = nullptr) const;
+			PackedVector3Array *r_verts = nullptr, PackedInt32Array *r_indices = nullptr,
+			const std::unordered_set<int64_t> *p_face_mask = nullptr) const;
 	int _reject(const slab::Mesh &p_mesh, slab::MeshFault p_fault,
 			slab::FaultElement p_fallback_element = slab::FaultElement::NONE,
 			uint32_t p_fallback_slot = slab::INVALID_IDX);

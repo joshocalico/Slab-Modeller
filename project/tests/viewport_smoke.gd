@@ -382,6 +382,47 @@ func case_escape_returns_to_object_mode_and_stops() -> void:
 	expect(_session.state().mode == SlabSelection.Mode.OBJECT, "escape returns to object mode")
 
 
+func case_escape_exits_face_isolation_without_clearing_soft_select() -> void:
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box])
+	_session.adopt_host_selection()
+	var selection: SlabSelection = _session.state()
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([_world.top_face(box)]))
+	selection.set_soft_select(true)
+	selection.enter_face_isolation()
+	expect(selection.face_isolated, "entered face isolation before Escape")
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_ESCAPE))
+	expect(verdict == SlabViewport.Verdict.STOP, "Escape exits Face isolation")
+	expect(not selection.face_isolated, "Escape restores face visibility")
+	expect(selection.soft_select, "Escape does not clear Soft Select")
+	expect(selection.mode == SlabSelection.Mode.FACE, "Escape keeps Face mode")
+	expect(not selection.ids.is_empty(), "Escape keeps the face selection")
+
+
+func case_escape_exits_faces_without_toggling_solid_isolate() -> void:
+	var box: Node3D = _world.box()
+	_host.stub_host_selection([box])
+	_session.adopt_host_selection()
+	var selection: SlabSelection = _session.state()
+	selection.enter_isolation(_world.stage())
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([_world.top_face(box)]))
+	selection.set_soft_select(true)
+	selection.enter_face_isolation()
+	expect(selection.isolated and selection.face_isolated, "both isolate modes are on")
+	var verdict: int = _session.handle(_world.camera(), _world.key(KEY_ESCAPE))
+	expect(verdict == SlabViewport.Verdict.STOP, "Escape claims Face isolation first")
+	expect(not selection.face_isolated, "Escape exits Faces only")
+	expect(selection.isolated, "Escape does not toggle solid Isolate")
+	expect(selection.soft_select, "Soft Select stays on")
+	expect(selection.mode == SlabSelection.Mode.FACE, "Face mode stays after leaving Faces")
+	verdict = _session.handle(_world.camera(), _world.key(KEY_ESCAPE))
+	expect(verdict == SlabViewport.Verdict.STOP, "second Escape exits solid Isolate")
+	expect(not selection.isolated, "solid Isolate exits on the next Escape")
+	expect(selection.mode == SlabSelection.Mode.FACE, "second Escape does not drop to Object while leaving solid Isolate")
+
+
 func case_changing_mode_clears_ids_and_hover() -> void:
 	var box: Node3D = _world.box()
 	_host.stub_host_selection([box])
