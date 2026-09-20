@@ -115,6 +115,7 @@ func toggle_isolation(scene_root: Node) -> bool:
 
 
 const SOLID_CLASS := "SlabSolid"
+const EXTERNAL_MESH_CLASS := "SlabExternalMesh"
 
 const MODE_LABELS: Dictionary = {
 	Mode.OBJECT: "Object",
@@ -177,12 +178,26 @@ static func is_solid(node: Object) -> bool:
 	return node != null and is_instance_valid(node) and node.is_class(SOLID_CLASS)
 
 
+static func is_external_mesh(node: Object) -> bool:
+	if node == null or not is_instance_valid(node):
+		return false
+	if node.is_class(EXTERNAL_MESH_CLASS):
+		return true
+	if node is Node and node.has_meta("slab_external_mesh"):
+		return true
+	return false
+
+
+static func is_slab_object(node: Object) -> bool:
+	return is_solid(node) or is_external_mesh(node)
+
+
 static func owning_solid(node: Object) -> Node3D:
 	if node == null or not is_instance_valid(node):
 		return null
 	var current: Node = node as Node
 	while current != null:
-		if is_solid(current):
+		if is_slab_object(current):
 			return current
 		current = current.get_parent()
 	return null
@@ -193,7 +208,7 @@ static func owning_solid(node: Object) -> Node3D:
 static func editor_owning_solid(node: Object) -> Node3D:
 	if node == null or not is_instance_valid(node) or not node is Node:
 		return null
-	if is_solid(node):
+	if is_slab_object(node):
 		return node as Node3D
 	var current := node as Node
 	var crossed_internal := false
@@ -201,7 +216,7 @@ static func editor_owning_solid(node: Object) -> Node3D:
 		var parent := current.get_parent()
 		if not parent.get_children().has(current):
 			crossed_internal = true
-		if is_solid(parent):
+		if is_slab_object(parent):
 			return (parent as Node3D) if crossed_internal else null
 		current = parent
 	return null
@@ -293,6 +308,32 @@ func count() -> int:
 	return objects.size() if mode == Mode.OBJECT else ids.size()
 
 
+func has_only_external_meshes() -> bool:
+	drop_invalid()
+	if objects.is_empty():
+		return false
+	for obj in objects:
+		if obj != null and is_instance_valid(obj) and is_solid(obj):
+			return false
+	return true
+
+
+func has_any_external_mesh() -> bool:
+	drop_invalid()
+	for obj in objects:
+		if obj != null and is_instance_valid(obj) and is_external_mesh(obj):
+			return true
+	return false
+
+
+func first_external_mesh() -> Node3D:
+	drop_invalid()
+	for obj in objects:
+		if obj != null and is_instance_valid(obj) and is_external_mesh(obj):
+			return obj
+	return null
+
+
 func mode_label() -> String:
 	return MODE_LABELS[mode]
 
@@ -303,7 +344,18 @@ func describe() -> String:
 		return "No solid selected."
 	if mode == Mode.OBJECT:
 		if objects.size() == 1:
-			return "%s selected." % objects[0].name
+			var obj: Node3D = objects[0]
+			if is_external_mesh(obj):
+				return "%s (External mesh) selected." % obj.name
+			return "%s selected." % obj.name
+		var external_count: int = 0
+		for obj in objects:
+			if is_external_mesh(obj):
+				external_count += 1
+		if external_count == objects.size():
+			return "%d external meshes selected." % objects.size()
+		if external_count > 0:
+			return "%d objects selected (%d external)." % [objects.size(), external_count]
 		return "%d solids selected." % objects.size()
 	var nouns: Array = MODE_NOUNS[mode]
 	var who: String = objects[0].name
@@ -319,9 +371,19 @@ func compact_description() -> String:
 	if objects.is_empty():
 		return "No solid selected"
 	if objects.size() > 1:
+		var external_count: int = 0
+		for obj in objects:
+			if is_external_mesh(obj):
+				external_count += 1
+		if external_count == objects.size():
+			return "%d external meshes" % objects.size()
+		if external_count > 0:
+			return "%d objects (%d external)" % [objects.size(), external_count]
 		return "%d solids selected" % objects.size()
 	var who: String = objects[0].name
 	if mode == Mode.OBJECT:
+		if is_external_mesh(objects[0]):
+			return "%s (External mesh)" % who
 		return who
 	var nouns: Array = MODE_NOUNS[mode]
 	if ids.is_empty():

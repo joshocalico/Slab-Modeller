@@ -1725,12 +1725,23 @@ func _on_paint_changed() -> void:
 	_sync_model_chrome()
 	if _operation_row != null:
 		_operation_row.visible = not on and _actions.operation_active
+	var external_only: bool = _selection != null and _selection.has_only_external_meshes()
 	if _uv_toggle != null:
 		_uv_toggle.set_pressed_no_signal(_workspace == Workspace.UV)
 		_style_tool(_uv_toggle, _workspace == Workspace.UV)
+		_uv_toggle.disabled = external_only
+		if external_only:
+			_uv_toggle.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+		else:
+			_uv_toggle.tooltip_text = "Open the UV workspace for unwrapping and material placement. Escape closes it."
 	if _paint_toggle != null:
 		_paint_toggle.set_pressed_no_signal(_workspace == Workspace.PAINT)
 		_style_tool(_paint_toggle, _workspace == Workspace.PAINT)
+		_paint_toggle.disabled = external_only
+		if external_only:
+			_paint_toggle.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+		else:
+			_paint_toggle.tooltip_text = "Open the pixel Paint workspace. Escape closes it."
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on

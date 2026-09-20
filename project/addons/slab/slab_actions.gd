@@ -47,6 +47,7 @@ signal object_order_changed(nodes: Array)
 signal create_placement_requested(row: Dictionary, plan: Dictionary)
 signal create_settings_changed
 signal export_requested(solids: Array)
+signal import_requested
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -311,6 +312,8 @@ static func section_of(row: Dictionary) -> String:
 	var id: String = str(row.get("id", ""))
 	if id.begins_with("uv_") or id == "set_face_material":
 		return SECTION_UV
+	if id == "import_mesh":
+		return "Object"
 	var modes: Array = row["modes"]
 	if id == "bevel_edges":
 		return "Edge"
@@ -321,12 +324,19 @@ static func section_of(row: Dictionary) -> String:
 	return SlabSelection.MODE_LABELS[modes[0]]
 
 
+const EXTERNAL_MESH_ALLOWED_ACTIONS: Array[String] = [
+	"export_solids", "import_mesh",
+]
+
+
 func disabled_reason(row: Dictionary) -> String:
 	if operation_active:
 		return "Apply or cancel the current preview first."
 	var modes: Array = row["modes"]
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
+	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):
+		return "Convert to a Slab solid first (Promote — later)."
 	var exact: int = row.get("exact_count", 0)
 	if exact > 0 and _selection.count() != exact:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
@@ -336,6 +346,16 @@ func disabled_reason(row: Dictionary) -> String:
 			return "Select a solid to export."
 		return "%s needs %s." % [row["label"], _element_count(_selection.mode, need)]
 	return ""
+
+
+func _is_external_mesh_allowed(row: Dictionary) -> bool:
+	var action_id: String = row.get("id", "")
+	if action_id in EXTERNAL_MESH_ALLOWED_ACTIONS:
+		return true
+	var section: String = section_of(row)
+	if section == SECTION_CREATE:
+		return true
+	return false
 
 
 func tooltip_of(row: Dictionary) -> String:
@@ -697,6 +717,11 @@ func _export_op() -> Dictionary:
 	return { "status": "" }
 
 
+func _import_op() -> Dictionary:
+	import_requested.emit()
+	return { "status": "" }
+
+
 func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
@@ -814,6 +839,7 @@ func _build() -> Array[Dictionary]:
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
 		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
+		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh file (OBJ/STL). Non-manifold and open meshes are allowed.", 0, _import_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),

@@ -30,6 +30,7 @@ const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 var _selection: RefCounted
 var _metrics: RefCounted
 var _buttons: Dictionary = {}
+var _with_labels: bool = false
 
 
 static func keycode_for(mode: int) -> int:
@@ -46,6 +47,7 @@ static func mode_for_keycode(keycode: int) -> int:
 func setup(selection: RefCounted, with_labels: bool, metrics: RefCounted = null) -> void:
 	_selection = selection
 	_metrics = metrics if metrics != null else SlabMetrics.at_scale(1.0)
+	_with_labels = with_labels
 	add_theme_constant_override("separation", 2)
 	var group := ButtonGroup.new()
 	for mode in SlabSelection.MODE_LABELS:
@@ -55,9 +57,21 @@ func setup(selection: RefCounted, with_labels: bool, metrics: RefCounted = null)
 
 
 func refresh() -> void:
+	var external_only: bool = _selection.has_only_external_meshes()
 	for mode in _buttons:
 		var button: Button = _buttons[mode]
 		button.set_pressed_no_signal(mode == _selection.mode)
+		if mode != SlabSelection.Mode.OBJECT:
+			button.disabled = external_only
+			if external_only:
+				button.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+			else:
+				var lines := PackedStringArray()
+				if not _with_labels:
+					lines.append(SlabSelection.MODE_LABELS[mode])
+				lines.append(MODE_HINTS[mode])
+				lines.append("Shortcut %s." % OS.get_keycode_string(MODE_KEYS[mode]))
+				button.tooltip_text = "\n".join(lines)
 
 
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:

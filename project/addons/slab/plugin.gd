@@ -13,6 +13,8 @@ const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd"
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
+const SlabImportMesh := preload("res://addons/slab/slab_import_mesh.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
 const SweepGizmo := preload("res://addons/slab/gizmos/slab_sweep_gizmo.gd")
@@ -33,6 +35,7 @@ var _workspace := "3D"
 var _overlay_camera: Camera3D
 var _export_dialog: EditorFileDialog
 var _export_solids: Array[Node3D] = []
+var _import_dialog: EditorFileDialog
 
 
 func _enter_tree() -> void:
@@ -75,6 +78,7 @@ func _enter_tree() -> void:
 	if not scene_saved.is_connected(_on_scene_saved):
 		scene_saved.connect(_on_scene_saved)
 	_actions.export_requested.connect(_on_export_requested)
+	_actions.import_requested.connect(_on_import_requested)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
@@ -90,10 +94,15 @@ func _exit_tree() -> void:
 		scene_saved.disconnect(_on_scene_saved)
 	if _actions and _actions.export_requested.is_connected(_on_export_requested):
 		_actions.export_requested.disconnect(_on_export_requested)
+	if _actions and _actions.import_requested.is_connected(_on_import_requested):
+		_actions.import_requested.disconnect(_on_import_requested)
 	if _export_dialog and is_instance_valid(_export_dialog):
 		_export_dialog.queue_free()
 		_export_dialog = null
 	_export_solids.clear()
+	if _import_dialog and is_instance_valid(_import_dialog):
+		_import_dialog.queue_free()
+		_import_dialog = null
 	if _selection:
 		if _selection.changed.is_connected(_on_selection_changed):
 			_selection.changed.disconnect(_on_selection_changed)
@@ -128,7 +137,7 @@ func _exit_tree() -> void:
 
 
 func _handles(object: Object) -> bool:
-	return SlabSelection.editor_owning_solid(object) != null
+	return SlabSelection.editor_owning_solid(object) != null or SlabExternalMesh.is_external_mesh(object)
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
@@ -522,3 +531,50 @@ func _on_export_file_selected(path: String) -> void:
 	var count: int = _export_solids.size()
 	_actions.reported.emit("Exported %d %s → %s" % [count, "solid" if count == 1 else "solids", path])
 	_export_solids.clear()
+
+
+func _on_import_requested() -> void:
+	if _import_dialog == null or not is_instance_valid(_import_dialog):
+		_import_dialog = EditorFileDialog.new()
+		_import_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+		_import_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_import_dialog.title = "Import Mesh..."
+		_import_dialog.file_selected.connect(_on_import_file_selected)
+		EditorInterface.get_base_control().add_child(_import_dialog)
+	_import_dialog.clear_filters()
+	_import_dialog.add_filter("*.obj", "Wavefront OBJ")
+	_import_dialog.add_filter("*.stl", "STL")
+	_import_dialog.popup_centered_ratio(0.6)
+
+
+func _on_import_file_selected(path: String) -> void:
+	var result: Dictionary = SlabImportMesh.load_from_file(path)
+	if result.get("error", ERR_INVALID_DATA) != OK:
+		_actions.reported.emit("Import failed: %s" % result.get("message", "Unknown error"))
+		return
+	var external_mesh: Node3D = result.get("mesh")
+	if external_mesh == null:
+		_actions.reported.emit("Import failed: No mesh created")
+		return
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null:
+		external_mesh.free()
+		_actions.reported.emit("Open a scene before importing a mesh.")
+		return
+	var parent: Node = _import_parent(root)
+	get_undo_redo().create_action("Slab Import Mesh", UndoRedo.MERGE_DISABLE, root)
+	get_undo_redo().add_do_method(parent, "add_child", external_mesh, true)
+	get_undo_redo().add_do_method(external_mesh, "set_owner", root)
+	get_undo_redo().add_do_reference(external_mesh)
+	get_undo_redo().add_undo_method(parent, "remove_child", external_mesh)
+	get_undo_redo().commit_action()
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(external_mesh)
+	_actions.reported.emit(result.get("status", "Imported mesh."))
+
+
+func _import_parent(root: Node) -> Node:
+	var current: Node3D = _selection.solid
+	if current != null and current.get_parent() != null:
+		return current.get_parent()
+	return root

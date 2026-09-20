@@ -29,7 +29,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
 		"Object": [
 			"boolean_union", "boolean_subtract", "boolean_intersect", "plane_cut", "array", "mirror_x", "mirror_y", "mirror_z",
-			"center_pivot", "snap_to_grid", "export_solids",
+			"center_pivot", "snap_to_grid", "export_solids", "import_mesh",
 		],
 	},
 	SlabSelection.Mode.VERTEX: {
