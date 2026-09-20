@@ -93,11 +93,16 @@ func case_isolate_button_exists_and_toggles() -> void:
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	root.add_child(panel)
-	var isolate: Button = panel.find_child("IsolateSelection", true, false)
-	expect(isolate != null, "Isolate button exists in SelectionControls")
-	expect(isolate.text == "Isolate", "Initial Isolate button text is 'Isolate'")
-	expect(isolate.toggle_mode, "Isolate button is a toggle")
-	expect(isolate.disabled, "Isolate button is disabled without selection")
+	var isolate_row: Control = panel.find_child("IsolateSelection", true, false)
+	var isolate_solids: Button = panel.find_child("IsolateSolids", true, false)
+	var isolate_faces: Button = panel.find_child("IsolateFaces", true, false)
+	var isolate_label: Label = panel.find_child("IsolateLabel", true, false)
+	expect(isolate_row != null, "Isolate control exists in SelectionControls")
+	expect(isolate_label != null and isolate_label.text == "Isolate", "Isolate label reads Isolate")
+	expect(isolate_solids != null and isolate_solids.text == "Solids", "Solids segment exists")
+	expect(isolate_faces != null and isolate_faces.text == "Faces", "Faces segment exists")
+	expect(isolate_solids.toggle_mode and isolate_faces.toggle_mode, "Isolate segments are toggles")
+	expect(isolate_solids.disabled and isolate_faces.disabled, "Isolate segments disabled without selection")
 	if ClassDB.class_exists(SlabSelection.SOLID_CLASS):
 		var scene := Node3D.new()
 		root.add_child(scene)
@@ -108,18 +113,31 @@ func case_isolate_button_exists_and_toggles() -> void:
 		selection.set_objects([solid])
 		selection.settings_changed.emit()
 		await process_frame
-		expect(not isolate.disabled, "Isolate button is enabled with selection")
-		expect(isolate.text == "Isolate", "Button text is 'Isolate' before isolation")
+		expect(not isolate_solids.disabled, "Solids segment is enabled with selection")
+		expect(not isolate_solids.button_pressed, "Solids segment starts unpressed")
 		selection.enter_isolation(scene)
 		selection.settings_changed.emit()
 		await process_frame
-		expect(isolate.text == "Exit Isolate", "Button text changes to 'Exit Isolate' during isolation")
-		expect(isolate.button_pressed, "Isolate button shows pressed during isolation")
+		expect(isolate_solids.button_pressed, "Solids segment shows pressed during isolation")
+		expect(not isolate_faces.button_pressed, "Faces segment stays independent of solid Isolate")
 		selection.exit_isolation()
 		selection.settings_changed.emit()
 		await process_frame
-		expect(isolate.text == "Isolate", "Button text returns to 'Isolate' after exit")
-		expect(not isolate.button_pressed, "Isolate button shows unpressed after exit")
+		expect(not isolate_solids.button_pressed, "Solids segment unpressed after exit")
+		var top: int = 0
+		for face in solid.call("get_faces"):
+			if solid.call("face_normal", face).y > 0.9:
+				top = face
+				break
+		selection.mode = SlabSelection.Mode.FACE
+		selection.set_ids(PackedInt64Array([top]))
+		selection.enter_face_isolation()
+		await process_frame
+		expect(isolate_faces.button_pressed, "Faces segment shows pressed during face isolation")
+		expect(not isolate_solids.button_pressed, "Solids segment stays off while Faces is on")
+		selection.exit_face_isolation()
+		await process_frame
+		expect(not isolate_faces.button_pressed, "Faces segment unpressed after exit")
 		scene.free()
 	panel.free()
 

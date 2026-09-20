@@ -136,6 +136,9 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	add_child(_header())
 	_selection_controls = preload("res://addons/slab/slab_selection_controls.gd").new()
 	_selection_controls.setup(_selection, _metrics, _scene_root_getter)
+	if _selection != null and _selection.has_signal("isolation_reported") \
+			and not _selection.isolation_reported.is_connected(_on_reported):
+		_selection.isolation_reported.connect(_on_reported)
 	add_child(_selection_controls)
 	_operation_row = _operation_controls()
 	add_child(_operation_row)

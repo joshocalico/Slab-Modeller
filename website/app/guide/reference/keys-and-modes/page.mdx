@@ -12,7 +12,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | <kbd>2</kbd> | Vertex | Pick a vertex. Move, Rotate, and Scale transform the selection around the configured pivot and axes. |
 | <kbd>3</kbd> | Edge | Pick an edge. The transform gizmo acts on both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
 | <kbd>4</kbd> | Face | Pick a face. The transform gizmo acts on all its vertices. Shift-drag extrudes. |
-| <kbd>Escape</kbd> | Object | Leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In Surface Paint it cancels a stroke, or closes the workspace when idle. |
+| <kbd>Escape</kbd> | Object | Leaves Face isolation first and restores every face without clearing Soft Select or toggling solid Isolate. If only solid Isolate is on, Escape exits that. Otherwise it leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In Surface Paint it cancels a stroke, or closes the workspace when idle. |
 
 <kbd>W</kbd>, <kbd>E</kbd>, and <kbd>R</kbd> are Godot's Move, Rotate, and Scale tools. Slab claims <kbd>E</kbd> in Face mode for Extrude when a face is selected.
 

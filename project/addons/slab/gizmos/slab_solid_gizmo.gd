@@ -155,11 +155,15 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 		return
 	var wire := PackedVector3Array()
 	for edge in solid.get_edges():
+		if not _edge_is_display_visible(solid, edge):
+			continue
 		wire.append_array(solid.edge_endpoints(edge))
 	if not wire.is_empty():
 		gizmo.add_lines(wire, get_material(_line_material(WIRE), gizmo), false)
 	var seams := PackedVector3Array()
 	for edge in PackedInt64Array(solid.call("get_uv_seams")):
+		if not _edge_is_display_visible(solid, edge):
+			continue
 		seams.append_array(solid.call("edge_endpoints", edge))
 	if not seams.is_empty():
 		gizmo.add_lines(seams, get_material(UV_SEAM, gizmo), false)
@@ -317,6 +321,17 @@ static func configure_overlay_material(material: StandardMaterial3D, transparent
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = on_top
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if transparent else BaseMaterial3D.TRANSPARENCY_DISABLED
+
+
+func _edge_is_display_visible(solid: Node3D, edge: int) -> bool:
+	if solid == null or not solid.has_method("is_display_face_visible") or not solid.has_method("edge_faces"):
+		return true
+	if not bool(solid.call("has_display_face_mask")):
+		return true
+	for face in PackedInt64Array(solid.call("edge_faces", edge)):
+		if bool(solid.call("is_display_face_visible", face)):
+			return true
+	return false
 
 
 func _draw_idle_elements(gizmo: EditorNode3DGizmo, solid: Node3D, mode: int) -> void:

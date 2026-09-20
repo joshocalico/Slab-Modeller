@@ -557,6 +557,9 @@ func _on_key(event: InputEventKey) -> int:
 	if event.ctrl_pressed or event.meta_pressed:
 		return Verdict.PASS
 	if event.keycode == KEY_ESCAPE:
+		if _selection.face_isolated:
+			_selection.exit_face_isolation()
+			return Verdict.STOP
 		if _selection.isolated:
 			_selection.exit_isolation()
 			return Verdict.STOP

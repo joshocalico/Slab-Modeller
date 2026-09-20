@@ -2,21 +2,26 @@
 extends HFlowContainer
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
 
 const FONT_SIZE := 15
 
 var _selection: RefCounted
 var _custom: HBoxContainer
 var _metrics: RefCounted
-var _isolate: Button
+var _isolate_solids: Button
+var _isolate_faces: Button
 var _soft_select: Button
 var _soft_options: HBoxContainer
 var _scene_root_getter: Callable
+var _report: Callable
 
-func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable()) -> void:
+func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable(),
+		report: Callable = Callable()) -> void:
 	_selection = selection
 	_metrics = metrics if metrics != null else preload("res://addons/slab/slab_metrics.gd").at_scale(1.0)
 	_scene_root_getter = scene_root_getter
+	_report = report
 	name = "SelectionControls"
 	add_theme_constant_override("h_separation", 8)
 	_choice("Pivot", ["Selection centre", "Active element", "Custom"], selection.pivot_mode,
@@ -33,15 +38,25 @@ func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter:
 	_style_text(xray)
 	xray.toggled.connect(func(value: bool) -> void: _selection.set_xray(value))
 	add_child(xray)
-	_isolate = Button.new()
-	_isolate.name = "IsolateSelection"
-	_isolate.toggle_mode = true
-	_isolate.button_pressed = selection.isolated
-	_sync_isolate_label()
-	_isolate.tooltip_text = "Hide non-selected solids to focus on the current selection. Toggle or press Escape to exit."
-	_style_text(_isolate)
-	_isolate.pressed.connect(_on_isolate_pressed)
-	add_child(_isolate)
+	var isolate_row := HBoxContainer.new()
+	isolate_row.name = "IsolateSelection"
+	isolate_row.add_theme_constant_override("separation", 2)
+	add_child(isolate_row)
+	var isolate_label := Label.new()
+	isolate_label.name = "IsolateLabel"
+	isolate_label.text = "Isolate"
+	_style_text(isolate_label)
+	isolate_row.add_child(isolate_label)
+	_isolate_solids = _segment_button("IsolateSolids", "Solids",
+		"Hide non-selected solids. Other solids leave the view. Toggle to exit.")
+	_isolate_solids.button_pressed = selection.isolated
+	_isolate_solids.pressed.connect(_on_isolate_solids_pressed)
+	isolate_row.add_child(_isolate_solids)
+	_isolate_faces = _segment_button("IsolateFaces", "Faces",
+		"Hide unselected faces on the active solid. Other solids stay visible. Escape exits.")
+	_isolate_faces.button_pressed = selection.face_isolated
+	_isolate_faces.pressed.connect(_on_isolate_faces_pressed)
+	isolate_row.add_child(_isolate_faces)
 	_soft_select = Button.new()
 	_soft_select.name = "SoftSelect"
 	_soft_select.toggle_mode = true
@@ -122,25 +137,47 @@ func _sync() -> void:
 		var field: SpinBox = _custom.get_node("Pivot" + "XYZ"[axis])
 		if not is_equal_approx(field.value, _selection.custom_pivot_world[axis]):
 			field.set_value_no_signal(_selection.custom_pivot_world[axis])
-	if _isolate != null:
-		_isolate.set_pressed_no_signal(_selection.isolated)
-		_sync_isolate_label()
-		_isolate.disabled = _selection.objects.is_empty()
+	_sync_isolate()
 	_sync_soft_select()
 
 
-func _sync_isolate_label() -> void:
-	if _isolate == null:
+func _sync_isolate() -> void:
+	if _isolate_solids == null or _isolate_faces == null:
 		return
-	_isolate.text = "Exit Isolate" if _selection.isolated else "Isolate"
+	var empty: bool = _selection.objects.is_empty()
+	_isolate_solids.set_pressed_no_signal(_selection.isolated)
+	_isolate_solids.disabled = empty
+	_isolate_solids.tooltip_text = "Hide non-selected solids. Other solids leave the view. Toggle to exit."
+	_isolate_faces.set_pressed_no_signal(_selection.face_isolated)
+	_isolate_faces.disabled = empty
+	_isolate_faces.tooltip_text = _faces_tooltip()
 
 
-func _on_isolate_pressed() -> void:
+func _faces_tooltip() -> String:
+	if _selection.has_any_external_mesh():
+		return SlabActions.PROMOTE_FIRST_TOOLTIP
+	if _selection.face_isolated:
+		return "Restore all faces. Escape exits Face isolation without clearing Soft Select."
+	if _selection.mode != SlabSelection.Mode.FACE:
+		return "Select faces in Face mode, then isolate them. Other solids stay visible."
+	if _selection.ids.is_empty():
+		return "Select faces, then isolate them. Unselected faces hide. Other solids stay visible."
+	return "Hide unselected faces on the active solid. Other solids stay visible. Escape exits."
+
+
+func _on_isolate_solids_pressed() -> void:
 	var scene_root: Node = null
 	if _scene_root_getter.is_valid():
 		scene_root = _scene_root_getter.call()
 	_selection.toggle_isolation(scene_root)
-	_sync_isolate_label()
+	_sync_isolate()
+
+
+func _on_isolate_faces_pressed() -> void:
+	var result: Dictionary = _selection.toggle_face_isolation()
+	if _report.is_valid() and str(result.get("status", "")) != "":
+		_report.call(str(result["status"]))
+	_sync_isolate()
 
 
 func _sync_soft_select() -> void:
@@ -178,6 +215,25 @@ func _choice(label_text: String, choices: Array, selected: int, callback: Callab
 	choice.select(selected)
 	choice.item_selected.connect(callback)
 	add_child(choice)
+
+
+func _segment_button(node_name: String, text: String, tooltip: String) -> Button:
+	var button := Button.new()
+	button.name = node_name
+	button.text = text
+	button.toggle_mode = true
+	button.tooltip_text = tooltip
+	_style_text(button)
+	var active := StyleBoxFlat.new()
+	active.bg_color = Color(0.86, 0.72, 0.34)
+	active.set_corner_radius_all(3)
+	active.content_margin_left = _metrics.px(8)
+	active.content_margin_right = _metrics.px(8)
+	button.add_theme_stylebox_override("pressed", active)
+	button.add_theme_stylebox_override("hover_pressed", active)
+	button.add_theme_color_override("font_pressed_color", Color(0.12, 0.1, 0.06))
+	button.add_theme_color_override("font_hover_pressed_color", Color(0.12, 0.1, 0.06))
+	return button
 
 
 func _style_text(control: Control) -> void:
