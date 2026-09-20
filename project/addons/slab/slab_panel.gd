@@ -102,6 +102,10 @@ var _brush_color: ColorPickerButton
 var _overlay_opacity: SpinBox
 var _flatten_button: Button
 var _channel_label: Label
+var _channel_picker: HBoxContainer
+var _layer_list: VBoxContainer
+var _add_layer_button: Button
+var _delete_layer_button: Button
 var _keybind_dropdown: OptionButton
 var _selection_controls: Control
 var _operation_row: Control
@@ -403,10 +407,99 @@ func bind_paint(paint: RefCounted) -> void:
 	if _paint != null and _paint.has_signal("reported"):
 		if not _paint.reported.is_connected(_on_reported):
 			_paint.reported.connect(_on_reported)
+	if _paint != null and _paint.has_signal("channel_changed"):
+		if not _paint.channel_changed.is_connected(_on_channel_changed):
+			_paint.channel_changed.connect(_on_channel_changed)
+	if _paint != null and _paint.has_signal("layers_changed"):
+		if not _paint.layers_changed.is_connected(_refresh_layer_list):
+			_paint.layers_changed.connect(_refresh_layer_list)
 	if _paint_canvas != null:
 		_paint_canvas.setup(_paint, _metrics)
 		_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_on_paint_changed()
+
+
+func _on_channel_changed() -> void:
+	_sync_channel_picker()
+	_refresh_layer_list()
+	_refresh_paint_chrome()
+
+
+func _sync_channel_picker() -> void:
+	if _channel_picker == null or _paint == null:
+		return
+	var current_ch: int = _paint.channel
+	for i in _channel_picker.get_child_count():
+		var btn: Button = _channel_picker.get_child(i) as Button
+		if btn == null:
+			continue
+		var expected_pressed: bool = false
+		match i:
+			0: expected_pressed = current_ch == SlabPaint.Channel.ALBEDO
+			1: expected_pressed = current_ch == SlabPaint.Channel.ROUGHNESS
+			2: expected_pressed = current_ch == SlabPaint.Channel.EMISSION
+		if btn.button_pressed != expected_pressed:
+			btn.set_pressed_no_signal(expected_pressed)
+	if _channel_label != null:
+		_channel_label.text = _paint.current_channel_name()
+
+
+func _refresh_layer_list() -> void:
+	if _layer_list == null:
+		return
+	for child in _layer_list.get_children():
+		_layer_list.remove_child(child)
+		child.queue_free()
+	if _paint == null:
+		return
+	var layers: Array[Dictionary] = _paint.all_layers_info()
+	for layer_info: Dictionary in layers:
+		var row := _create_layer_row(layer_info)
+		_layer_list.add_child(row)
+	if _delete_layer_button != null:
+		_delete_layer_button.disabled = layers.size() <= 1
+
+
+func _create_layer_row(info: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "Layer%d" % info.index
+	row.add_theme_constant_override("separation", 2)
+	row.custom_minimum_size.y = _scaled(22.0)
+	
+	var vis_btn := Button.new()
+	vis_btn.name = "LayerVis%d" % info.index
+	vis_btn.text = "👁" if info.visible else "○"
+	vis_btn.toggle_mode = true
+	vis_btn.button_pressed = info.visible
+	vis_btn.tooltip_text = "Toggle layer visibility"
+	vis_btn.add_theme_font_size_override("font_size", _font(10))
+	vis_btn.custom_minimum_size = Vector2(_scaled(20.0), _scaled(20.0))
+	var layer_idx: int = info.index
+	vis_btn.toggled.connect(func(pressed: bool) -> void:
+		if _paint:
+			_paint.set_layer_visible(layer_idx, pressed)
+	)
+	row.add_child(vis_btn)
+	
+	var name_btn := Button.new()
+	name_btn.name = "LayerName%d" % info.index
+	name_btn.text = info.name
+	name_btn.flat = true
+	name_btn.toggle_mode = true
+	name_btn.button_pressed = info.active
+	name_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_btn.add_theme_font_size_override("font_size", _font(11))
+	name_btn.tooltip_text = "Click to select this layer"
+	if info.active:
+		name_btn.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	name_btn.pressed.connect(func() -> void:
+		if _paint:
+			_paint.set_active_layer(layer_idx)
+	)
+	row.add_child(name_btn)
+	
+	return row
 
 
 func bind_undo(undo: Object) -> void:
@@ -1545,16 +1638,104 @@ func _apply_picker_fonts(node: Node) -> void:
 
 func _brush_column() -> Control:
 	var col := VBoxContainer.new()
-	col.custom_minimum_size.x = _scaled(132.0)
+	col.custom_minimum_size.x = _scaled(140.0)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", 2)
+	
+	var channel_section := Label.new()
+	channel_section.text = "Channel"
+	channel_section.add_theme_font_size_override("font_size", _font(13))
+	channel_section.add_theme_color_override("font_color", ACCENT)
+	col.add_child(channel_section)
+	
+	_channel_picker = HBoxContainer.new()
+	_channel_picker.name = "ChannelPicker"
+	_channel_picker.add_theme_constant_override("separation", 2)
+	var channel_group := ButtonGroup.new()
+	for ch_entry in [[SlabPaint.Channel.ALBEDO, "Albedo"], [SlabPaint.Channel.ROUGHNESS, "Roughness"], [SlabPaint.Channel.EMISSION, "Emission"]]:
+		var ch_btn := Button.new()
+		ch_btn.name = "Channel%s" % ch_entry[1]
+		ch_btn.text = ch_entry[1]
+		ch_btn.toggle_mode = true
+		ch_btn.button_group = channel_group
+		ch_btn.button_pressed = ch_entry[0] == SlabPaint.Channel.ALBEDO
+		ch_btn.add_theme_font_size_override("font_size", _font(11))
+		ch_btn.custom_minimum_size.y = _scaled(24.0)
+		ch_btn.tooltip_text = "Paint on the %s channel." % ch_entry[1]
+		var channel_id: int = ch_entry[0]
+		ch_btn.pressed.connect(func() -> void:
+			if _paint:
+				_paint.channel = channel_id
+		)
+		_channel_picker.add_child(ch_btn)
+	col.add_child(_channel_picker)
+	
 	_channel_label = Label.new()
 	_channel_label.name = "ChannelLabel"
 	_channel_label.text = "Albedo"
-	_channel_label.add_theme_font_size_override("font_size", _font(14))
+	_channel_label.add_theme_font_size_override("font_size", _font(12))
 	_channel_label.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
-	_channel_label.tooltip_text = "Painting on the Albedo channel."
+	_channel_label.tooltip_text = "Currently painting on this channel."
+	_channel_label.visible = false
 	col.add_child(_channel_label)
+	
+	col.add_child(HSeparator.new())
+	
+	var layer_header := HBoxContainer.new()
+	layer_header.add_theme_constant_override("separation", 4)
+	var layer_label := Label.new()
+	layer_label.text = "Layers"
+	layer_label.add_theme_font_size_override("font_size", _font(13))
+	layer_label.add_theme_color_override("font_color", ACCENT)
+	layer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layer_header.add_child(layer_label)
+	
+	_add_layer_button = Button.new()
+	_add_layer_button.name = "AddLayer"
+	_add_layer_button.text = "+"
+	_add_layer_button.tooltip_text = "Add a new layer to the current channel."
+	_add_layer_button.add_theme_font_size_override("font_size", _font(12))
+	_add_layer_button.custom_minimum_size = Vector2(_scaled(24.0), _scaled(20.0))
+	_add_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.add_layer()
+	)
+	layer_header.add_child(_add_layer_button)
+	
+	_delete_layer_button = Button.new()
+	_delete_layer_button.name = "DeleteLayer"
+	_delete_layer_button.text = "-"
+	_delete_layer_button.tooltip_text = "Delete the active layer."
+	_delete_layer_button.add_theme_font_size_override("font_size", _font(12))
+	_delete_layer_button.custom_minimum_size = Vector2(_scaled(24.0), _scaled(20.0))
+	_delete_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.remove_layer()
+	)
+	layer_header.add_child(_delete_layer_button)
+	col.add_child(layer_header)
+	
+	_layer_list = VBoxContainer.new()
+	_layer_list.name = "LayerList"
+	_layer_list.add_theme_constant_override("separation", 2)
+	col.add_child(_layer_list)
+	
+	var overlay_opacity_row := _compact_spin("Opacity", 0.0, 1.0, 0.05, 1.0, func(v: float) -> void:
+		if _paint:
+			_paint.overlay_opacity = v
+	, "Active layer opacity. Strokes remain non-destructive until Flatten.", &"overlay_opacity")
+	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
+	col.add_child(overlay_opacity_row)
+	
+	_flatten_button = _named_action("Flatten", "MoveDown", "Commit all visible layers to the base as one undoable action.", func() -> void:
+		if _paint:
+			_paint.flatten()
+	)
+	_flatten_button.name = "PaintFlatten"
+	col.add_child(_flatten_button)
+	
+	col.add_child(HSeparator.new())
+	
 	var brush := Label.new()
 	brush.text = "Brush"
 	brush.add_theme_font_size_override("font_size", _font(13))
@@ -1579,23 +1760,7 @@ func _brush_column() -> Control:
 		if _paint:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
-	var layer_label := Label.new()
-	layer_label.text = "Layer"
-	layer_label.add_theme_font_size_override("font_size", _font(13))
-	layer_label.add_theme_color_override("font_color", ACCENT)
-	col.add_child(layer_label)
-	var overlay_opacity_row := _compact_spin("Opacity", 0.0, 1.0, 0.05, 1.0, func(v: float) -> void:
-		if _paint:
-			_paint.overlay_opacity = v
-	, "Overlay layer opacity. Strokes remain non-destructive until Flatten.", &"overlay_opacity")
-	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
-	col.add_child(overlay_opacity_row)
-	_flatten_button = _named_action("Flatten", "MoveDown", "Commit the overlay strokes to the base Albedo as one undoable action.", func() -> void:
-		if _paint:
-			_paint.flatten()
-	)
-	_flatten_button.name = "PaintFlatten"
-	col.add_child(_flatten_button)
+	
 	var overlay := CheckBox.new()
 	overlay.name = "PaintUvOverlay"
 	overlay.text = "Show UV"
@@ -1898,9 +2063,22 @@ func _refresh_paint_chrome() -> void:
 	if _flatten_button != null:
 		var can_flatten: bool = _paint != null and _paint.can_flatten()
 		_flatten_button.disabled = not can_flatten
-		_flatten_button.tooltip_text = "Commit the overlay strokes to the base Albedo as one undoable action." if can_flatten else "Paint strokes on the overlay first."
+		var channel_name: String = _paint.current_channel_name() if _paint else "Albedo"
+		_flatten_button.tooltip_text = "Commit all visible layers to the %s base as one undoable action." % channel_name if can_flatten else "Paint strokes on the overlay first."
 	if _channel_label != null:
-		_channel_label.visible = is_paint_workspace
+		_channel_label.visible = false
+	if _channel_picker != null:
+		_channel_picker.visible = is_paint_workspace
+		if is_paint_workspace:
+			_sync_channel_picker()
+	if _layer_list != null:
+		_layer_list.visible = is_paint_workspace
+		if is_paint_workspace:
+			_refresh_layer_list()
+	if _add_layer_button != null:
+		_add_layer_button.visible = is_paint_workspace
+	if _delete_layer_button != null:
+		_delete_layer_button.visible = is_paint_workspace
 	_refresh_paint_palette()
 	if _paint != null and _paint.active:
 		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
