@@ -50,6 +50,7 @@ func _boot() -> void:
 	_check_channel_switching()
 	_check_multi_layer_management()
 	_check_channel_layer_strokes()
+	_check_channel_viewport_strokes()
 	_finish()
 
 
@@ -1617,22 +1618,155 @@ func _check_channel_layer_strokes() -> void:
 	paint.end_stroke()
 	_expect(paint.has_channel_overlay_strokes(), "Roughness has strokes")
 	
+	# R1: Emission stroke coverage
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.layer_count() == 1, "Emission starts with 1 layer")
+	paint._ensure_channel_texture(SlabPaint.Channel.EMISSION)
+	
+	paint.brush_color = Color(1.0, 0.8, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on Emission channel")
+	paint.dab_uv(Vector2(0.6, 0.4))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Emission has strokes after painting")
+	_expect(paint.current_channel_name() == "Emission", "channel name is Emission during stroke")
+	
 	paint.channel = SlabPaint.Channel.ALBEDO
 	_expect(paint.layer_count() == 2, "Albedo still has 2 layers after switching back")
 	_expect(paint.has_channel_overlay_strokes(), "Albedo overlay strokes preserved")
 	
+	var albedo_layers_before_flatten: int = paint.layer_count()
 	var undo_before := undo.actions.size()
 	_expect(paint.flatten(), "flatten succeeds on Albedo")
 	_expect(undo.actions.size() == undo_before + 1, "flatten records one undo action")
 	_expect(paint.layer_count() == 1, "flatten resets to one layer")
 	_expect(not paint.has_channel_overlay_strokes(), "flatten clears overlay strokes")
 	
+	# R3: Exact layer count assert instead of vacuous >= 1
 	undo.undo()
 	_expect(paint.has_channel_overlay_strokes(), "flatten undo restores overlay strokes")
-	_expect(paint.layer_count() >= 1, "flatten undo restores layers")
+	_expect(paint.layer_count() == albedo_layers_before_flatten, "flatten undo restores exact layer count (%d)" % albedo_layers_before_flatten)
+	
+	# R2: Flatten+Undo on Roughness channel
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.has_channel_overlay_strokes(), "Roughness strokes preserved after Albedo flatten undo")
+	paint.add_layer()
+	var roughness_layers_before_flatten: int = paint.layer_count()
+	_expect(roughness_layers_before_flatten == 2, "Roughness now has 2 layers")
+	
+	paint.brush_color = Color(0.3, 0.3, 0.3)
+	_expect(paint.begin_stroke(), "stroke starts on Roughness layer 1")
+	paint.dab_uv(Vector2(0.2, 0.2))
+	paint.end_stroke()
+	
+	var roughness_undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Roughness")
+	_expect(undo.actions.size() == roughness_undo_before + 1, "Roughness flatten records one undo action")
+	_expect(paint.layer_count() == 1, "Roughness flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "Roughness flatten clears overlay strokes")
+	
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "Roughness flatten undo restores overlay strokes")
+	_expect(paint.layer_count() == roughness_layers_before_flatten, "Roughness flatten undo restores exact layer count (%d)" % roughness_layers_before_flatten)
+	
+	# R2: Flatten+Undo on Emission channel
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.has_channel_overlay_strokes(), "Emission strokes preserved")
+	paint.add_layer()
+	var emission_layers_before_flatten: int = paint.layer_count()
+	_expect(emission_layers_before_flatten == 2, "Emission now has 2 layers")
+	
+	paint.brush_color = Color(0.0, 1.0, 1.0)
+	_expect(paint.begin_stroke(), "stroke starts on Emission layer 1")
+	paint.dab_uv(Vector2(0.8, 0.8))
+	paint.end_stroke()
+	
+	var emission_undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Emission")
+	_expect(undo.actions.size() == emission_undo_before + 1, "Emission flatten records one undo action")
+	_expect(paint.layer_count() == 1, "Emission flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "Emission flatten clears overlay strokes")
+	
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "Emission flatten undo restores overlay strokes")
+	_expect(paint.layer_count() == emission_layers_before_flatten, "Emission flatten undo restores exact layer count (%d)" % emission_layers_before_flatten)
 	
 	paint.exit()
 	solid.free()
+
+
+func _check_channel_viewport_strokes() -> void:
+	# R4: Per-channel 3D/viewport stroke path
+	var world := Node3D.new()
+	root.add_child(world)
+	var host: RefCounted = SlabTestHost.over(world)
+	var session := SlabViewport.new(host)
+	var selection: RefCounted = session.state()
+	var actions := SlabActions.new(selection)
+	session.bind_actions(actions)
+	var paint := SlabPaint.new()
+	var undo := SlabTestUndo.new()
+	paint.bind(selection, actions, undo)
+	session.bind_paint(paint)
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	world.add_child(solid)
+	solid.call("make_box", Vector3(2, 3, 2))
+	var cam := Camera3D.new()
+	world.add_child(cam)
+	cam.look_at_from_position(Vector3(6, 8, 10), Vector3(1, 1.5, 1), Vector3.UP)
+	cam.current = true
+	var top: int = _top_face(solid)
+	var existing := StandardMaterial3D.new()
+	existing.resource_name = "ViewportChannelTest"
+	solid.set("materials", [existing])
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	actions.material_slot = 0
+	paint.enter()
+	paint.tool = SlabPaint.Tool.PIXEL
+	paint.make_unique()
+	
+	var screen: Vector2 = cam.unproject_position(solid.to_global(solid.call("face_centroid", top)))
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = screen
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = screen
+	
+	# Viewport stroke on Albedo (existing contract already covers canvas; this adds 3D)
+	paint.channel = SlabPaint.Channel.ALBEDO
+	paint.brush_color = Color(1.0, 0.2, 0.2)
+	var albedo_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes(), "Albedo 3D viewport stroke creates overlay")
+	_expect(paint.has_channel_overlay_strokes() or not albedo_before_strokes, "Albedo viewport stroke landed on active layer")
+	
+	# Viewport stroke on Roughness
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	paint._ensure_channel_texture(SlabPaint.Channel.ROUGHNESS)
+	paint.brush_color = Color(0.5, 0.5, 0.5)
+	var roughness_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes() and not roughness_before_strokes, "Roughness 3D viewport stroke creates overlay on fresh channel")
+	_expect(paint.current_channel_name() == "Roughness", "Roughness channel active during viewport stroke")
+	
+	# Viewport stroke on Emission
+	paint.channel = SlabPaint.Channel.EMISSION
+	paint._ensure_channel_texture(SlabPaint.Channel.EMISSION)
+	paint.brush_color = Color(1.0, 0.9, 0.0)
+	var emission_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes() and not emission_before_strokes, "Emission 3D viewport stroke creates overlay on fresh channel")
+	_expect(paint.current_channel_name() == "Emission", "Emission channel active during viewport stroke")
+	
+	paint.exit()
+	world.free()
 
 
 func _expect(ok: bool, what: String) -> bool:
