@@ -89,6 +89,8 @@ static func _collect_solids(node: Node, out: Array[Node3D]) -> void:
 static func _ray_depth(solid: Node3D, origin: Vector3, direction: Vector3) -> float:
 	var best: float = -1.0
 	for id in solid.get_faces():
+		if not _face_is_display_visible(solid, id):
+			continue
 		var corners: PackedVector3Array = solid.face_corners(id)
 		if corners.size() < 3:
 			continue
@@ -211,6 +213,8 @@ static func _face_candidates(solid: Node3D, camera: Camera3D, screen: Vector2,
 	var direction: Vector3 = camera.project_ray_normal(screen)
 	var by_id: Dictionary = {}
 	for id in solid.get_faces():
+		if not _face_is_display_visible(solid, id):
+			continue
 		var corners: PackedVector3Array = solid.face_corners(id)
 		if corners.size() < 3:
 			continue
@@ -248,6 +252,12 @@ static func pick_world_hit(root: Node, camera: Camera3D, screen: Vector2, exclud
 			best = hit.duplicate()
 			best["solid"] = solid
 	return best
+
+
+static func _face_is_display_visible(solid: Node3D, face: int) -> bool:
+	if solid == null or not solid.has_method("is_display_face_visible"):
+		return true
+	return bool(solid.call("is_display_face_visible", face))
 
 
 static func _pick_face(solid: Node3D, camera: Camera3D, screen: Vector2) -> int:

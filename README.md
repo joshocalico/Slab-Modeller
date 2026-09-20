@@ -35,6 +35,8 @@ Shift-drag a face to extrude. Shift-drag an edge to bevel.
 
 **Soft Select.** In element modes, enable Soft Select to apply falloff influence to neighboring geometry during transforms. Set radius and falloff curve in the panel.
 
+**Isolate.** One control with Solids | Faces. Solids hides other solids. Faces hides unselected faces on the active solid and leaves other solids in the scene. Escape exits Face isolation without clearing Soft Select.
+
 **Surface Paint.** Open the Surface Paint section for materials and UVs. UV scale, offset, and rotation live on the same panel. Every edit goes through undo.
 
 **Import & Export.** Import external meshes (OBJ, STL) to reference alongside your solids. Export your models via the Export action.

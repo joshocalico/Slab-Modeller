@@ -72,6 +72,18 @@ Enable **X-ray selection** to include occluded vertices, edges, and faces on vis
 
 X-ray does not include a node hidden in Godot or a node under a hidden ancestor. Hide an obstructing `SlabSolid` to pick the visible geometry behind it. To show the solid again, select it in the Scene tree and enable **Visibility > Visible** in the Inspector.
 
+## Isolate solids or faces
+
+**Isolate** is one control with **Solids** and **Faces** segments. They are independent. They are not two competing toggles.
+
+**Solids** hides every other `SlabSolid` so the current selection stays in view. Toggle **Solids** or press Escape (when Face isolation is off) to bring the other solids back.
+
+**Faces** hides unselected faces on the active solid. Other solids stay in the scene. Soft Select falloff still moves neighboring vertices, including verts on hidden faces. Press Escape or click **Faces** again to restore every face. Escape does not clear Soft Select and does not turn solid Isolate on or off.
+
+Face Isolate needs Face mode and at least one selected face on a `SlabSolid`. On an External mesh it refuses, names Promote first, and leaves the mesh unchanged.
+
+Website figures for this chrome are still the Phase C Design wireframes (`isolate-01` through `isolate-03`). They are not a live editor capture. Design should recapture the shipped Solids | Faces control in the same cycle.
+
 ## Keep a multi-selection when you move
 
 A plain click replaces the element set with the item under the cursor. Shift-click to add faces, then use the Move gizmo. Shift-drag on faces also extrudes.
