@@ -47,6 +47,9 @@ func _boot() -> void:
 	await process_frame
 	_check_viewport_paint_does_not_extrude()
 	_check_overlay_layer_and_flatten()
+	_check_channel_switching()
+	_check_multi_layer_management()
+	_check_channel_layer_strokes()
 	_finish()
 
 
@@ -1451,6 +1454,183 @@ func _check_overlay_layer_and_flatten() -> void:
 		"flatten redo restores flattened base")
 	_expect(not paint.has_overlay_strokes(), "flatten redo clears overlay strokes")
 	_expect(not paint.can_flatten(), "flatten redo disables re-flatten")
+	paint.exit()
+	solid.free()
+
+
+func _check_channel_switching() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "ChannelSwitchBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := SlabTestUndo.new()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.2, 0.4, 0.8)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	_expect(paint.channel == SlabPaint.Channel.ALBEDO, "default channel is Albedo")
+	_expect(paint.current_channel_name() == "Albedo", "channel name is Albedo")
+	
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.channel == SlabPaint.Channel.ROUGHNESS, "switched to Roughness channel")
+	_expect(paint.current_channel_name() == "Roughness", "channel name is Roughness")
+	
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.channel == SlabPaint.Channel.EMISSION, "switched to Emission channel")
+	_expect(paint.current_channel_name() == "Emission", "channel name is Emission")
+	
+	paint.channel = SlabPaint.Channel.ALBEDO
+	_expect(paint.channel == SlabPaint.Channel.ALBEDO, "switched back to Albedo channel")
+	
+	paint.exit()
+	solid.free()
+
+
+func _check_multi_layer_management() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "MultiLayerBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := SlabTestUndo.new()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.2, 0.4, 0.8)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	_expect(paint.layer_count() == 1, "starts with one layer")
+	_expect(paint.active_layer_index() == 0, "active layer is 0")
+	
+	var layer_info := paint.layer_info(0)
+	_expect(layer_info.name == "Layer 1", "first layer named Layer 1")
+	_expect(layer_info.visible == true, "first layer visible")
+	_expect(is_equal_approx(layer_info.opacity, 1.0), "first layer opacity 1.0")
+	
+	var new_index := paint.add_layer()
+	_expect(new_index == 1, "add_layer returns index 1")
+	_expect(paint.layer_count() == 2, "now has two layers")
+	_expect(paint.active_layer_index() == 1, "new layer is active")
+	
+	var all_layers := paint.all_layers_info()
+	_expect(all_layers.size() == 2, "all_layers_info returns 2 layers")
+	_expect(all_layers[0].name == "Layer 1", "first layer name correct")
+	_expect(all_layers[1].name == "Layer 2", "second layer name correct")
+	_expect(all_layers[1].active == true, "second layer marked active")
+	
+	paint.set_active_layer(0)
+	_expect(paint.active_layer_index() == 0, "switched to layer 0")
+	
+	paint.set_layer_visible(1, false)
+	var updated_info := paint.layer_info(1)
+	_expect(updated_info.visible == false, "layer 1 now hidden")
+	
+	paint.set_layer_opacity(1, 0.5)
+	updated_info = paint.layer_info(1)
+	_expect(is_equal_approx(updated_info.opacity, 0.5), "layer 1 opacity set to 0.5")
+	
+	paint.set_layer_name(1, "My Paint")
+	updated_info = paint.layer_info(1)
+	_expect(updated_info.name == "My Paint", "layer 1 renamed to My Paint")
+	
+	_expect(not paint.remove_layer(0), "cannot delete layer when it would leave none")
+	paint.set_active_layer(1)
+	_expect(paint.remove_layer(0), "can delete layer 0 when layer 1 exists")
+	_expect(paint.layer_count() == 1, "now has one layer after delete")
+	_expect(paint.active_layer_index() == 0, "active layer adjusted after delete")
+	
+	paint.exit()
+	solid.free()
+
+
+func _check_channel_layer_strokes() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "ChannelLayerStrokeBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := SlabTestUndo.new()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.5, 0.5, 0.5)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	paint.brush_color = Color(1.0, 0.0, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on Albedo channel")
+	paint.dab_uv(Vector2(0.25, 0.25))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Albedo has strokes")
+	
+	paint.add_layer()
+	_expect(paint.layer_count() == 2, "Albedo now has 2 layers")
+	_expect(paint.active_layer_index() == 1, "layer 1 is active")
+	
+	paint.brush_color = Color(0.0, 1.0, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on layer 1")
+	paint.dab_uv(Vector2(0.75, 0.75))
+	paint.end_stroke()
+	
+	var albedo_layer_1 := paint.layer_info(1)
+	_expect(not albedo_layer_1.is_empty, "layer 1 has strokes after painting")
+	
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.layer_count() == 1, "Roughness starts with 1 layer")
+	paint._ensure_channel_texture(SlabPaint.Channel.ROUGHNESS)
+	
+	paint.brush_color = Color(0.8, 0.8, 0.8)
+	_expect(paint.begin_stroke(), "stroke starts on Roughness channel")
+	paint.dab_uv(Vector2(0.5, 0.5))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Roughness has strokes")
+	
+	paint.channel = SlabPaint.Channel.ALBEDO
+	_expect(paint.layer_count() == 2, "Albedo still has 2 layers after switching back")
+	_expect(paint.has_channel_overlay_strokes(), "Albedo overlay strokes preserved")
+	
+	var undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Albedo")
+	_expect(undo.actions.size() == undo_before + 1, "flatten records one undo action")
+	_expect(paint.layer_count() == 1, "flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "flatten clears overlay strokes")
+	
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "flatten undo restores overlay strokes")
+	_expect(paint.layer_count() >= 1, "flatten undo restores layers")
+	
 	paint.exit()
 	solid.free()
 
