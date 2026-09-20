@@ -10,6 +10,8 @@ const SlabSweepScript := preload("res://addons/slab/slab_sweep.gd")
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
 const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
+const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
+const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
 const SweepGizmo := preload("res://addons/slab/gizmos/slab_sweep_gizmo.gd")
@@ -28,6 +30,8 @@ var _subgizmo_solid: Node3D = null
 var _topology_solid: Node3D = null
 var _workspace := "3D"
 var _overlay_camera: Camera3D
+var _export_dialog: EditorFileDialog
+var _export_solids: Array[Node3D] = []
 
 
 func _enter_tree() -> void:
@@ -69,6 +73,7 @@ func _enter_tree() -> void:
 	main_screen_changed.connect(_on_main_screen_changed)
 	if not scene_saved.is_connected(_on_scene_saved):
 		scene_saved.connect(_on_scene_saved)
+	_actions.export_requested.connect(_on_export_requested)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
@@ -82,6 +87,12 @@ func _exit_tree() -> void:
 		main_screen_changed.disconnect(_on_main_screen_changed)
 	if scene_saved.is_connected(_on_scene_saved):
 		scene_saved.disconnect(_on_scene_saved)
+	if _actions and _actions.export_requested.is_connected(_on_export_requested):
+		_actions.export_requested.disconnect(_on_export_requested)
+	if _export_dialog and is_instance_valid(_export_dialog):
+		_export_dialog.queue_free()
+		_export_dialog = null
+	_export_solids.clear()
 	if _selection:
 		if _selection.changed.is_connected(_on_selection_changed):
 			_selection.changed.disconnect(_on_selection_changed)
@@ -461,3 +472,46 @@ func _capture_predicate() -> void:
 	img.save_png(path)
 	print("slab capture wrote ", path, " ", img.get_width(), "x", img.get_height())
 	get_tree().quit()
+
+
+func _on_export_requested(solids: Array) -> void:
+	_export_solids.clear()
+	for solid in solids:
+		if solid is Node3D and is_instance_valid(solid):
+			_export_solids.append(solid)
+	if _export_solids.is_empty():
+		_actions.reported.emit("Select a solid to export.")
+		return
+	if _export_dialog == null or not is_instance_valid(_export_dialog):
+		_export_dialog = EditorFileDialog.new()
+		_export_dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+		_export_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_export_dialog.title = "Export..."
+		_export_dialog.file_selected.connect(_on_export_file_selected)
+		EditorInterface.get_base_control().add_child(_export_dialog)
+	_export_dialog.clear_filters()
+	_export_dialog.add_filter("*.obj", "Wavefront OBJ")
+	var default_name: String = _export_solids[0].name if _export_solids.size() == 1 else "export"
+	default_name = default_name.replace(" ", "_").to_lower()
+	_export_dialog.current_file = default_name + ".obj"
+	_export_dialog.popup_centered_ratio(0.6)
+
+
+func _on_export_file_selected(path: String) -> void:
+	if _export_solids.is_empty():
+		_actions.reported.emit("No solids to export.")
+		return
+	var export_mesh := SlabExportMesh.new()
+	var err: int = export_mesh.bake(_export_solids)
+	if err != OK:
+		_actions.reported.emit("Export failed: could not bake mesh data.")
+		_export_solids.clear()
+		return
+	err = SlabExportObj.write(path, export_mesh)
+	if err != OK:
+		_actions.reported.emit("Export failed: could not write file.")
+		_export_solids.clear()
+		return
+	var count: int = _export_solids.size()
+	_actions.reported.emit("Exported %d %s → %s" % [count, "solid" if count == 1 else "solids", path])
+	_export_solids.clear()

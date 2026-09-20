@@ -46,6 +46,7 @@ signal snap_align_cancel_requested
 signal object_order_changed(nodes: Array)
 signal create_placement_requested(row: Dictionary, plan: Dictionary)
 signal create_settings_changed
+signal export_requested(solids: Array)
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -331,6 +332,8 @@ func disabled_reason(row: Dictionary) -> String:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
 	var need: int = row["min_count"]
 	if _selection.count() < need:
+		if row["id"] == "export_solids":
+			return "Select a solid to export."
 		return "%s needs %s." % [row["label"], _element_count(_selection.mode, need)]
 	return ""
 
@@ -683,6 +686,17 @@ func _align_face_op() -> Dictionary:
 	return { "status": "Align Face: point at a face on another solid, preview the rigid placement, then click to apply. Escape cancels." }
 
 
+func _export_op() -> Dictionary:
+	var solids: Array[Node3D] = []
+	for obj in _selection.objects:
+		if obj != null and is_instance_valid(obj):
+			solids.append(obj)
+	if solids.is_empty():
+		return { "status": "Select a solid to export." }
+	export_requested.emit(solids)
+	return { "status": "" }
+
+
 func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
@@ -799,6 +813,7 @@ func _build() -> Array[Dictionary]:
 		_row("mirror_z", "Mirror Z", "Object", object, 1, "Mirrors the solid across its local Z axis.", 0, _mirror_op.bind(Vector3(1.0, 1.0, -1.0))),
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
+		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
