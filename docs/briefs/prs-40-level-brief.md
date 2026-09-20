@@ -1,154 +1,172 @@
-# PRS-40 level brief: Signal Relay Annex
+# PRS-40 level brief: Signal Relay Annex (craft bar)
 
-**Audience:** QA (run) · Design (capture moments) · CoS (kick + report) · Eng (fixes)
-**Authors:** Product with QA
-**Date:** 2026-09-20 (ACST)
+**Audience:** QA (run) · Design (massing + surfaces + capture) · CoS (kick + report) · Eng (fixes)
+**Authors:** Product with Design (massing/surfaces) and QA (pass criteria)
+**Date:** 2026-09-21 (ACST)
 **Linear:** [PRS-40](https://linear.app/joshsteele/issue/PRS-40)
 **Related:** [PRS-38](https://linear.app/joshsteele/issue/PRS-38) paint dock · [PRS-39](https://linear.app/joshsteele/issue/PRS-39) Promote chrome
-**Status:** Product-locked 2026-09-20. Dual use: QA audit path and later tutorial clips (same build). Ready for CoS kick after PRS-38 + PRS-39 clear.
+**Status:** Product+Design locked 2026-09-21. Craft bar raised after Joshua rejected PR #39. Texture + full V1 coverage included. Hold QA until CoS re-kicks.
 
-Canonical copy: this file in the repo (`docs/briefs/prs-40-level-brief.md`). Also attached on Linear PRS-40.
+**Source of record:** this file in the repo (`docs/briefs/prs-40-level-brief.md` on `bleeding`). Also on Linear PRS-40. Box `/workspace` copies are mirrors only.
+
+## Why this revision
+
+Joshua rejected the Annex on PR #39 as not a true level. CoS agrees: thin slabs, no place. He also asked for texture (not bare grey) and for the rebuild to test the whole shipped V1 product while authoring the place. This brief raises place craft, surface craft, and coverage. Do not merge #39 as Done for PRS-40.
 
 ## Goal
 
-Build one small real level on bleeding the way an author would. `scripts/slab-verify` green is required but not enough. File every real product failure as a Bug with How to try it and media before calling the audit Done.
+Build one small authored interior on bleeding the way a level author would, and use that build as a full product audit of major shipped V1 surfaces. `scripts/slab-verify` green is required but not enough. File every real product failure as a Bug with How to try it and media before calling the audit Done.
 
-Care bar (Joshua via CoS): How to try it stays honest. Do not mark docs figures Done when they show broken chrome.
+Care bar: How to try it stays honest. Do not mark docs figures Done when they show broken chrome.
 
-Tutorial fodder (Joshua via CoS): same build is later tutorial clips. One path. Not a second authored level. During the audit, note clip moments below. Design captures after Bugs clear. Do not film until chrome Bugs are fixed.
+Tutorial fodder: same build is later tutorial clips. One path. Not a second authored level. Note clip moments during the audit. Design films after Bugs clear.
+
+## Craft bar (Done when)
+
+All of these must hold. Solid count may go past 12 if craft needs it. Stop optimizing for an 8–12 solid budget.
+
+### Place
+
+1. Enclosed volume with a ceiling that closes the room. Not open sky over floating plates.
+2. Entrance or doorway with wall thickness. Opening about 1.0 m wide by 2.1 m tall. Jambs and wall depth at least 0.25 m. Not a hole in a wafer.
+3. Clear circulation from entrance to the raised area. Floors thick enough to stand on (about 0.15–0.25 m). No floating thin plates.
+4. Stairs or stepped solid that climb to a platform you can stand on. Platform height about 1.0–1.25 m. Treads deep enough for a player-ish footfall.
+5. Walkable scale. Outer shell about 8×6×3.5 m (W×D×H) unless Design locks different dims.
+6. Relay rack prop that reads as equipment. Tall cabinet massing about 0.6×0.4×1.8 m (or Design-locked alternate). Extrude, Inset, Bevel, Loop, plus Soft Select on a bezel or panel. Not a random 1.2 m cube.
+7. Two readable zones: entry bay and raised relay loft, connected by the stairs.
+
+Fail place craft if the scene looks like a tool demo: paper-thin walls, missing ceiling, wafer stairs, or a cube labeled as the relay.
+
+### Texture
+
+8. Floor, walls, ceiling, and the relay prop are not left default grey. Each gets intentional albedo (paint or materials) so the annex reads as a finished place in a still.
+9. Roughness and/or Emission used where it helps the place read (at least one non-albedo channel on the rack or loft wall).
+10. annex-06 paint beat shows surface work on the level in frame (rack or architectural face with real strokes / Flatten commit). Not a single dab on a blank white canvas with no place context.
+11. UV Unwrap + Pack + Fit precede paint on painted solids so islands are honest.
+
+### Full V1 coverage (test the product while building the place)
+
+Building the Annex is a full product audit. Exercise every major shipped V1 surface while authoring the place. Do not run a thin create→topo→paint strip and call it Done.
+
+Cover at least (use where craft needs them; invent nothing that is not on bleeding):
+
+* Create strip: Box plus at least one other shape the space needs (Stair and/or Cylinder/Arch/Plane as craft requires).
+* Object ops that fit the place: Mirror and/or Array if useful; boolean Subtract or Union if a doorway or bay needs it. Op Card Apply/Cancel where those ops use it.
+* Vertex / Edge / Face topo: Extrude, Inset, Bevel, Loop, plus Connect or Dissolve if used naturally.
+* Soft Select with visible falloff.
+* Solid Isolate and Face Isolate (Faces path). Esc exits Faces without clearing Soft Select.
+* UV workspace: Unwrap, Pack (distinct from Unwrap), Fit, and element select (Vert/Edge/Face) if shipped.
+* Paint: Albedo, Roughness, Emission, layers if shipped, Flatten that commits. Dock fully visible.
+* Export: OBJ at minimum. Also STL and/or FBX if on bleeding (honest filters).
+* External import + Promote (External-only chrome).
+* Save / reopen editable with collision on.
+
+If a shipped major surface cannot be hit honestly in this level, name it in the QA report as a coverage gap. Do not fake coverage.
 
 ## Level: Signal Relay Annex
 
-One enclosed annex. About 8 to 12 solids. Fresh `Node3D` scene or Signal Foundry if free. Not a full map. Not a second tutorial set piece.
+One enclosed annex. Fresh `Node3D` scene or Signal Foundry if free. Not a full map. Not a second tutorial set piece.
 
 ### Pass when the annex exists
 
-1. Floor, walls, ceiling, one doorway, one raised platform or stair.
-2. One prop solid with Extrude, Inset, Bevel, and one Loop cut.
-3. Soft Select once on a vertex or edge ring so neighbors visibly follow falloff.
-4. Face Isolate once (PRS-33 on bleeding). Solids|Faces. Esc exits Faces without clearing Soft Select. Other solids stay.
-5. UV Unwrap + Pack + Fit on at least one solid (PRS-29 Pack on bleeding). Pack is not Unwrap. Overflow refuse if triggered.
-6. Paint on one face: Albedo stroke, brief Roughness and Emission, Flatten that commits (overlay present). Dock fully visible beside the canvas.
-7. Export a solid as Wavefront OBJ (optional second: FBX). File lands. Solid unchanged after export.
-8. Import that OBJ (or any closed External). External badge on. Vertex/Edge/Face off.
-9. Promote once. Hidden on SlabSolid (PRS-39). Present only for one External. No ellipsis once PRS-39 lands. Success unlocks V/E/F, or refuse leaves External intact.
-10. Save scene, reopen, solids still editable, collision still on.
+1. Outer shell with floor, walls, and ceiling. Wall thickness at least 0.25 m. Ceiling closes the volume. Surfaces not default grey.
+2. Doorway entrance with thickness. Readable from outside and inside.
+3. Entry bay floor + raised loft platform with stairs you can climb and stand on.
+4. Create strip used for Box and at least one other needed shape (e.g. Stair).
+5. At least one Object op that fits (Mirror, Array, or boolean) with honest Apply/Cancel if Op Card applies.
+6. Relay rack with Extrude, Inset, Bevel, Loop, Soft Select falloff. Connect/Dissolve if natural.
+7. Solid Isolate once and Face Isolate once.
+8. UV Unwrap + Pack + Fit (+ element select if shipped) on painted solids.
+9. Paint with intentional albedo on architecture and prop; at least one other channel; Flatten commits. Dock visible.
+10. Export OBJ; also STL or FBX if on tip. Solid unchanged after export.
+11. Import External. Badge on. V/E/F off. Promote External-only. Success unlocks V/E/F or refuse leaves External intact.
+12. Save, reopen, editable, collision on.
 
-When the audit ends, the scene has floor, walls, ceiling, doorway, platform/stair, prop, and the promoted solid (or a clear Promote refuse with External intact).
+### Must be in / out
 
-### Must be in
+Must be in: craft bar place + texture + full V1 coverage above; live dock checks; stills annex-01…08 with the textured place in frame.
 
-* Create strip, Extrude Apply/Cancel, Inset, Bevel, Loop
-* Soft Select with visible neighbor falloff (not toggle-only)
-* Face Isolate (Faces path) + Soft Select coexistence + Esc
-* UV: Unwrap, Pack (distinct), Fit frames only
-* Paint: channels, Flatten, dock not under canvas
-* Export OBJ, Import Mesh, External badge, Promote External-only
-* Save / reopen editable
-* Live visual check of docks (occlusion / cut controls = Bug)
-
-### Must be out (this pass)
-
-* Full PowerHouse / playable map
-* Keybind profile remapping deep dive
-* Weld/Collapse as a required step (optional if natural)
-* New topology tools not claimed shipped
-* glTF, overlapping CSG, UV sculpt
-* Docs figure recapture (Design after Eng fixes)
-* Re-running every Phase C smoke in isolation
-* Filming tutorials during the audit (note moments only)
-* A second tutorial-only level
+Must be out: greybox tool demos; bare grey slabs; thin floating plates; full PowerHouse map; keybind deep dive; Weld as required; filming finished tutorials during the audit; a second tutorial-only level; optimizing solid count under craft needs; fake tool hits.
 
 ### Tools that must be touched
 
-| Step | Tool / chrome | Skip only if |
+| Area | Must hit | Skip only if |
 | --- | --- | --- |
-| Create | Object Create strip | never |
-| Topo | Extrude Apply, Inset, Bevel, Loop | never |
-| Soft Select | On, radius, move with falloff | never |
-| Face Isolate | Solids\|Faces chrome | never (on bleeding) |
-| UV | Unwrap, Pack, Fit | never (Pack on bleeding) |
-| Paint | Paint workspace, channels, Flatten | never |
-| Share | Export OBJ, Import Mesh, Promote | never |
+| Create | Box + ≥1 other needed shape | never |
+| Object | Mirror and/or Array and/or boolean as craft needs; Op Card honest | never leave all unused |
+| Topo | Extrude, Inset, Bevel, Loop; Connect/Dissolve if natural | never |
+| Soft Select | On, radius, falloff visible | never |
+| Isolate | Solid Isolate + Face Isolate | never |
+| UV | Unwrap, Pack, Fit; element select if shipped | never |
+| Paint | Albedo + ≥1 other channel; Flatten commit; dock visible | never |
+| Share | Export OBJ (+ STL/FBX if on tip); Import; Promote | never |
 | Persist | Save + reopen | never |
 
-Do not skip a tool that claims to ship. Prefer a short refuse with a Bug over a silent skip.
+## Clip moments (same build)
 
-## Clip moments (same build; note during audit; Design films later)
-
-| Beat | Stem candidate | What to show |
+| Beat | Stem | What to show |
 | --- | --- | --- |
-| 1 | `annex-01-create` | Floor + walls from Create strip |
-| 2 | `annex-02-topo` | Doorway / Extrude Apply / Bevel or Loop |
-| 3 | `annex-03-soft-select` | Soft Select falloff on the prop |
-| 4 | `annex-04-face-isolate` | Face Isolate Faces, Esc keeps Soft Select |
-| 5 | `annex-05-uv-pack` | Unwrap then Pack (show they differ), Fit |
-| 6 | `annex-06-paint` | Paint + Flatten commit, dock fully visible |
-| 7 | `annex-07-export` | Export OBJ + honest format |
+| 1 | `annex-01-create` | Shell + thick doorway; non-grey start if materials already applied |
+| 2 | `annex-02-topo` | Stairs / loft / Extrude Apply; Object op if used here |
+| 3 | `annex-03-soft-select` | Soft Select falloff on the relay rack |
+| 4 | `annex-04-face-isolate` | Face Isolate; Solid Isolate may share beat |
+| 5 | `annex-05-uv-pack` | Unwrap then Pack, Fit, element strip if shipped |
+| 6 | `annex-06-paint` | Textured place in frame; Flatten commit; dock visible |
+| 7 | `annex-07-export` | Export OBJ (+ second format if on tip) |
 | 8 | `annex-08-external-promote` | Import, badge, Promote External-only |
 
-Product locks titles/captions after the audit report (PRS-37 style). Clips do not block the audit.
-
-Design capture plan: stills during audit; film after Bugs clear. Clip stems `annex-01`…`annex-08` above.
+Product locks titles/captions after the rebuild audit report. Design capture plan follows these stems. Stills must show the textured place, not chrome-only crops.
 
 ## Pass criteria (QA owns)
 
 Audit PASS only when all of:
 
-1. Level steps 1–10 complete without a workaround that hides a Bug.
-2. Live chrome: no dock occlusion, cut controls, or wrong visibility on Create / Soft Select / Isolate / UV / Paint / Object Export-Promote. Paint dock fully visible (PRS-38 fixed, or filed again if still broken).
-3. Promote absent unless exactly one External is selected; label has no ellipsis after PRS-39 (or filed again if still wrong).
-4. Soft Select falloff is visible in the edit (not toggle-only). Pack is not Unwrap. Face Isolate Esc does not clear Soft Select.
-5. Export non-destructive. External tools stay disabled until Promote succeeds.
-6. Save → reopen → editable + collision on for built solids.
-7. Every real failure already has a Linear Bug with How to try it + media (screenshot/clip when chrome).
-8. Full `scripts/slab-verify` EXIT=0 on the same tip used for the build. Green alone does not pass.
+1. Place craft bar met. Scene reads as a place on a still without a caption.
+2. Texture craft bar met. Not default grey. annex-06 shows intentional surface work on the level.
+3. Full V1 coverage met, or every miss listed as a named coverage gap in the CoS report.
+4. Level steps complete without a workaround that hides a Bug.
+5. Live chrome honest (paint dock, Promote External-only, Op Card, Isolate Esc).
+6. Soft Select falloff visible. Pack is not Unwrap.
+7. Export non-destructive. External tools disabled until Promote succeeds.
+8. Save → reopen → editable + collision on.
+9. Every real failure has a Linear Bug with How to try it + media.
+10. `scripts/slab-verify` EXIT=0 on the same tip. Green alone does not pass.
 
-Audit FAIL (or partial) if any required step blocks, chrome is broken, or a known fail lacks a Bug. Partial reports list which steps passed and Bug links for the rest.
-
-Evidence: attach GATE.md, scene notes, clip-moment list, Bug ids, and slab-verify log on the Linear PRS-40 comment (or a linked gist/PR). Do not rely on a box-only folder.
+Evidence on Linear PRS-40 (or linked PR): GATE.md, craft stills (place + texture), coverage checklist, clip-moment list, Bug ids, slab-verify log. No box-only SoR.
 
 ## Bug filing rule (QA owns)
 
-* Bug: wrong shipped behavior; layout/chrome (occlusion, cut controls, false affordance, wrong visibility); refuse that should succeed; success that should refuse; Undo/save/reopen break; docs figure that shows broken chrome as Done.
-* Improvement: harness debt, missing or weak smoke, nicer copy, later breadth, optional polish that is not encoding a product bug.
-* File as you go. How to try it required. Prefer screenshot or clip when product chrome is involved (blob links). No silent batch notes.
-* Do not re-open PRS-38 / PRS-39 if already fixed on the tip under test. Repro and file a new Bug only if the fail still reproduces.
-* Do not close the audit while known blockers lack Linear Bugs.
-* Product vs harness split stays sharp in every report.
+* Bug: wrong shipped behavior; layout/chrome; bad refuse/success; Undo/save/reopen break; docs figure showing broken chrome as Done.
+* Improvement: harness debt, weak smoke, copy, later breadth.
+* File as you go. How to try it + media when chrome. No silent batch notes.
+* Do not re-open PRS-38 / PRS-39 if tip is fixed. New Bug only if still broken.
+* Do not close the audit while known blockers lack Bugs.
 
-## Preconditions (CoS kick)
+## Preconditions (CoS re-kick)
 
-Do not start until CoS names this cycle clear enough, including at least:
-
-* Docs remaining chrome (PRS-31 / #35), landed @ `959f754`
-* Promote chrome hide (PRS-39)
-* Paint dock fix (PRS-38)
-* Any other V1/roadmap items CoS lists
-
-If CoS kicks with known open Bugs, the level still runs. Those Bugs stay open until fixed. The audit does not paper over them.
+Hold rebuild until CoS re-kicks after this brief is Product+Design locked on bleeding. PRS-38 / PRS-39 stay Done.
 
 ## Report back to CoS
 
-Short note only:
-
-* Tip SHA under test
-* Level completed: yes / partial (which steps)
-* Passed
-* Failed (with Bug links)
-* Clip moments noted (path worth filming: yes/no + list)
+* Tip SHA
+* Craft bar place: pass / fail
+* Texture: pass / fail
+* Coverage: pass / gaps named
+* Level steps: yes / partial
+* Bugs filed
+* Clip moments noted
 * `scripts/slab-verify` EXIT
 
-No merge authority from QA.
+No merge authority from QA. Do not call PRS-40 Done on a greybox or bare-grey annex.
 
 ## Owners
 
-* Product: this brief, what "small real level" means, later tutorial title/caption lock
-* QA: execute, evidence on Linear PRS-40, Bugs, CoS report
-* Design: chrome consult + capture moments on this same build
+* Product: this brief, craft + coverage bar, later tutorial title/caption lock
+* Design: massing CLAIM, surface notes, capture stills with textured place in frame
+* QA: execute rebuild, evidence on Linear, Bugs, CoS report
 * Eng: fix filed Bugs
-* CoS: kick when clear; receive report
+* CoS: re-kick when brief locked; receive report
 
 ## Notes
 
-Rank: after current roadmap clears. Level name is Signal Relay Annex (Product CLAIM over earlier Maintenance Bay shelf draft). QA co-signed pass criteria and Bug rule folded in 2026-09-20.
+Rank: rebuild after Joshua reject of PR #39. Prior greybox brief superseded. Design CLAIMED massing (entrance → entry bay → stair/platform → relay loft) and surface intent (floor / walls+ceiling / loft deck / rack painted or materialled). Capture stems annex-01…08 unchanged.
