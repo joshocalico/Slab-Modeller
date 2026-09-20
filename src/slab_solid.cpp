@@ -90,6 +90,8 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_face_uv", "faces", "scale", "offset", "rotation"), &SlabSolid::set_face_uv);
 	ClassDB::bind_method(D_METHOD("mark_uv_seams", "edges", "marked"), &SlabSolid::mark_uv_seams);
 	ClassDB::bind_method(D_METHOD("unwrap_uv", "faces", "pixels_per_meter", "texture_resolution"), &SlabSolid::unwrap_uv);
+	ClassDB::bind_method(D_METHOD("pack_uv", "faces", "texture_resolution", "source_texture_resolution"),
+			&SlabSolid::pack_uv, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("set_face_material", "faces", "slot"), &SlabSolid::set_face_material);
 
 	ClassDB::bind_method(D_METHOD("bevel_edges", "edges", "amount", "segments"), &SlabSolid::bevel_edges, DEFVAL(1));
@@ -561,6 +563,33 @@ Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_
 	if (error == 0) {
 		out["islands"] = result.island_count;
 		out["auto_seams"] = auto_seams;
+		out["faces"] = p_faces;
+		out["atlas_overflow"] = false;
+	}
+	return out;
+}
+
+Dictionary SlabSolid::pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution,
+		int p_source_texture_resolution) {
+	Dictionary out;
+	std::vector<slab::FaceId> ids;
+	if (!_face_ids(p_faces, ids)) {
+		out["error"] = int(slab::MeshError::STALE_HANDLE);
+		return out;
+	}
+	slab::MeshEdit edit(live_mesh);
+	const slab::ops::UvPackResult result = slab::ops::pack_uv(edit, ids, p_texture_resolution,
+			p_source_texture_resolution);
+	if (!result.ok()) {
+		out["error"] = int(result.fault.code);
+		out["atlas_overflow"] = result.atlas_overflow;
+		if (result.atlas_overflow) out["suggested_texture_resolution"] = result.suggested_texture_resolution;
+		return out;
+	}
+	const int error = _commit(std::move(edit));
+	out["error"] = error;
+	if (error == 0) {
+		out["islands"] = result.island_count;
 		out["faces"] = p_faces;
 		out["atlas_overflow"] = false;
 	}

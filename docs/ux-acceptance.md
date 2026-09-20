@@ -35,6 +35,8 @@ The next visual and interaction priorities are recorded in [Modeller design dire
 
 - Fit UV uses actual mapping bounds instead of a quarter-tile minimum. Rendered tests fit tiny and very large transient mappings to 82% of the limiting canvas dimension, then send real wheel input to verify monotonic zoom and pointer anchoring. A collapsed point mapping remains finite. Reviewed captures use the loaded Brick texture, including an ordinary low-density unwrap. These checks cover navigation, not zoom-independent modifier-drag sensitivity. The full verifier, docs links, and website build passed after this change.
 
+- Pack is a distinct UV action from Unwrap and from Fit UV. It re-atlases existing unwrapped islands without unfolding from 3D. Overflow refuses, leaves the solid unchanged, and names Texture px or Placement scale. Undo restores pre-pack UVs. Fit UV still frames the canvas only. Pixel hides Pack and the UV element strip. Website MDX describes the shipped actions; the Material / UV figure is still the pre-Pack capture and needs a Design recapture.
+
 - UV modifier drags use editor-scaled screen distance. The rendered regression reproduced different outcomes at two zoom levels before the fix. Afterward, a 25-logical-pixel horizontal drag rotates 25 degrees at either zoom; a diagonal Shift-drag applies the same expected U/V factors. Held modifiers, Escape, exact native Undo/Redo, stable canvas framing, and pointer-relative Move all pass. This covers gesture consistency rather than the broader paint workflow. The full verifier, documentation link check, and website build pass.
 
 ## Remaining acceptance work

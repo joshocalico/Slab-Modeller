@@ -94,6 +94,7 @@ var _paint_mapping_title: Label
 var _paint_mapping_state: Label
 var _paint_density_row: Control
 var _paint_unwrap: Button
+var _paint_pack: Button
 var _paint_texture_px_label: Label
 var _paint_texture_px_spin: SpinBox
 var _brush_radius: SpinBox
@@ -1501,11 +1502,14 @@ func _paint_mapping_section() -> Control:
 	fields.add_child(_paint_density_row)
 	var texture_px := _compact_spin("Texture px", 16, 16384, 1, _actions.uv_texture_resolution, func(v: float) -> void:
 		_actions.uv_texture_resolution = int(v)
-	, "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique. Existing artwork is not resized.", &"paint_uv_texture_resolution")
+	, "Reference atlas resolution for Unwrap and Pack. Existing artwork is not resized.", &"paint_uv_texture_resolution")
 	_paint_texture_px_label = texture_px.get_child(0) as Label
 	_paint_texture_px_spin = texture_px.get_child(1) as SpinBox
 	fields.add_child(texture_px)
 	section.add_child(fields)
+	var mapping_actions := HFlowContainer.new()
+	mapping_actions.name = "PaintUvActions"
+	mapping_actions.add_theme_constant_override("h_separation", 4)
 	var unwrap := _named_action("Unwrap", "ArrayMesh", "Unfold the selected face region at this density and texture resolution.", func() -> void:
 		_commit_paint_mapping_inputs()
 		_actions.run("uv_unwrap")
@@ -1515,7 +1519,18 @@ func _paint_mapping_section() -> Control:
 	)
 	_paint_unwrap = unwrap
 	unwrap.name = "PaintUnwrap"
-	section.add_child(unwrap)
+	mapping_actions.add_child(unwrap)
+	var pack := _named_action("Pack", "GridLayout", "Repack islands without re-unwrapping.", func() -> void:
+		_commit_paint_mapping_inputs()
+		_actions.run("uv_pack")
+		if _paint != null and _last_report.begins_with("Packed "):
+			_paint.refresh_uv_mapping()
+			_paint_canvas.frame_uv.call_deferred()
+	)
+	_paint_pack = pack
+	pack.name = "PaintPack"
+	mapping_actions.add_child(pack)
+	section.add_child(mapping_actions)
 	return section
 
 
@@ -2033,13 +2048,15 @@ func _refresh_paint_chrome() -> void:
 		_paint_density_row.visible = is_uv_workspace
 	if _paint_unwrap != null:
 		_paint_unwrap.visible = is_uv_workspace
+	if _paint_pack != null:
+		_paint_pack.visible = is_uv_workspace
 	var pixel_has_artwork := false
 	if is_paint_workspace and _paint != null:
 		var pixel_material: Variant = _paint.material()
 		pixel_has_artwork = pixel_material is StandardMaterial3D and pixel_material.albedo_texture != null
 	if _paint_texture_px_label != null:
 		_paint_texture_px_label.text = "Texture px" if is_uv_workspace or pixel_has_artwork else "New image px"
-		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique."
+		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and Pack. Existing artwork is not resized."
 	if _paint_texture_px_spin != null:
 		_paint_texture_px_spin.editable = not pixel_has_artwork
 		_paint_texture_px_spin.tooltip_text = _paint_texture_px_label.tooltip_text

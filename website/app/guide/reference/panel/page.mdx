@@ -159,7 +159,7 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 
 ### Material / UV controls
 
-**Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands; **Placement** moves, rotates, and scales the current mapping. A successful Unwrap resets placement and frames the new islands in the canvas.
+**Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands. **Pack** re-atlases those islands without unfolding again. **Fit UV** frames the canvas only. **Placement** moves, rotates, and scales the current mapping. A successful Unwrap or Pack resets placement and frames the new islands in the canvas.
 
 | Control | Result |
 | --- | --- |
@@ -169,8 +169,10 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Material palette | Chooses the Brush without assigning it. Click **Assign**, or click a front-facing viewport face, to apply it. |
 | Material picker | Chooses or creates a `StandardMaterial3D` as the Brush preview. Click Assign to apply it to selected faces. Choosing a Brush does not change the solid or add an Undo step. Click its preview to edit the resource in Godot's Inspector. |
 | Pixels/metre | Sets the density for Unwrap. |
-| Texture px | Sets the reference atlas width for Unwrap. It does not resize existing artwork. |
+| Texture px | Sets the reference atlas width for Unwrap and Pack. It does not resize existing artwork. |
 | Unwrap | Creates seam-aware UV islands at the requested density and resets placement. An atlas that cannot fit leaves the solid unchanged and reports a suggested resolution. |
+| Pack | Re-atlases existing unwrapped islands without unfolding them again. Overflow refuses, leaves the solid unchanged, and points at Texture px or Placement scale. |
+| Fit UV | Frames the selected outlines in the UV canvas. It does not change the mesh. |
 | Repeat U, Repeat V | Sets texture repeats from 0.05 to 64. |
 | Repeat ×2, Repeat ÷2 | Doubles or halves both repeat values within the repeat limits and applies them in one undoable edit. Pending typed placement values are included. |
 | Offset U, Offset V | Moves the texture from -64 to 64. |
