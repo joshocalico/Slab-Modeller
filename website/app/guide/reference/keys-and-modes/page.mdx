@@ -8,7 +8,7 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 
 | Key | Mode | What a click does |
 | --- | --- | --- |
-| <kbd>1</kbd> | Object | Focus a `SlabSolid`. The node Move gizmo transforms the solid. Drag does not move vertices. |
+| <kbd>1</kbd> | Object | Focus a `SlabSolid` or External mesh. The node Move gizmo transforms the object. Drag does not move vertices. Vertex, Edge, and Face stay disabled on an External mesh until [Promote](/guide/how-to/promote-an-external-mesh) succeeds. |
 | <kbd>2</kbd> | Vertex | Pick a vertex. Move, Rotate, and Scale transform the selection around the configured pivot and axes. |
 | <kbd>3</kbd> | Edge | Pick an edge. The transform gizmo acts on both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
 | <kbd>4</kbd> | Face | Pick a face. The transform gizmo acts on all its vertices. Shift-drag extrudes. |

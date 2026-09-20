@@ -6,6 +6,7 @@
 #include "kernel/ops/boolean.hpp"
 #include "kernel/ops/bridge.hpp"
 #include "kernel/ops/edit.hpp"
+#include "kernel/ops/import.hpp"
 #include "kernel/ops/inset.hpp"
 #include "kernel/ops/loop.hpp"
 #include "kernel/ops/offset_loop.hpp"
@@ -73,6 +74,7 @@ void SlabSolid::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
+	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices"), &SlabSolid::import_from_mesh);
 	ClassDB::bind_method(D_METHOD("make_stair", "size", "steps"), &SlabSolid::make_stair);
 	ClassDB::bind_method(D_METHOD("make_cylinder", "radius", "height", "sides"), &SlabSolid::make_cylinder);
 	ClassDB::bind_method(D_METHOD("make_arch", "span", "depth", "segments", "thickness", "arc"), &SlabSolid::make_arch, DEFVAL(Math_PI));
@@ -437,6 +439,40 @@ int SlabSolid::make_box(const Vector3 &p_size) {
 		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices) {
+	Dictionary out;
+	std::vector<slab::IVec3> verts;
+	verts.reserve(size_t(p_vertices.size()));
+	for (int i = 0; i < p_vertices.size(); i++) {
+		slab::IVec3 q;
+		if (!slab::quantize(p_vertices[i], q)) {
+			out["error"] = int(slab::MeshError::COORD_OUT_OF_RANGE);
+			out["refuse_reason"] = "non-manifold";
+			return out;
+		}
+		verts.push_back(q);
+	}
+	std::vector<int32_t> indices;
+	indices.reserve(size_t(p_indices.size()));
+	for (int i = 0; i < p_indices.size(); i++) {
+		indices.push_back(p_indices[i]);
+	}
+
+	const slab::ops::ImportResult imported = slab::ops::import_from_triangles(verts, indices);
+	if (!imported.fault.ok()) {
+		out["error"] = int(imported.fault.code);
+		out["refuse_reason"] = String(imported.refuse_reason.c_str());
+		return out;
+	}
+
+	live_mesh = imported.mesh;
+	_rebuild();
+	emit_signal("topology_changed");
+	out["error"] = 0;
+	out["refuse_reason"] = "";
+	return out;
 }
 
 int SlabSolid::extrude_faces(const PackedInt64Array &p_faces, float p_distance) {

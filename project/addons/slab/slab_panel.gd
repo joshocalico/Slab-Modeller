@@ -1926,7 +1926,7 @@ func _on_paint_changed() -> void:
 		_style_tool(_uv_toggle, _workspace == Workspace.UV)
 		_uv_toggle.disabled = external_only
 		if external_only:
-			_uv_toggle.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+			_uv_toggle.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
 		else:
 			_uv_toggle.tooltip_text = "Open the UV workspace for unwrapping and material placement. Escape closes it."
 	if _paint_toggle != null:
@@ -1934,7 +1934,7 @@ func _on_paint_changed() -> void:
 		_style_tool(_paint_toggle, _workspace == Workspace.PAINT)
 		_paint_toggle.disabled = external_only
 		if external_only:
-			_paint_toggle.tooltip_text = "Convert to a Slab solid first (Promote — later)."
+			_paint_toggle.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
 		else:
 			_paint_toggle.tooltip_text = "Open the pixel Paint workspace. Escape closes it."
 	if _paint_body != null:

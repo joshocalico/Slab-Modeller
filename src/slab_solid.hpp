@@ -14,6 +14,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
@@ -77,6 +78,7 @@ public:
 
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
+	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices);
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
 	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);

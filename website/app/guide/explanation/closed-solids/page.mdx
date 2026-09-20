@@ -6,6 +6,8 @@ Slab stores a watertight half-edge mesh on `SlabSolid`. A wall is a thin box wit
 
 Extrude, inset, and boolean all assume every edge has a twin. A one-sided sheet fails those checks.
 
+An imported External mesh can be a sheet. **Promote to Slab Solid…** tries the half-edge conversion once. Success unlocks modelling. Refuse leaves the External mesh unchanged. Import does not promote. See [Promote an External mesh](/guide/how-to/promote-an-external-mesh).
+
 ## Openings
 
 A one-off door can be a Subtract through a wall. Push a second solid through the wall so it sticks out on both sides, then subtract. The kernel knifes both faces and joins the opening. See [Punch a cavity](/guide/how-to/punch-a-cavity).

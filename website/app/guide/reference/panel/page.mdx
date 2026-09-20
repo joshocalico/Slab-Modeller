@@ -77,7 +77,9 @@ See [Create a solid](/guide/how-to/create-a-solid).
 
 ## Object
 
-Needs a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. **Target** receives the result. **Second solid** is the other operand and is the cutter for Subtract. Click **Swap operands** to exchange those roles before running the Boolean. The second solid remains in the scene after the operation.
+Boolean, Mirror, Pivot, Snap, Plane Cut, and Array need a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. **Target** receives the result. **Second solid** is the other operand and is the cutter for Subtract. Click **Swap operands** to exchange those roles before running the Boolean. The second solid remains in the scene after the operation.
+
+**Import Mesh…** is available with no selection. **Export…** works on a selected `SlabSolid` or External mesh. **Promote to Slab Solid…** needs one External mesh.
 
 | Command | Result |
 | --- | --- |
@@ -89,6 +91,9 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. *
 | Snap To Grid | Rounds every vertex onto the grid step. |
 | Plane Cut | Previews an exact local-space plane, keeps the chosen side, and caps every section loop. |
 | Array | Previews 2 to 256 total instances in a linear or radial layout, then creates the copies as one undo action. |
+| Import Mesh… | Loads an OBJ or STL as an External mesh. Non-manifold and open files stay External. Import never promotes. |
+| Export… | Writes the selected solid or External mesh. Does not change the scene. |
+| Promote to Slab Solid… | Converts one closed External mesh into a `SlabSolid`. Open, empty, or non-manifold meshes are refused and left unchanged. |
 
 ## Vertex
 
