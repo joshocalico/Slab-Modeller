@@ -123,6 +123,46 @@ func case_isolate_button_exists_and_toggles() -> void:
 	panel.free()
 
 
+func case_soft_select_button_exists_and_toggles() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	var soft_btn: Button = panel.find_child("SoftSelect", true, false)
+	var soft_opts: HBoxContainer = panel.find_child("SoftSelectOptions", true, false)
+	expect(soft_btn != null, "Soft Select button exists in SelectionControls")
+	expect(soft_btn.text == "Soft Select", "Soft Select button text is 'Soft Select'")
+	expect(soft_btn.toggle_mode, "Soft Select button is a toggle")
+	expect(soft_btn.disabled, "Soft Select button disabled in Object mode")
+	expect(soft_opts != null and not soft_opts.visible, "Soft Select options hidden initially")
+	selection.mode = SlabSelection.Mode.FACE
+	selection.settings_changed.emit()
+	await process_frame
+	expect(not soft_btn.disabled, "Soft Select button enabled in Face mode")
+	expect(not soft_btn.button_pressed, "Soft Select button starts unpressed")
+	selection.set_soft_select(true)
+	selection.settings_changed.emit()
+	await process_frame
+	expect(soft_btn.button_pressed, "Soft Select button pressed when enabled")
+	expect(soft_opts.visible, "Soft Select options visible when enabled")
+	var radius: SpinBox = soft_opts.find_child("SoftRadius", true, false)
+	var falloff: OptionButton = soft_opts.find_child("SoftFalloff", true, false)
+	expect(radius != null, "Soft Select has Radius spin")
+	expect(falloff != null, "Soft Select has Falloff option")
+	selection.set_soft_select(false)
+	selection.settings_changed.emit()
+	await process_frame
+	expect(not soft_btn.button_pressed, "Soft Select button unpressed when disabled")
+	expect(not soft_opts.visible, "Soft Select options hidden when disabled")
+	selection.mode = SlabSelection.Mode.OBJECT
+	selection.settings_changed.emit()
+	await process_frame
+	expect(soft_btn.disabled, "Soft Select disabled when returning to Object mode")
+	expect(soft_btn.tooltip_text.contains("Vertex"), "Object mode tooltip mentions element modes")
+	panel.free()
+
+
 func case_loop_cut_controls_preserve_edge_settings() -> void:
 	var panel := _build_panel(1.0, SlabSelection.Mode.EDGE)
 	root.add_child(panel)

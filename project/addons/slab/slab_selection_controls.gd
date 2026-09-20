@@ -1,12 +1,16 @@
 @tool
 extends HFlowContainer
 
+const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+
 const FONT_SIZE := 15
 
 var _selection: RefCounted
 var _custom: HBoxContainer
 var _metrics: RefCounted
 var _isolate: Button
+var _soft_select: Button
+var _soft_options: HBoxContainer
 var _scene_root_getter: Callable
 
 func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable()) -> void:
@@ -38,6 +42,47 @@ func setup(selection: RefCounted, metrics: RefCounted = null, scene_root_getter:
 	_style_text(_isolate)
 	_isolate.pressed.connect(_on_isolate_pressed)
 	add_child(_isolate)
+	_soft_select = Button.new()
+	_soft_select.name = "SoftSelect"
+	_soft_select.toggle_mode = true
+	_soft_select.text = "Soft Select"
+	_soft_select.button_pressed = selection.soft_select
+	_soft_select.tooltip_text = "Apply a falloff influence to neighboring elements during transforms."
+	_style_text(_soft_select)
+	_soft_select.pressed.connect(_on_soft_select_pressed)
+	add_child(_soft_select)
+	_soft_options = HBoxContainer.new()
+	_soft_options.name = "SoftSelectOptions"
+	_soft_options.visible = selection.soft_select and selection.soft_select_allowed()
+	add_child(_soft_options)
+	var radius_label := Label.new()
+	radius_label.text = "Radius"
+	_style_text(radius_label)
+	_soft_options.add_child(radius_label)
+	var radius := SpinBox.new()
+	radius.name = "SoftRadius"
+	radius.min_value = 0.01
+	radius.max_value = 100.0
+	radius.step = 0.01
+	radius.value = selection.soft_radius
+	radius.custom_minimum_size.x = _metrics.px(72)
+	radius.tooltip_text = "Falloff distance from the hard selection."
+	_style_text(radius)
+	_style_text(radius.get_line_edit())
+	radius.value_changed.connect(func(value: float) -> void: _selection.set_soft_radius(value))
+	_soft_options.add_child(radius)
+	var falloff_label := Label.new()
+	falloff_label.text = "Falloff"
+	_style_text(falloff_label)
+	_soft_options.add_child(falloff_label)
+	var falloff := OptionButton.new()
+	falloff.name = "SoftFalloff"
+	falloff.add_item("Smooth")
+	falloff.add_item("Linear")
+	falloff.select(selection.soft_falloff)
+	_style_text(falloff)
+	falloff.item_selected.connect(func(index: int) -> void: _selection.set_soft_falloff(index))
+	_soft_options.add_child(falloff)
 	_custom = HBoxContainer.new()
 	_custom.name = "CustomPivot"
 	_custom.visible = selection.pivot_mode == 2
@@ -81,6 +126,7 @@ func _sync() -> void:
 		_isolate.set_pressed_no_signal(_selection.isolated)
 		_sync_isolate_label()
 		_isolate.disabled = _selection.objects.is_empty()
+	_sync_soft_select()
 
 
 func _sync_isolate_label() -> void:
@@ -95,6 +141,29 @@ func _on_isolate_pressed() -> void:
 		scene_root = _scene_root_getter.call()
 	_selection.toggle_isolation(scene_root)
 	_sync_isolate_label()
+
+
+func _sync_soft_select() -> void:
+	if _soft_select == null:
+		return
+	var allowed: bool = _selection.soft_select_allowed()
+	_soft_select.disabled = not allowed
+	_soft_select.tooltip_text = "Soft Select works in Vertex, Edge, or Face." if not allowed else "Apply a falloff influence to neighboring elements during transforms."
+	_soft_select.set_pressed_no_signal(_selection.soft_select and allowed)
+	_soft_options.visible = _selection.soft_select and allowed
+	var radius: SpinBox = _soft_options.get_node("SoftRadius")
+	if not is_equal_approx(radius.value, _selection.soft_radius):
+		radius.set_value_no_signal(_selection.soft_radius)
+	var falloff: OptionButton = _soft_options.get_node("SoftFalloff")
+	falloff.select(_selection.soft_falloff)
+
+
+func _on_soft_select_pressed() -> void:
+	if not _selection.soft_select_allowed():
+		_soft_select.set_pressed_no_signal(false)
+		return
+	_selection.set_soft_select(not _selection.soft_select)
+	_sync_soft_select()
 
 func _choice(label_text: String, choices: Array, selected: int, callback: Callable) -> void:
 	var label := Label.new()
