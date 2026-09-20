@@ -30,7 +30,7 @@ Selection conversion also matters during authoring. Rounding a roof requires its
 
 Surface Paint owns material choice, Assign, UV placement, and Mapping. Face mode keeps geometry commands and the Selection disclosure. Its right-hand settings appear for Align Face rather than repeating Paint's fields.
 
-Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions.
+Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Pack re-atlases those existing islands without unfolding again. Fit UV frames the canvas only. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions. Pixel hides the UV element strip and Pack.
 
 Resize expands beside the image with Width, Height, Keep aspect, resampling, Apply Resize, and Cancel. The canvas stays visible while the author chooses dimensions. Only Apply changes the image; UV placement remains unchanged. This uses the modelling tools' explicit Apply and Cancel controls. The form shows pending dimensions, not a preview of the resampled pixels.
 

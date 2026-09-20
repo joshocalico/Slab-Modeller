@@ -94,6 +94,7 @@ public:
 	int set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation);
 	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
 	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
+	Dictionary pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution, int p_source_texture_resolution = 0);
 	int set_face_material(const PackedInt64Array &p_faces, int p_slot);
 
 	int bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1);

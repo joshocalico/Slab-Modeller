@@ -121,6 +121,7 @@ var uv_offset := Vector2.ZERO
 var uv_rotation_degrees: float = 0.0
 var uv_pixels_per_meter: float = 256.0
 var uv_texture_resolution: int = 1024
+var _uv_atlas_resolution: int = 0
 var material_slot: int = 0
 
 var shapes: RefCounted
@@ -579,6 +580,10 @@ func _unwrap_op() -> Dictionary:
 	return { "run": _unwrap_target }
 
 
+func _pack_op() -> Dictionary:
+	return { "run": _pack_target }
+
+
 func _operation_op(kind: int) -> Dictionary:
 	return { "preview": kind }
 
@@ -943,6 +948,7 @@ func _unwrap_target(target: Node3D) -> String:
 	uv_scale = Vector2.ONE
 	uv_offset = Vector2.ZERO
 	uv_rotation_degrees = 0.0
+	_uv_atlas_resolution = uv_texture_resolution
 	if _undo != null and after != before:
 		_undo.create_action("Slab Unwrap UV", UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
@@ -950,6 +956,33 @@ func _unwrap_target(target: Node3D) -> String:
 		_undo.commit_action(false)
 	var automatic := PackedInt64Array(result.get("auto_seams", PackedInt64Array()))
 	return "Unwrapped %d island(s); added %d automatic cut(s)." % [int(result.get("islands", 0)), automatic.size()]
+
+
+func _pack_target(target: Node3D) -> String:
+	for face in _selection.ids:
+		var attrs: Dictionary = target.call("face_uv", face)
+		if not bool(attrs.get("unwrapped", false)):
+			return "Pack needs unwrapped islands. Unwrap first. The solid was unchanged."
+	var before: PackedByteArray = target.get("data")
+	var source: int = _uv_atlas_resolution if _uv_atlas_resolution > 0 else uv_texture_resolution
+	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, source)
+	if bool(result.get("atlas_overflow", false)):
+		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
+		return "Pack refused: islands exceed atlas. Increase Texture px to at least %d, or scale down Placement. The solid was unchanged." % suggested
+	var err: int = int(result.get("error", ERR_INVALID_SELECTION))
+	if err != OK:
+		return "Pack failed. %s" % describe_error(err, "uv_pack")
+	var after: PackedByteArray = target.get("data")
+	uv_scale = Vector2.ONE
+	uv_offset = Vector2.ZERO
+	uv_rotation_degrees = 0.0
+	_uv_atlas_resolution = uv_texture_resolution
+	if _undo != null and after != before:
+		_undo.create_action("Slab Pack UV", UndoRedo.MERGE_DISABLE, target)
+		_undo.add_do_property(target, "data", after)
+		_undo.add_undo_property(target, "data", before)
+		_undo.commit_action(false)
+	return "Packed %d island(s)." % int(result.get("islands", 0))
 
 
 func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable, exact_count: int = 0) -> Dictionary:
@@ -1017,6 +1050,7 @@ func _build() -> Array[Dictionary]:
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
 		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),
+		_row("uv_pack", "Pack", "GridLayout", face, 1, "Repack islands without re-unwrapping.", 0, _pack_op),
 
 		_row("select_all", "Select All", "ListSelect", elements, 0, "Selects every element in the current mode.", KEY_A, _select_op.bind(_pick_all)),
 		_row("select_none", "Select None", "Clear", elements, 1, "Clears the element selection.", KEY_D, _select_op.bind(_pick_none)),

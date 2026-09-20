@@ -193,6 +193,11 @@ func case_unwrap_pack_fit_workflow() -> void:
 	await process_frame
 	var unwrap: Button = panel.find_child("PaintUnwrap", true, false)
 	expect(unwrap != null, "Unwrap button exists in UV workspace")
+	var pack: Button = panel.find_child("PaintPack", true, false)
+	expect(pack != null, "Pack button exists in UV workspace")
+	expect(pack.visible, "Pack button visible in UV workspace")
+	expect(pack.tooltip_text == "Repack islands without re-unwrapping.",
+		"Pack tooltip is exactly the locked copy")
 	var fit: Button = panel.find_child("PaintFitUv", true, false)
 	expect(fit != null, "Fit UV button exists in UV workspace")
 	expect(fit.visible, "Fit UV button visible in UV workspace")
@@ -206,8 +211,33 @@ func case_unwrap_pack_fit_workflow() -> void:
 	for face in faces:
 		var attrs: Dictionary = solid.call("face_uv", face)
 		expect(bool(attrs.get("unwrapped", false)), "face %d is marked unwrapped after Unwrap" % face)
-	expect(paint.active, "UV workspace stays active after Unwrap")
-	expect(panel.current_workspace() == SlabPanel.Workspace.UV, "stays in UV workspace after Unwrap")
+	var after_unwrap: PackedByteArray = solid.get("data")
+	actions.uv_offset = Vector2(0.35, 0.35)
+	actions.run("uv_apply")
+	var after_offset: PackedByteArray = solid.get("data")
+	expect(after_offset != after_unwrap, "Placement offset changes UV data")
+	actions.run("uv_pack")
+	expect(not reports.is_empty() and reports.back().begins_with("Packed "),
+		"Pack reports success, got %s" % [reports.back() if not reports.is_empty() else ""])
+	var after_pack: PackedByteArray = solid.get("data")
+	expect(after_pack != after_offset, "Pack rearranges islands")
+	solid.set("data", after_offset)
+	actions.uv_pixels_per_meter = 128.0
+	actions.uv_texture_resolution = 1024
+	actions.run("uv_unwrap")
+	expect(solid.get("data") != after_pack, "Unwrap at a new density is not Pack")
+	var data_before_fit: PackedByteArray = solid.get("data")
+	fit.pressed.emit()
+	expect(solid.get("data") == data_before_fit, "Fit UV frames the canvas only")
+	paint.tool = SlabPaint.Tool.PIXEL
+	panel.call("_on_paint_changed")
+	await process_frame
+	expect(not pack.visible, "Paint workspace hides Pack")
+	expect(not unwrap.visible, "Paint workspace hides Unwrap")
+	var strip: Control = panel.find_child("UVModeStrip", true, false)
+	expect(strip != null and not strip.visible, "Paint workspace hides the UV element strip")
+	expect(paint.active, "workspace stays active after Pack")
+	expect(panel.current_workspace() == SlabPanel.Workspace.PAINT, "switched to Paint after the hide check")
 	panel.free()
 	solid.free()
 

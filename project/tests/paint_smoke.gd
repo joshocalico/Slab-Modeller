@@ -1043,8 +1043,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(mapping != null and mapping.is_visible_in_tree()
 		and panel.find_child("PaintMappingState", true, false).visible == false
 		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible == false
-		and panel.find_child("PaintUnwrap", true, false).visible == false,
-		"Pixel reduces Mapping to image-size controls")
+		and panel.find_child("PaintUnwrap", true, false).visible == false
+		and panel.find_child("PaintPack", true, false).visible == false,
+		"Pixel reduces Mapping to image-size controls and hides Pack")
 	_expect(not mapping_resolution.editable
 		and (mapping_resolution.get_parent().get_child(0) as Label).text == "Texture px",
 		"existing Pixel artwork reports its dimensions without offering a resize")
@@ -1164,8 +1165,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(mapping_resolution.editable, "Material/UV can set the reference atlas resolution")
 	_expect(panel.find_child("PaintMappingState", true, false).visible
 		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible
-		and panel.find_child("PaintUnwrap", true, false).visible,
-		"Material/UV exposes mapping state, density, and Unwrap")
+		and panel.find_child("PaintUnwrap", true, false).visible
+		and panel.find_child("PaintPack", true, false).visible,
+		"Material/UV exposes mapping state, density, Unwrap, and Pack")
 	_expect(panel.find_child("PaintPlacementTitle", true, false).text == "Placement",
 		"Mapping and Placement are distinct inspector sections")
 	var repeat_u: SpinBox = panel.find_child("paint_uv_repeat_u", true, false).get_child(1) as SpinBox

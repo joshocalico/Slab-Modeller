@@ -106,6 +106,49 @@ func _run() -> void:
 	check(shared_actions.uv_scale == Vector2.ONE and shared_actions.uv_offset == Vector2.ZERO
 		and is_zero_approx(shared_actions.uv_rotation_degrees),
 		"successful Unwrap resets shared placement state to the kernel mapping")
+	var after_unwrap: PackedByteArray = clone.get("data")
+	var unwrap_lengths := _edge_lengths(clone, sides)
+	shared_actions.uv_offset = Vector2(0.35, 0.35)
+	shared_actions.run("uv_apply")
+	var after_offset: PackedByteArray = clone.get("data")
+	check(after_offset != after_unwrap, "placement offset mutates UV data")
+	var undo_before_pack: int = shared_undo.actions.size()
+	shared_actions.run("uv_pack")
+	check(not reports.is_empty() and reports.back().begins_with("Packed ") and reports.back().contains("island"),
+		"shared Pack reports packed islands, got %s" % [reports.back() if not reports.is_empty() else ""])
+	var after_pack: PackedByteArray = clone.get("data")
+	check(after_pack != after_offset, "Pack writes a new atlas without calling Unwrap")
+	check(shared_actions.uv_offset == Vector2.ZERO, "successful Pack resets shared placement state")
+	check(_lengths_scale(unwrap_lengths, _edge_lengths(clone, sides), 1.0),
+		"Pack keeps island edge lengths instead of unfolding again")
+	shared_undo.undo()
+	check(clone.get("data") == after_offset, "Pack Undo restores pre-pack UVs")
+	check(shared_undo.actions.size() == undo_before_pack + 1, "Pack recorded one undo action")
+	shared_undo.redo()
+	check(clone.get("data") == after_pack, "Pack Redo restores packed UVs")
+	clone.set("data", after_offset)
+	shared_actions.uv_offset = Vector2(0.35, 0.35)
+	shared_actions.uv_pixels_per_meter = 64.0
+	shared_actions.uv_texture_resolution = 2048
+	shared_actions.run("uv_unwrap")
+	var after_reunwrap: PackedByteArray = clone.get("data")
+	check(after_reunwrap != after_pack, "Unwrap at a new density is not Pack")
+	check(_lengths_scale(unwrap_lengths, _edge_lengths(clone, sides), 0.5),
+		"Unwrap rebuilds island size from 3D; Pack does not")
+	clone.set("data", after_unwrap)
+	shared_actions.uv_scale = Vector2(16.0, 16.0)
+	shared_actions.run("uv_apply")
+	var overflow_pack_before: PackedByteArray = clone.get("data")
+	var undo_before_overflow_pack: int = shared_undo.actions.size()
+	reports.clear()
+	shared_actions.run("uv_pack")
+	check(not reports.is_empty() and reports.back().contains("Pack refused")
+		and reports.back().contains("Texture px") and reports.back().contains("Placement"),
+		"shared Pack overflow names Texture px and Placement")
+	check(clone.get("data") == overflow_pack_before, "shared Pack overflow leaves UV data unchanged")
+	check(shared_undo.actions.size() == undo_before_overflow_pack
+		and shared_actions.uv_scale == Vector2(16.0, 16.0),
+		"shared Pack overflow preserves history and pending placement")
 
 	var undo := Undo.new()
 	undo.create_action("Unwrap UV")
@@ -139,6 +182,28 @@ func _shared_edge(solid: Node3D, face_a: int, face_b: int) -> int:
 		if faces.has(face_b):
 			return edge
 	return 0
+
+
+func _edge_lengths(solid: Node3D, faces: PackedInt64Array) -> Array[float]:
+	var out: Array[float] = []
+	for face in faces:
+		var corners: PackedVector3Array = solid.call("face_corners", face)
+		if corners.size() < 2:
+			out.append(0.0)
+			continue
+		var a := PaintUv.point_uv(solid, face, corners[0])
+		var b := PaintUv.point_uv(solid, face, corners[1])
+		out.append(a.distance_to(b))
+	return out
+
+
+func _lengths_scale(before: Array[float], after: Array[float], factor: float) -> bool:
+	if before.size() != after.size() or before.is_empty():
+		return false
+	for i in before.size():
+		if absf(after[i] - before[i] * factor) > 0.001:
+			return false
+	return true
 
 
 func _uv_matches_emit(mesh: ArrayMesh, local: Vector3, mapped: Vector2) -> bool:
