@@ -5,13 +5,13 @@
 **Date:** 2026-09-21 (ACST)
 **Linear:** [PRS-40](https://linear.app/joshsteele/issue/PRS-40)
 **Related:** [PRS-38](https://linear.app/joshsteele/issue/PRS-38) · [PRS-39](https://linear.app/joshsteele/issue/PRS-39)
-**Status:** Product+Design locked 2026-09-21 (v3). Joshua rejected tip `a2463c71`. Place readability is the gate. Hold QA until CoS re-kicks after this brief lands on bleeding.
+**Status:** Product+Design locked v3.1 surface addendum 2026-09-21. Joshua on #44 tip `6cf335bc`: obvious textures + fully painted UVs. Place readability still required. Hold QA until CoS re-kicks after this addendum lands on bleeding.
 
 **Source of record:** this file in the repo (`docs/briefs/prs-40-level-brief.md` on `bleeding`). Box `/workspace` copies are mirrors only.
 
-## Why v3
+## Why v3.1
 
-Joshua rejected craft rebuild tip `a2463c71` ("still not a true level"). Thickness, palette, and tool coverage were necessary but not enough. Stills still read as a slab collage / tool demo. Do not merge that tip as Done for PRS-40.
+Joshua rejected craft rebuild tip `a2463c71` (“still not a true level”). Thickness, palette, and tool coverage were necessary but not enough. Stills still read as a slab collage / tool demo. Do not merge that tip as Done for PRS-40. Tip `6cf335bc` on PR #44 was closer but still rejected for weak / incomplete paint. Do not squash #44 as Done.
 
 ## Goal
 
@@ -27,27 +27,40 @@ All must hold. Solid and prop count rise as craft needs. No budget that kills pl
 
 ### Place readability (gate)
 
-A wide still must sell "Signal Relay Annex" without text. Fail if it looks like floating plates, a T-junction of slabs, or a tool demo.
+A wide still must sell “Signal Relay Annex” without text. Fail if it looks like floating plates, a T-junction of slabs, or a tool demo.
 
-Design composition CLAIM (2026-09-21):
+Design composition CLAIM (2026-09-21). Stranger test: caption-free stills must sell door, bay, climbable stair, loft-as-loft, rack-in-room. Fail = collage / floating plates / trophy cube.
 
-1. Shell ≥8×6×3.5 m (W×D×H). Grow if rooms need air. Default rack ~0.6×0.4×1.8 m unless rewritten.
-2. Bay ~4 m deep; loft over the back half. At least one interior pier or half-wall so it is not a single empty box.
-3. Doorway as threshold. Thick opening about 1.0×2.1 m, jambs ≥0.25 m. Exterior face, then a clear look-into the bay. Interior continues past the threshold.
-4. Stair along a wall, attached bay floor ↔ loft deck. Create Stair preferred. Visible treads/risers. Climbable in frame. Optional handrail. Not a wafer ramp or floating island.
-5. Loft as a room. Half-wall or rail. At least 0.8 m clear stand space in front of the rack. Rack against a wall or niche, not on a trophy pad.
-6. Rack as furniture in the loft. Plinth + bezel topo + Soft Select. Reads as equipment in the room, not a free-floating cube.
-7. Circulation clear in wide stills: doorway → bay → climb → rack in the room. annex-01 / annex-02 / annex-06 must show that path.
-8. At least two supporting props (crate, cable run, rail, light massing) so the room is not empty architecture. More solids OK.
+1. Shell at least 8×6×3.5 m (grow for air). Bay about 4 m deep. Loft over the back half.
+2. At least one pier or half-wall so the bay reads as a room, not an empty box.
+3. Doorway as threshold with depth and look-into bay. Opening about 1.0×2.1 m, jambs ≥0.25 m.
+4. Stair along a wall, attached bay floor ↔ loft deck. Create Stair preferred. Optional handrail mass. Climbable in frame. Not a wafer ramp.
+5. Loft as a room: half-wall or rail; at least 0.8 m clear stand space in front of the rack; rack against wall or niche on a plinth (not a trophy pad).
+6. Rack as furniture (~0.6×0.4×1.8 m): plinth + bezel topo + Soft Select. Equipment in the room, not a free-floating cube.
+7. At least two supporting props (crate / cable / light box / conduit or similar).
+8. Circulation clear in wide stills: outside → door → bay → stair → loft with rack. annex-01 / annex-02 / annex-06 must show that path.
 
-Product accepts Design CLAIM dims and spatial moves above.
+Product accepts this CLAIM.
 
-### Mood / materials
+### Mood / materials (obvious + full UV paint)
 
-9. Palette CLAIM stands: bay cool worn plate; loft warm grit (distinct); walls mid plaster; ceiling darker soffit; rack dark chassis + Roughness; bezel accent + Emission on one indicator face.
-10. Mood: exterior cool vs interior spill; bay worn; loft cleaner; rack dark with Emission indicator. Value contrast sells atmosphere. "Slightly tinted grey" fails.
-11. annex-06: rack + loft in frame, Flatten commit, dock visible, mood readable.
-12. UV Unwrap + Pack + Fit before paint on painted solids.
+8. Design surface CLAIM (2026-09-21). Thumbnail-readable high-contrast palette:
+   * Bay floor: cool blue-grey.
+   * Walls: warm ochre.
+   * Ceiling: charcoal.
+   * Loft deck: warm grit/rust (clearly not the bay).
+   * Door jamb: dark trim.
+   * Rack body: near-black + Roughness.
+   * Bezel: saturated amber + Emission indicator.
+9. Materials must read at a glance. Subtle tint fails even if hex codes differ.
+10. Fully painted UVs. Full island = coverage of UV island area, not touched once. Architecture + rack Unwrap/Pack/Fit, then paint to these Albedo floors:
+    * Bay floor / loft deck / rack body ≥90%.
+    * Walls / soffit ≥85%.
+    * Door jamb ≥80%.
+    * Rack bezel ≥95% amber Albedo + Emission blob ~8–16 px, Flatten committed.
+    Flood first (brush ≥40% island diameter), then detail. Sparse dabs fail. A 1:1 UV atlas shows filled blocks, not white + dots. Architecture and rack both show filled albedo in wide stills.
+11. Mood: exterior cool vs interior spill; bay worn; loft cleaner; rack dark with Emission. Value contrast sells atmosphere.
+12. annex-06: loft + rack in frame, dock visible, filled bezel + architecture. Sells painted place at thumbnail without canvas zoom. Dabs fail. Flatten commit required.
 
 ### Full V1 coverage
 
@@ -67,7 +80,7 @@ Exercise major shipped V1 surfaces while authoring the place. Named gaps only; n
 
 1. Place readability gate passes on wide stills (stranger test, no caption).
 2. Doorway threshold, enclosed bay, climbable stair, loft-as-room, rack-as-furniture all present.
-3. Mood/materials sell the annex.
+3. Mood/materials sell the annex at a glance (high contrast). Fully painted UVs on painted solids.
 4. Full V1 coverage met or gaps named.
 5. Tool path + save/reopen honest.
 6. Clip moments annex-01…08 noted with place in frame.
@@ -76,7 +89,7 @@ Exercise major shipped V1 surfaces while authoring the place. Named gaps only; n
 
 * Slab collage / floating plates / T-junction demos / trophy-pad rack
 * Empty single box with a cube called a rack
-* Bare grey or mood failure
+* Bare grey, subtle tint, or single-stroke blank-atlas paint
 * Thin tool-path strips that ignore place
 * Merging rejected tips as Done
 * Fake coverage
@@ -90,7 +103,7 @@ Same stems annex-01…08. Every still shows the place. annex-01 must read as an 
 PASS only when:
 
 1. Place readability gate met.
-2. Mood/materials met.
+2. Mood/materials met: obvious contrast + fully painted UV islands on architecture and rack.
 3. Coverage met or gaps named.
 4. Live chrome honest.
 5. Bugs filed as you go.
@@ -110,7 +123,7 @@ Hold until this brief is on bleeding and CoS re-kicks. Do not treat PR #39 / tip
 
 * Tip SHA
 * Place readability: pass / fail (why, with still)
-* Mood: pass / fail
+* Mood / painted UVs: pass / fail
 * Coverage: pass / gaps
 * Bugs / clip moments / slab-verify EXIT
 
@@ -124,4 +137,6 @@ Hold until this brief is on bleeding and CoS re-kicks. Do not treat PR #39 / tip
 
 ## Notes
 
-v3 supersedes v2 place language. Design CLAIMED composition: shell ≥8×6×3.5 (grow for air), bay ~4 m, ≥1 pier/half-wall, thick doorway with look-into, stair along wall attached bay↔loft (Create Stair preferred, optional handrail), loft half-wall/rail with ≥0.8 m clear in front of rack, rack against wall/niche on plinth, ≥2 supporting props. Mood (exterior cool vs interior spill; bay worn; loft cleaner; rack Emission) and palette CLAIM stand. Full V1 coverage while authoring. Capture stems annex-01…08 unchanged.
+v3.1 adds obvious texture + full UV paint on top of v3 place language. Design CLAIMED composition (shell≥8×6×3.5, bay~4 m, pier/half-wall, threshold door, wall stair, loft ≥0.8 m clear, rack on plinth in niche, ≥2 props) and mood (exterior cool vs interior spill; bay worn; loft cleaner; rack Emission). Capture stems annex-01…08 unchanged.
+
+Surface addendum: Design CLAIMED thumbnail palette (cool blue-grey bay, warm ochre walls, charcoal ceiling, grit/rust loft, dark jamb, near-black rack, amber Emission bezel) and full-island fill floors (bay/loft/rack ≥90%, walls/soffit ≥85%, jamb ≥80%, bezel ≥95% amber + Emission blob). Flood first, then detail. Do not squash #44 / `6cf335bc` as Done.
