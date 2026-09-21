@@ -5,7 +5,7 @@
 **Date:** 2026-09-21 (ACST)
 **Linear:** [PRS-40](https://linear.app/joshsteele/issue/PRS-40)
 **Related:** [PRS-38](https://linear.app/joshsteele/issue/PRS-38) · [PRS-39](https://linear.app/joshsteele/issue/PRS-39)
-**Status:** Product+Design locked v3.1 surface addendum 2026-09-21. Joshua on #44 tip `6cf335bc`: obvious textures + fully painted UVs. Place readability still required. Hold QA until CoS re-kicks after this addendum lands on bleeding.
+**Status:** Shipped demo on bleeding (PRS-40 Done, Annex v3.1 via PR #46). PR #47 holds merge to main until Joshua/Astra. Historical: #44 tip `6cf335bc` was not squashed as Done.
 
 **Source of record:** this file in the repo (`docs/briefs/prs-40-level-brief.md` on `bleeding`). Box `/workspace` copies are mirrors only.
 
