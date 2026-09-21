@@ -1,6 +1,8 @@
 # Signal Relay Annex (v3.1 surface pass)
 
-Editor-authored Slab level for [PRS-40](https://linear.app/joshsteele/issue/PRS-40). This tree is the **brief v3.1 surface rebuild** against bleeding `@2b60ce1` (high-contrast palette + full UV island fills). It supersedes the weak / incomplete paint on tip `6cf335bc` / [PR #44](https://github.com/joshocalico/slab-modeller/pull/44) without squashing that PR as Done. **Not Done** for PRS-40 — do not merge as Annex Done.
+Status: shipped demo on bleeding (PRS-40 Done, Annex v3.1 via PR #46). PR #47 holds merge to main until Joshua/Astra.
+
+Editor-authored Slab level for [PRS-40](https://linear.app/joshsteele/issue/PRS-40). This tree is the brief v3.1 surface rebuild (high-contrast palette + full UV island fills). It supersedes the weak / incomplete paint on tip `6cf335bc` / [PR #44](https://github.com/joshocalico/slab-modeller/pull/44). Do not squash #44 as Done.
 
 ## How to try it
 
