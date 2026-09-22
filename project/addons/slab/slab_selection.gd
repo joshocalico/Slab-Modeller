@@ -19,6 +19,7 @@ var xray: bool = false
 var active_id: int = 0
 var isolated: bool = false
 var _hidden_solids: Dictionary = {}
+var _isolation_suspended: bool = false
 var face_isolated: bool = false
 var _face_mask := PackedInt64Array()
 var _face_mask_solid: Node3D = null
@@ -195,10 +196,22 @@ func enter_isolation(scene_root: Node) -> bool:
 	for obj in objects:
 		if is_instance_valid(obj):
 			target_set[obj] = true
-	for node in scene_root.find_children("*", SOLID_CLASS, true, false):
-		if not target_set.has(node) and node.visible:
-			_hidden_solids[node] = true
-			node.visible = false
+	var candidates: Array[Node] = scene_root.find_children("*", SOLID_CLASS, true, false)
+	if is_solid(scene_root):
+		candidates.push_front(scene_root)
+	for node in candidates:
+		if target_set.has(node) or not node.visible:
+			continue
+		var ancestor_of_target := false
+		for target in target_set:
+			if node.is_ancestor_of(target):
+				ancestor_of_target = true
+				break
+		# Keep the transform parent visible when a selected solid is nested in it.
+		var display: Node3D = node.get_node_or_null("Mesh") if ancestor_of_target else node
+		if display != null and display.visible:
+			_hidden_solids[display] = true
+			display.visible = false
 	isolated = true
 	settings_changed.emit()
 	return true
@@ -211,8 +224,27 @@ func exit_isolation() -> void:
 		if is_instance_valid(node):
 			node.visible = true
 	_hidden_solids.clear()
+	_isolation_suspended = false
 	isolated = false
 	settings_changed.emit()
+
+
+func suspend_isolation_for_save() -> void:
+	if not isolated or _isolation_suspended:
+		return
+	for node in _hidden_solids:
+		if is_instance_valid(node):
+			node.visible = true
+	_isolation_suspended = true
+
+
+func resume_isolation_after_save() -> void:
+	if not isolated or not _isolation_suspended:
+		return
+	for node in _hidden_solids:
+		if is_instance_valid(node):
+			node.visible = false
+	_isolation_suspended = false
 
 
 func toggle_isolation(scene_root: Node) -> bool:
@@ -327,6 +359,7 @@ var mode: int = Mode.OBJECT:
 		if face_isolated and value != Mode.FACE:
 			exit_face_isolation()
 		mode = value
+		clear_uv_selection()
 		if orientation == Orientation.FACE and mode != Mode.FACE:
 			orientation = Orientation.WORLD
 		ids = PackedInt64Array()
@@ -418,6 +451,8 @@ func drop_invalid() -> void:
 	for node in objects:
 		if node != null and is_instance_valid(node):
 			kept.append(node)
+	if objects != kept:
+		clear_uv_selection()
 	objects = kept
 	if hover_solid != null and not is_instance_valid(hover_solid):
 		hover_solid = null
@@ -443,6 +478,7 @@ func set_objects(nodes: Array) -> void:
 		if not keep_mask:
 			exit_face_isolation()
 	objects = kept
+	clear_uv_selection()
 	ids = PackedInt64Array()
 	active_id = 0
 	changed.emit()
@@ -461,6 +497,7 @@ func set_ids(value: PackedInt64Array) -> void:
 	if value == ids:
 		return
 	ids = value
+	clear_uv_selection()
 	active_id = ids[ids.size() - 1] if not ids.is_empty() else 0
 	if face_isolated:
 		_refresh_face_isolation_mask()

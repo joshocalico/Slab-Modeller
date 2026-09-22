@@ -76,6 +76,8 @@ func _enter_tree() -> void:
 	_sync_native_local_axes()
 	_on_editor_selection_changed()
 	main_screen_changed.connect(_on_main_screen_changed)
+	if not scene_changed.is_connected(_on_scene_changed):
+		scene_changed.connect(_on_scene_changed)
 	if not scene_saved.is_connected(_on_scene_saved):
 		scene_saved.connect(_on_scene_saved)
 	_actions.export_requested.connect(_on_export_requested)
@@ -85,6 +87,11 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	if _selection:
+		_selection.exit_isolation()
+		_selection.exit_face_isolation()
+	if scene_changed.is_connected(_on_scene_changed):
+		scene_changed.disconnect(_on_scene_changed)
 	if _session:
 		_session.cancel_create_preview()
 	if _host:
@@ -185,7 +192,23 @@ func _on_main_screen_changed(screen_name: String) -> void:
 	_workspace = screen_name
 
 
+func _apply_changes() -> void:
+	# Godot calls this before packing a scene. Isolation is editor-only state.
+	if _selection != null:
+		_selection.suspend_isolation_for_save()
+		_selection.resume_isolation_after_save.call_deferred()
+
+
+func _on_scene_changed(_scene_root: Node) -> void:
+	if _selection != null:
+		_selection.exit_isolation()
+		_selection.exit_face_isolation()
+		_selection.set_objects([])
+
+
 func _on_scene_saved(path: String) -> void:
+	if _selection != null:
+		_selection.resume_isolation_after_save()
 	if _paint != null:
 		_paint.scene_saved(path)
 
