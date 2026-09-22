@@ -1,5 +1,11 @@
 # Capture
 
+## September 23 native pass
+
+`annex-09` through `annex-13` are uncomposited Godot window captures made during native editor use. `annex-13` shows the running scene after an editor restart. Select `Camera3D` or `EntranceCamera` and enable **Preview** to reproduce their viewpoints; playing the scene uses `Camera3D`.
+
+## Historical pass
+
 SubViewport + `Camera3D.make_current` + root `viewport.get_texture().get_image()` composite.
 
 **Never** `DisplayServer.screen_get_image`.
