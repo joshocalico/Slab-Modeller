@@ -319,3 +319,78 @@ SLAB_TEST(triangulate_emits_a_collinear_triangle) {
 	triangulate_loop({ a, b, c }, tris);
 	expect_eq(int(tris.size()), 3, "collinear face still emits one triangle");
 }
+
+SLAB_TEST(import_preserves_triangle_materials_and_uvs) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::box(edit, godot::Vector3(2, 3, 4)).ok(), "attribute source box builds");
+	Mesh source;
+	expect(std::move(edit).commit(source).ok(), "attribute source commits");
+	EmitOut emitted;
+	emit_arrays(source, emitted);
+	std::vector<ops::ImportTriangleAttrs> attrs(emitted.indices.size() / 3);
+	for (size_t t = 0; t < attrs.size(); t++) {
+		attrs[t].material_slot = uint32_t(t % 3);
+		attrs[t].has_uvs = true;
+		attrs[t].uvs = {godot::Vector2(0.11f, 0.27f), godot::Vector2(0.83f, 0.19f), godot::Vector2(0.42f, 0.91f)};
+	}
+	const auto vertices = _quantize_emit(emitted);
+	const auto imported = ops::import_from_triangles(vertices, emitted.indices, attrs);
+	expect(imported.fault.ok(), "UV and material import succeeds");
+	std::vector<FaceId> faces;
+	imported.mesh.all_faces(faces);
+	expect_eq(int(faces.size()), int(attrs.size()), "all source triangles survive");
+	for (size_t t = 0; t < faces.size(); t++) {
+		const FaceAttrs actual = imported.mesh.attrs(faces[t]);
+		expect_eq(int(actual.material_slot), int(attrs[t].material_slot), "triangle retains material slot");
+		for (size_t k = 0; k < 3; k++) {
+			const auto p = dequantize(vertices[size_t(emitted.indices[t * 3 + k])]);
+			const godot::Vector2 uv = godot::Vector2(p.dot(actual.uv_u), p.dot(actual.uv_v)) + actual.uv_origin;
+			expect(uv.distance_to(attrs[t].uvs[k]) < 0.0001f, "UV remains attached to original position after winding normalization");
+		}
+	}
+	attrs.pop_back();
+	expect(!ops::import_from_triangles(vertices, emitted.indices, attrs).fault.ok(), "incomplete attribute records refuse");
+}
+
+SLAB_TEST(import_refuses_malformed_tail_without_partial_success) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::box(edit, godot::Vector3(2, 2, 2)).ok(), "malformed source box builds");
+	Mesh source;
+	expect(std::move(edit).commit(source).ok(), "malformed source commits");
+	EmitOut emitted;
+	emit_arrays(source, emitted);
+	const auto vertices = _quantize_emit(emitted);
+	auto indices = emitted.indices;
+	indices.push_back(0);
+	expect(!ops::import_from_triangles(vertices, indices).fault.ok(), "trailing partial triangle refuses");
+	indices.push_back(1);
+	indices.push_back(-1);
+	expect(!ops::import_from_triangles(vertices, indices).fault.ok(), "invalid triangle after closed mesh refuses");
+	indices.back() = 0;
+	expect(!ops::import_from_triangles(vertices, indices).fault.ok(), "collapsed triangle after closed mesh refuses");
+}
+
+SLAB_TEST(import_preserves_linear_sliver_uvs_and_refuses_inconsistent_uvs) {
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::box(edit, godot::Vector3(2, 2, 2)).ok(), "UV sliver source builds");
+	Mesh box;
+	expect(std::move(edit).commit(box).ok(), "UV sliver source commits");
+	EmitOut emitted;
+	emit_arrays(box, emitted);
+	auto vertices = _quantize_emit(emitted);
+	auto indices = emitted.indices;
+	_split_first_edge_with_midpoint(vertices, indices, true);
+	std::vector<ops::ImportTriangleAttrs> attrs(indices.size() / 3);
+	attrs.back().has_uvs = true;
+	attrs.back().material_slot = 7;
+	attrs.back().uvs = {godot::Vector2(0, 0), godot::Vector2(1, 1), godot::Vector2(0.5f, 0.5f)};
+	const auto imported = ops::import_from_triangles(vertices, indices, attrs);
+	expect(imported.fault.ok(), "linear user-authored sliver UVs promote");
+	std::vector<FaceId> faces;
+	imported.mesh.all_faces(faces);
+	expect_eq(int(imported.mesh.attrs(faces.back()).material_slot), 7, "user sliver material preserved");
+	attrs.back().uvs[2] = godot::Vector2(0.25f, 0.75f);
+	const auto refused = ops::import_from_triangles(vertices, indices, attrs);
+	expect(!refused.fault.ok(), "nonlinear sliver UVs refuse without discarding attributes");
+	expect(refused.refuse_reason == "unsupported UV mapping", "sliver refusal explains unsupported mapping");
+}

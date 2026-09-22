@@ -27,6 +27,9 @@ static func _load_obj(path: String) -> Dictionary:
 	var vertex_normals := PackedVector3Array()
 	var vertex_uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
+	var triangle_materials := PackedStringArray()
+	var current_material := ""
+	var materials: Dictionary = {}
 
 	while not file.eof_reached():
 		var line: String = file.get_line().split("#", true, 1)[0].strip_edges()
@@ -39,6 +42,18 @@ static func _load_obj(path: String) -> Dictionary:
 
 		var command: String = parts[0]
 		match command:
+			"mtllib":
+				var library_name: String = line.substr(command.length()).strip_edges()
+				var library_path: String = path.get_base_dir().path_join(library_name)
+				var libraries: PackedStringArray = PackedStringArray([library_name]) if FileAccess.file_exists(library_path) else library_name.split(" ", false)
+				for library in libraries:
+					var loaded := _load_mtl(path.get_base_dir().path_join(library))
+					if loaded.has("error"):
+						file.close()
+						return loaded
+					materials.merge(loaded["materials"], true)
+			"usemtl":
+				current_material = line.substr(command.length()).strip_edges()
 			"v":
 				if parts.size() >= 4:
 					positions.append(Vector3(
@@ -79,6 +94,7 @@ static func _load_obj(path: String) -> Dictionary:
 					file.close()
 					return {"error": ERR_INVALID_DATA, "message": "Invalid or degenerate OBJ face"}
 				for i in range(0, triangles.size(), 3):
+					triangle_materials.append(current_material)
 					# OBJ is counterclockwise; ArrayMesh fronts are clockwise.
 					for corner in [triangles[i], triangles[i + 2], triangles[i + 1]]:
 						indices.append(vertices.size())
@@ -93,15 +109,82 @@ static func _load_obj(path: String) -> Dictionary:
 
 	vertex_normals = _fill_missing_normals(vertices, indices, vertex_normals)
 
-	var mesh: ArrayMesh = _build_array_mesh(vertices, vertex_normals, vertex_uvs, indices)
+	var groups: Dictionary = {}
+	for triangle in triangle_materials.size():
+		var material_name: String = triangle_materials[triangle]
+		if not material_name.is_empty() and not materials.has(material_name):
+			return {"error": ERR_INVALID_DATA, "message": "OBJ references undefined material: %s" % material_name}
+		if not groups.has(material_name):
+			groups[material_name] = []
+		groups[material_name].append(triangle)
+	var mesh := ArrayMesh.new()
+	for material_name in groups:
+		var group_vertices := PackedVector3Array()
+		var group_normals := PackedVector3Array()
+		var group_uvs := PackedVector2Array()
+		var group_indices := PackedInt32Array()
+		for triangle in groups[material_name]:
+			for corner in 3:
+				var index: int = indices[triangle * 3 + corner]
+				group_indices.append(group_vertices.size())
+				group_vertices.append(vertices[index])
+				group_normals.append(vertex_normals[index])
+				group_uvs.append(vertex_uvs[index])
+		var surface: Array = []
+		surface.resize(Mesh.ARRAY_MAX)
+		surface[Mesh.ARRAY_VERTEX] = group_vertices
+		surface[Mesh.ARRAY_NORMAL] = group_normals
+		surface[Mesh.ARRAY_TEX_UV] = group_uvs
+		surface[Mesh.ARRAY_INDEX] = group_indices
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface)
+		if materials.has(material_name):
+			mesh.surface_set_material(mesh.get_surface_count() - 1, materials[material_name])
 	var external := SlabExternalMesh.from_mesh(mesh, path)
 	external.name = path.get_file().get_basename()
 
 	return {
 		"error": OK,
 		"mesh": external,
-		"status": "Imported as External mesh (not a Slab solid). OBJ materials are not imported."
+		"status": "Imported as External mesh (not a Slab solid). UVs and material assignments preserved."
 	}
+
+
+static func _load_mtl(path: String) -> Dictionary:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return {"error": FileAccess.get_open_error(), "message": "Could not open OBJ material library: %s" % path}
+	var materials: Dictionary = {}
+	var material: StandardMaterial3D = null
+	while not file.eof_reached():
+		var line: String = file.get_line().split("#", true, 1)[0].strip_edges().replace("\t", " ")
+		var parts: PackedStringArray = line.split(" ", false)
+		if parts.is_empty():
+			continue
+		if parts[0] == "newmtl":
+			material = StandardMaterial3D.new()
+			material.resource_name = line.substr(6).strip_edges()
+			materials[material.resource_name] = material
+		elif material != null:
+			match parts[0]:
+				"Kd":
+					if parts.size() != 4:
+						return {"error": ERR_INVALID_DATA, "message": "Invalid MTL diffuse color"}
+					material.albedo_color = Color(float(parts[1]), float(parts[2]), float(parts[3]), material.albedo_color.a)
+				"d", "Tr":
+					if parts.size() != 2:
+						return {"error": ERR_INVALID_DATA, "message": "Invalid MTL opacity"}
+					material.albedo_color.a = float(parts[1]) if parts[0] == "d" else 1.0 - float(parts[1])
+					material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if material.albedo_color.a < 1.0 else BaseMaterial3D.TRANSPARENCY_DISABLED
+				"map_Kd":
+					var texture_path: String = line.substr(6).strip_edges()
+					if texture_path.begins_with("-"):
+						return {"error": ERR_UNAVAILABLE, "message": "MTL texture options are not supported"}
+					var image := Image.load_from_file(path.get_base_dir().path_join(texture_path))
+					if image == null or image.is_empty():
+						return {"error": ERR_CANT_OPEN, "message": "Could not load MTL diffuse texture: %s" % texture_path}
+					material.albedo_texture = ImageTexture.create_from_image(image)
+	file.close()
+	return {"materials": materials}
 
 
 static func _obj_index(value: int, count: int) -> int:

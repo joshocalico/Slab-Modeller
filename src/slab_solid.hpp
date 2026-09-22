@@ -73,6 +73,7 @@ public:
 	double volume() const;
 	AABB get_local_aabb() const;
 	Ref<ArrayMesh> build_mesh() const;
+	TypedArray<Material> get_mesh_materials() const;
 	bool set_display_preview(const PackedByteArray &p_data);
 	void clear_display_preview();
 	bool has_display_preview() const;
@@ -84,7 +85,8 @@ public:
 
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
-	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices);
+	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
+			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array());
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
 	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);

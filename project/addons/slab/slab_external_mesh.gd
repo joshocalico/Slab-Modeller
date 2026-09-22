@@ -4,7 +4,7 @@ class_name SlabExternalMesh
 
 signal topology_changed
 
-var _source_path: String = ""
+@export_storage var _source_path: String = ""
 var _is_manifold: bool = false
 var _vertex_count: int = 0
 var _face_count: int = 0
@@ -104,8 +104,7 @@ func get_materials() -> Array:
 	if mesh == null:
 		return mats
 	for surface_idx in mesh.get_surface_count():
-		var mat: Material = mesh.surface_get_material(surface_idx)
-		mats.append(mat)
+		mats.append(get_active_material(surface_idx))
 	return mats
 
 

@@ -10,6 +10,7 @@ var uvs: PackedVector2Array = PackedVector2Array()
 var indices: PackedInt32Array = PackedInt32Array()
 var material_per_triangle: PackedInt32Array = PackedInt32Array()
 var material_names: PackedStringArray = PackedStringArray()
+var materials: Array[Material] = []
 var solid_count: int = 0
 
 
@@ -20,6 +21,7 @@ func clear() -> void:
 	indices = PackedInt32Array()
 	material_per_triangle = PackedInt32Array()
 	material_names = PackedStringArray()
+	materials.clear()
 	solid_count = 0
 
 
@@ -42,7 +44,7 @@ func bake(solids: Array[Node3D]) -> int:
 		var mesh: ArrayMesh = _get_mesh(solid)
 		if mesh == null:
 			continue
-		var materials: Array = _get_materials(solid)
+		var surface_materials: Array = _get_materials(solid)
 		var solid_xform: Transform3D = solid.global_transform if solid.is_inside_tree() else solid.transform
 		# Export formats use counterclockwise fronts. A reflection reverses them again.
 		var reverse_winding: bool = solid_xform.basis.determinant() > 0.0
@@ -55,7 +57,7 @@ func bake(solids: Array[Node3D]) -> int:
 			var surf_normals: PackedVector3Array = _get_vector3_array(arrays, Mesh.ARRAY_NORMAL)
 			var surf_uvs: PackedVector2Array = _get_vector2_array(arrays, Mesh.ARRAY_TEX_UV)
 			var surf_indices: PackedInt32Array = _get_int32_array(arrays, Mesh.ARRAY_INDEX)
-			var mat: Material = materials[surface_idx] if surface_idx < materials.size() else null
+			var mat: Material = surface_materials[surface_idx] if surface_idx < surface_materials.size() else null
 			var mat_name: String = _material_name(mat, surface_idx)
 			var mat_global_idx: int
 			if material_to_index.has(mat):
@@ -70,6 +72,7 @@ func bake(solids: Array[Node3D]) -> int:
 					suffix += 1
 				used_names[mat_name] = true
 				material_names.append(mat_name)
+				materials.append(mat)
 				global_material_index += 1
 			var surf_base: int = positions.size()
 			var has_normals: bool = not surf_normals.is_empty()

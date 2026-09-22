@@ -69,6 +69,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("volume"), &SlabSolid::volume);
 	ClassDB::bind_method(D_METHOD("get_local_aabb"), &SlabSolid::get_local_aabb);
 	ClassDB::bind_method(D_METHOD("build_mesh"), &SlabSolid::build_mesh);
+	ClassDB::bind_method(D_METHOD("get_mesh_materials"), &SlabSolid::get_mesh_materials);
 	ClassDB::bind_method(D_METHOD("set_display_preview", "data"), &SlabSolid::set_display_preview);
 	ClassDB::bind_method(D_METHOD("clear_display_preview"), &SlabSolid::clear_display_preview);
 	ClassDB::bind_method(D_METHOD("has_display_preview"), &SlabSolid::has_display_preview);
@@ -80,7 +81,8 @@ void SlabSolid::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
-	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices"), &SlabSolid::import_from_mesh);
+	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices", "uvs", "material_slots"), &SlabSolid::import_from_mesh,
+			DEFVAL(PackedVector2Array()), DEFVAL(PackedInt32Array()));
 	ClassDB::bind_method(D_METHOD("make_stair", "size", "steps"), &SlabSolid::make_stair);
 	ClassDB::bind_method(D_METHOD("make_cylinder", "radius", "height", "sides"), &SlabSolid::make_cylinder);
 	ClassDB::bind_method(D_METHOD("make_arch", "span", "depth", "segments", "thickness", "arc"), &SlabSolid::make_arch, DEFVAL(Math_PI));
@@ -372,6 +374,7 @@ Dictionary SlabSolid::face_uv(int64_t p_face) const {
 	out["rotation"] = attrs.uv_rotation;
 	out["axis"] = int(attrs.uv_axis);
 	out["unwrapped"] = attrs.uv_unwrapped;
+	out["texture_resolution"] = int(attrs.uv_texture_resolution);
 	out["u"] = attrs.uv_u;
 	out["v"] = attrs.uv_v;
 	out["origin"] = attrs.uv_origin;
@@ -414,6 +417,21 @@ Ref<ArrayMesh> SlabSolid::build_mesh() const {
 	Ref<ArrayMesh> empty;
 	empty.instantiate();
 	return empty;
+}
+
+TypedArray<Material> SlabSolid::get_mesh_materials() const {
+	// Match build_mesh() surface order, including when a preview or isolation
+	// mask changes the surfaces currently shown by the editor.
+	TypedArray<Material> result;
+	for (uint32_t slot : committed_surface_slots) {
+		Ref<Material> material;
+		if (slot < uint32_t(materials.size())) {
+			material = materials[slot];
+		}
+		if (material.is_null()) material = prototype_material;
+		result.append(material);
+	}
+	return result;
 }
 
 bool SlabSolid::set_display_preview(const PackedByteArray &p_data) {
@@ -491,7 +509,8 @@ int SlabSolid::make_box(const Vector3 &p_size) {
 	return _commit(std::move(edit));
 }
 
-Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices) {
+Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
+		const PackedVector2Array &p_uvs, const PackedInt32Array &p_material_slots) {
 	Dictionary out;
 	std::vector<slab::IVec3> verts;
 	verts.reserve(size_t(p_vertices.size()));
@@ -510,7 +529,37 @@ Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, con
 		indices.push_back(p_indices[i]);
 	}
 
-	const slab::ops::ImportResult imported = slab::ops::import_from_triangles(verts, indices);
+	const int64_t index_count = p_indices.is_empty() ? p_vertices.size() : p_indices.size();
+	if (index_count % 3 != 0 || (!p_uvs.is_empty() && p_uvs.size() != p_vertices.size()) ||
+			(!p_material_slots.is_empty() && p_material_slots.size() != index_count / 3)) {
+		out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+		out["refuse_reason"] = "malformed attributes";
+		return out;
+	}
+	std::vector<slab::ops::ImportTriangleAttrs> attrs;
+	if (!p_uvs.is_empty() || !p_material_slots.is_empty()) {
+		attrs.resize(size_t(index_count / 3));
+		for (int64_t t = 0; t < index_count / 3; t++) {
+			if (!p_material_slots.is_empty() && p_material_slots[t] < 0) {
+				out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+				out["refuse_reason"] = "malformed material slots";
+				return out;
+			}
+			auto &triangle = attrs[size_t(t)];
+			triangle.material_slot = p_material_slots.is_empty() ? 0 : uint32_t(p_material_slots[t]);
+			triangle.has_uvs = !p_uvs.is_empty();
+			for (int k = 0; k < 3 && triangle.has_uvs; k++) {
+				const int64_t index = p_indices.is_empty() ? t * 3 + k : p_indices[t * 3 + k];
+				if (index < 0 || index >= p_uvs.size()) {
+					out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+					out["refuse_reason"] = "malformed indices";
+					return out;
+				}
+				triangle.uvs[size_t(k)] = p_uvs[index];
+			}
+		}
+	}
+	const slab::ops::ImportResult imported = slab::ops::import_from_triangles(verts, indices, attrs);
 	if (!imported.fault.ok()) {
 		out["error"] = int(imported.fault.code);
 		out["refuse_reason"] = String(imported.refuse_reason.c_str());

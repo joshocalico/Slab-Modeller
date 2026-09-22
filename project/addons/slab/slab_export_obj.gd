@@ -7,12 +7,16 @@ const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 static func write(path: String, export_mesh: SlabExportMesh) -> int:
 	if export_mesh == null or export_mesh.vertex_count() == 0:
 		return ERR_INVALID_PARAMETER
+	# Write dependencies first; never report an OBJ success with missing materials/textures.
+	var base_name: String = path.get_file().get_basename()
+	var mtl_name: String = base_name + ".mtl"
+	var mtl_path: String = path.get_base_dir().path_join(mtl_name)
+	var mtl_err: int = _write_mtl(mtl_path, export_mesh)
+	if mtl_err != OK:
+		return mtl_err
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-
-	var base_name: String = path.get_file().get_basename()
-	var mtl_name: String = base_name + ".mtl"
 
 	file.store_line("# Slab OBJ Export")
 	file.store_line("mtllib " + mtl_name)
@@ -59,33 +63,63 @@ static func write(path: String, export_mesh: SlabExportMesh) -> int:
 		else:
 			file.store_line("f %d %d %d" % [i0, i1, i2])
 
+	file.flush()
+	var write_error: int = file.get_error()
 	file.close()
-
-	var mtl_path: String = path.get_base_dir().path_join(mtl_name)
-	var mtl_err: int = _write_mtl(mtl_path, export_mesh)
-	if mtl_err != OK:
-		return mtl_err
-
-	return OK
+	return write_error
 
 
 static func _write_mtl(path: String, export_mesh: SlabExportMesh) -> int:
+	var texture_files: Dictionary = {}
+	var colors: Array[Color] = []
+	for i in export_mesh.material_names.size():
+		var material: Material = export_mesh.materials[i] if i < export_mesh.materials.size() else null
+		if material != null and not material is StandardMaterial3D:
+			return ERR_UNAVAILABLE
+		var color := Color(0.8, 0.8, 0.8, 1.0)
+		if material is StandardMaterial3D:
+			color = material.albedo_color
+			if material.albedo_texture != null:
+				var image: Image = material.albedo_texture.get_image()
+				if image == null or image.is_empty():
+					return ERR_INVALID_DATA
+				if image.is_compressed() and image.decompress() != OK:
+					return ERR_INVALID_DATA
+				var png: PackedByteArray = image.save_png_to_buffer()
+				if png.is_empty():
+					return ERR_INVALID_DATA
+				var hash := HashingContext.new()
+				hash.start(HashingContext.HASH_SHA256)
+				hash.update(png)
+				var digest: String = hash.finish().hex_encode().substr(0, 16)
+				var texture_name: String = "%s_%s_albedo_%s.png" % [path.get_file().get_basename(), export_mesh.material_names[i], digest]
+				texture_files[i] = {"name": texture_name, "bytes": png}
+		colors.append(color)
+	for texture in texture_files.values():
+		var texture_file := FileAccess.open(path.get_base_dir().path_join(texture.name), FileAccess.WRITE)
+		if texture_file == null:
+			return FileAccess.get_open_error()
+		texture_file.store_buffer(texture.bytes)
+		texture_file.flush()
+		var texture_error: int = texture_file.get_error()
+		texture_file.close()
+		if texture_error != OK:
+			return texture_error
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		return FileAccess.get_open_error()
-
-	file.store_line("# Slab MTL Export")
+	file.store_line("# Slab MTL Export: diffuse color, opacity and albedo texture; no PBR/shaders")
 	file.store_line("")
-
-	for mat_name in export_mesh.material_names:
-		file.store_line("newmtl " + mat_name)
-		file.store_line("Kd 0.8 0.8 0.8")
-		file.store_line("Ka 0.2 0.2 0.2")
-		file.store_line("Ks 0.1 0.1 0.1")
-		file.store_line("Ns 10.0")
-		file.store_line("d 1.0")
+	for i in export_mesh.material_names.size():
+		var color: Color = colors[i]
+		file.store_line("newmtl " + export_mesh.material_names[i])
+		file.store_line("Kd %.6f %.6f %.6f" % [color.r, color.g, color.b])
+		file.store_line("d %.6f" % color.a)
 		file.store_line("illum 2")
+		if texture_files.has(i):
+			file.store_line("map_Kd " + str(texture_files[i].name))
 		file.store_line("")
-
+	file.flush()
+	var write_error: int = file.get_error()
 	file.close()
-	return OK
+	return write_error

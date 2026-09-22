@@ -552,7 +552,10 @@ func _on_export_file_selected(path: String) -> void:
 		_:
 			err = SlabExportObj.write(path, export_mesh)
 	if err != OK:
-		_actions.reported.emit("Export failed: could not write file.")
+		if err == ERR_UNAVAILABLE and ext not in ["stl", "fbx"]:
+			_actions.reported.emit("OBJ export supports StandardMaterial3D albedo only. Shader materials are not supported.")
+		else:
+			_actions.reported.emit("Export failed: could not write the file or its material/texture dependencies.")
 		_export_solids.clear()
 		return
 	var count: int = _export_solids.size()

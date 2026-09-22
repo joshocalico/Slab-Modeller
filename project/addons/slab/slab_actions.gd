@@ -756,23 +756,43 @@ func _promote_op() -> Dictionary:
 func _flatten_mesh(mesh: Mesh) -> Dictionary:
 	var vertices := PackedVector3Array()
 	var indices := PackedInt32Array()
+	var uvs := PackedVector2Array()
+	var slots := PackedInt32Array()
+	var has_uvs := false
 	if mesh == null:
-		return { "vertices": vertices, "indices": indices }
+		return {"vertices": vertices, "indices": indices, "uvs": uvs, "slots": slots}
+	if mesh is ArrayMesh and mesh.get_blend_shape_count() > 0:
+		return {"error": "blend shapes are not supported"}
 	for surface_idx in mesh.get_surface_count():
+		if mesh is ArrayMesh and mesh.surface_get_primitive_type(surface_idx) != Mesh.PRIMITIVE_TRIANGLES:
+			return {"error": "only triangle surfaces are supported"}
 		var arrays: Array = mesh.surface_get_arrays(surface_idx)
-		if arrays.is_empty():
-			continue
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] if arrays.size() > Mesh.ARRAY_VERTEX else PackedVector3Array()
-		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays.size() > Mesh.ARRAY_INDEX else PackedInt32Array()
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var tex: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		if not tex.is_empty() and tex.size() != verts.size():
+			return {"error": "UV data is malformed"}
+		for unsupported in [Mesh.ARRAY_BONES, Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_COLOR]:
+			if arrays[unsupported] != null and not arrays[unsupported].is_empty():
+				return {"error": "skin, secondary UV, or vertex color data is not supported"}
+		if (idx.size() if not idx.is_empty() else verts.size()) % 3 != 0:
+			return {"error": "triangle indices are malformed"}
 		var base: int = vertices.size()
 		vertices.append_array(verts)
+		has_uvs = has_uvs or not tex.is_empty()
+		for i in verts.size():
+			uvs.append(tex[i] if not tex.is_empty() else Vector2.ZERO)
 		if idx.is_empty():
 			for i in verts.size():
 				indices.append(base + i)
 		else:
 			for i in idx:
+				if i < 0 or i >= verts.size():
+					return {"error": "triangle indices are malformed"}
 				indices.append(base + i)
-	return { "vertices": vertices, "indices": indices }
+		for i in (idx.size() if not idx.is_empty() else verts.size()) / 3:
+			slots.append(surface_idx)
+	return {"vertices": vertices, "indices": indices, "uvs": uvs if has_uvs else PackedVector2Array(), "slots": slots}
 
 
 func _editor_scene_root() -> Node:
@@ -804,6 +824,7 @@ func _promote_do(payload: Dictionary) -> void:
 			parent.move_child(solid, index)
 	if root != null and is_instance_valid(root):
 		solid.owner = root
+	_promote_move_children(payload, solid)
 	_selection.set_objects([solid])
 	_select_editor_node(solid)
 
@@ -824,8 +845,20 @@ func _promote_undo(payload: Dictionary) -> void:
 			parent.move_child(external, index)
 	if root != null and is_instance_valid(root):
 		external.owner = root
+	_promote_move_children(payload, external)
 	_selection.set_objects([external])
 	_select_editor_node(external)
+
+
+func _promote_move_children(payload: Dictionary, target: Node) -> void:
+	for child in payload["children"]:
+		if is_instance_valid(child) and child.get_parent() != target:
+			child.reparent(target, false)
+	for descendant in payload["child_owners"]:
+		if not is_instance_valid(descendant):
+			continue
+		var previous_owner: Node = payload["child_owners"][descendant]
+		descendant.owner = target if previous_owner == payload["external"] else previous_owner
 
 
 func _run_promote() -> Dictionary:
@@ -833,8 +866,15 @@ func _run_promote() -> Dictionary:
 	if external == null or not SlabExternalMesh.is_external_mesh(external):
 		return { "status": "Select an External mesh to promote." }
 
+	for child in external.get_children():
+		if child.name in [&"Mesh", &"__body"]:
+			return {"status": "Could not promote: child name %s is reserved by Slab. External mesh unchanged." % child.name}
+	if external.material_overlay != null:
+		return {"status": "Could not promote: material overlays are not supported. External mesh unchanged."}
 	var mesh: Mesh = external.mesh if external is MeshInstance3D else null
 	var arrays: Dictionary = _flatten_mesh(mesh)
+	if arrays.has("error"):
+		return {"status": "Could not promote: %s. External mesh unchanged." % arrays.error}
 	var vertices: PackedVector3Array = arrays["vertices"]
 	var indices: PackedInt32Array = arrays["indices"]
 	if vertices.is_empty():
@@ -846,7 +886,7 @@ func _run_promote() -> Dictionary:
 	if solid == null:
 		return { "status": "SlabSolid is not built yet." }
 
-	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices)
+	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"])
 	var err: int = int(imported.get("error", ERR_INVALID_DATA))
 	if err != OK:
 		var reason: String = str(imported.get("refuse_reason", "non-manifold"))
@@ -856,7 +896,10 @@ func _run_promote() -> Dictionary:
 		return { "status": "Could not promote: mesh is %s. External mesh unchanged." % reason }
 
 	solid.name = external.name
+	solid.top_level = external.top_level
 	solid.transform = external.transform
+	solid.visible = external.visible
+	solid.visibility_parent = external.visibility_parent
 	if external.has_method("get_materials"):
 		solid.set("materials", external.call("get_materials"))
 
@@ -868,7 +911,12 @@ func _run_promote() -> Dictionary:
 	var root: Node = external.owner
 	if root == null:
 		root = _editor_scene_root()
+	var child_owners: Dictionary = {}
+	for descendant in external.find_children("*", "", true, false):
+		child_owners[descendant] = descendant.owner
 	var payload := {
+		"children": external.get_children(),
+		"child_owners": child_owners,
 		"parent": parent,
 		"solid": solid,
 		"external": external,
