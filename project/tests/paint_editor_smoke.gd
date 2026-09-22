@@ -237,9 +237,13 @@ func _run() -> void:
 	_check(after != before and not paint.uv_drag_active, "release_commits_uv")
 	await _history_shortcut(panel, false)
 	_check(solid.get("data") == before, "editor_undo_restores_uv")
-	_check(panel.get("_status").text.is_empty()
-		and panel.get("_selection_context").text == selection.compact_description(),
-		"undo_clears_stale_tool_report_and_keeps_current_selection_in_header")
+	var expected_header := "%s · %d %s · %s" % [solid.name, selection.ids.size(),
+		"face" if selection.ids.size() == 1 else "faces", paint.selected_material_summary()]
+	var actual_header: String = panel.get("_selection_context").text
+	_check(panel.get("_status").text.is_empty() and selection.solid == solid
+		and actual_header == expected_header and not actual_header.contains(distinct_brush.resource_name),
+		"undo_clears_stale_report_and_keeps_selected_face_material_context (expected=%s actual=%s status=%s)" % [
+			expected_header, actual_header, panel.get("_status").text])
 	await _history_shortcut(panel, true)
 	_check(solid.get("data") == after, "editor_redo_restores_uv")
 	_check(_uv_frame(canvas) == placement_frame, "UV move, cancellation and history preserve canvas framing")
