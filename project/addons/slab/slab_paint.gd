@@ -693,6 +693,10 @@ func _set_channel_texture(ch: int, tex: ImageTexture, mat: StandardMaterial3D = 
 		Channel.EMISSION:
 			target.emission_enabled = true
 			target.emission_texture = tex
+			if tex != null:
+				# Authored RGB pixels control the mask; energy remains the brightness control.
+				target.emission = Color.WHITE
+				target.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 
 
 func _ensure_overlay() -> void:
@@ -901,6 +905,9 @@ func _snapshot_channel(mat: StandardMaterial3D, ch: int) -> Dictionary:
 			Channel.EMISSION: texture_present = mat.emission_texture != null
 	return {"material": mat, "channel": ch, "data": _encode_channel(_state_for_material(mat, ch)),
 		"texture_present": texture_present, "emission_enabled": mat.emission_enabled if mat != null else false,
+		"emission": mat.emission if mat != null else Color.BLACK,
+		"emission_operator": mat.emission_operator if mat != null else BaseMaterial3D.EMISSION_OP_ADD,
+		"emission_texture": mat.emission_texture if mat != null else null,
 		"roughness": mat.roughness if mat != null else 0.5,
 		"roughness_texture": mat.roughness_texture if mat != null else null,
 		"roughness_component": mat.roughness_texture_channel if mat != null else BaseMaterial3D.TEXTURE_CHANNEL_RED}
@@ -950,6 +957,9 @@ func _restore_channel(snapshot: Dictionary) -> void:
 		_set_channel_texture(ch, null, mat)
 	if ch == Channel.EMISSION:
 		mat.emission_enabled = snapshot["emission_enabled"]
+		mat.emission = snapshot["emission"]
+		mat.emission_operator = snapshot["emission_operator"]
+		mat.emission_texture = snapshot["emission_texture"]
 	if ch == Channel.ROUGHNESS:
 		mat.roughness = snapshot["roughness"]
 		mat.roughness_texture = snapshot["roughness_texture"]
@@ -1104,11 +1114,10 @@ func _ensure_channel_texture(ch: int) -> void:
 				_set_channel_texture(ch, tex)
 		Channel.EMISSION:
 			if _material.emission_texture == null:
-				_material.emission_enabled = true
 				var img := _filled(size, _material.emission if _material.emission_enabled else Color.BLACK)
 				img.generate_mipmaps()
 				var tex := ImageTexture.create_from_image(img)
-				_material.emission_texture = tex
+				_set_channel_texture(ch, tex)
 
 
 func layer_count() -> int:

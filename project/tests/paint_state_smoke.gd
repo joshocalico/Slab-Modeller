@@ -130,6 +130,7 @@ func _run() -> void:
 	_check_unique_layers()
 	_check_failed_save()
 	_check_roughness_scalar()
+	_check_emission_operator()
 	quit(1 if failures else 0)
 
 func _check_layer_persistence() -> void:
@@ -274,4 +275,53 @@ func _check_roughness_scalar() -> void:
 		var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StandardMaterial3D
 		_check(is_equal_approx(loaded.roughness, 1.0) and _pixels(loaded.roughness_texture) == painted,
 			"normalized Roughness and pixel values survive resource reload")
+		_dispose(f)
+
+func _check_emission_operator() -> void:
+	for operator in [BaseMaterial3D.EMISSION_OP_ADD, BaseMaterial3D.EMISSION_OP_MULTIPLY]:
+		var f := _fixture()
+		var paint: RefCounted = f.paint
+		var mat: StandardMaterial3D = paint.material()
+		mat.emission_enabled = true
+		mat.emission = Color(1, 0.72, 0.12)
+		mat.emission_operator = operator
+		mat.emission_energy_multiplier = 3.2
+		var original_color := mat.emission
+		var mask := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		mask.fill(Color.BLACK)
+		var original := ImageTexture.create_from_image(mask)
+		mat.emission_texture = original
+		paint.channel = Paint.Channel.EMISSION
+		_check(mat.emission_texture == original and mat.emission == original_color
+			and mat.emission_operator == operator, "Emission preview preserves imported material settings")
+		paint.begin_stroke()
+		paint.dab_pixel(Vector2(16, 16))
+		paint.cancel_stroke()
+		_check(mat.emission_texture == original and mat.emission == original_color
+			and mat.emission_operator == operator, "Emission Escape restores original texture, color and operator")
+		_stroke(paint)
+		var pixels := mat.emission_texture.get_image()
+		# Godot's shader uses (color * texture) * energy for MULTIPLY,
+		# versus (color + texture) * energy for ADD. Black must emit no light.
+		var outside := mat.emission * pixels.get_pixel(0, 0) if mat.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY else mat.emission + pixels.get_pixel(0, 0)
+		var inside := mat.emission * pixels.get_pixel(16, 16) if mat.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY else mat.emission + pixels.get_pixel(16, 16)
+		_check(mat.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY and mat.emission == Color.WHITE
+			and is_zero_approx(outside.r + outside.g + outside.b)
+			and inside.r > 0.1 and is_zero_approx(inside.g + inside.b)
+			and is_equal_approx(mat.emission_energy_multiplier, 3.2),
+			"Emission paint publishes absolute colored pixels with black outside the mask (legacy operator=%s)" % operator)
+		var painted := _pixels(mat.emission_texture)
+		f.undo.undo()
+		_check(mat.emission_enabled and mat.emission_texture == original and mat.emission == original_color
+			and mat.emission_operator == operator and is_equal_approx(mat.emission_energy_multiplier, 3.2),
+			"Emission Undo restores exact legacy color, operator, texture and energy")
+		f.undo.redo()
+		_check(mat.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY and mat.emission == Color.WHITE
+			and _pixels(mat.emission_texture) == painted, "Emission Redo restores masked output and exact pixels")
+		var path := "user://slab_paint_test/emission_operator.tres"
+		_check(ResourceSaver.save(mat, path) == OK, "masked Emission resource saves")
+		var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as StandardMaterial3D
+		_check(loaded.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY and loaded.emission == Color.WHITE
+			and _pixels(loaded.emission_texture) == painted and is_equal_approx(loaded.emission_energy_multiplier, 3.2),
+			"Emission mask settings and exact pixels survive resource reload")
 		_dispose(f)
