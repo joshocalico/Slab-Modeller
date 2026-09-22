@@ -122,13 +122,14 @@ func _init() -> void:
 	_check_shapes_stay_off_the_solid()
 	_check_two_materials()
 	_check_fallback_lighting()
-	_check_signed_extrude_after_inset()
 
 
 func _process(_dt: float) -> bool:
 	_frames += 1
 	if _frames < 2:
 		return false
+	# These editor operations read global transforms; SceneTree._init runs before tree entry.
+	_check_signed_extrude_after_inset()
 	_check_boolean_uses_node_transforms()
 	_finish()
 	return true
@@ -249,6 +250,7 @@ func _check_fallback_lighting() -> void:
 func _check_signed_extrude_after_inset() -> void:
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
 	root.add_child(solid)
+	_expect(solid.is_inside_tree(), "operation-handle fixture has entered the scene tree")
 	_expect(solid.call("make_box", Vector3(4, 3, 4)) == 0, "room box builds")
 	var top: int = _top_face(solid)
 	_expect(solid.call("inset_faces", PackedInt64Array([top]), 0.45) == 0, "room inset succeeds")
