@@ -9,6 +9,7 @@ const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabSweepScript := preload("res://addons/slab/slab_sweep.gd")
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
+const SlabEditorProjection := preload("res://addons/slab/slab_editor_projection.gd")
 const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
 const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
@@ -34,12 +35,15 @@ var _subgizmo_solid: Node3D = null
 var _topology_solid: Node3D = null
 var _workspace := "3D"
 var _overlay_camera: Camera3D
+var _editor_projection: Node
 var _export_dialog: EditorFileDialog
 var _export_solids: Array[Node3D] = []
 var _import_dialog: EditorFileDialog
 
 
 func _enter_tree() -> void:
+	_editor_projection = SlabEditorProjection.new()
+	add_child(_editor_projection)
 	set_input_event_forwarding_always_enabled()
 	set_force_draw_over_forwarding_enabled()
 	set_process_shortcut_input(true)
@@ -142,6 +146,10 @@ func _exit_tree() -> void:
 	_selection = null
 	_session = null
 	_host = null
+	_overlay_camera = null
+	if _editor_projection != null:
+		_editor_projection.free()
+		_editor_projection = null
 
 
 func _handles(object: Object) -> bool:
@@ -149,14 +157,23 @@ func _handles(object: Object) -> bool:
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
-	_overlay_camera = viewport_camera
+	var views: Array = []
+	for index in 4:
+		views.append(EditorInterface.get_editor_viewport_3d(index))
+	var window_viewport := get_viewport()
+	var input_view := SlabEditorProjection.input_view(viewport_camera, views,
+		window_viewport.gui_get_hovered_control(), window_viewport.gui_get_focus_owner())
+	if input_view == null:
+		return AFTER_GUI_INPUT_PASS
+	var input_camera: Camera3D = _editor_projection.camera_for(viewport_camera, input_view)
+	_overlay_camera = input_camera
 	update_overlays()
 	if _session == null:
 		return AFTER_GUI_INPUT_PASS
 	if event is InputEventKey and get_viewport().is_input_handled():
 		return AFTER_GUI_INPUT_STOP
 	var native_was_pending: bool = _session.native_gizmo_pending()
-	var verdict: int = _session.handle(viewport_camera, event)
+	var verdict: int = _session.handle(input_camera, event)
 	# Updating a Node3D's gizmos schedules a rebuild. Doing that between the
 	# native handle press and its motion invalidates Godot's active subgizmo.
 	if not native_was_pending and not _session.native_gizmo_pending():
@@ -372,6 +389,8 @@ func _refresh_gizmos() -> void:
 
 
 func _forward_3d_force_draw_over_viewport(overlay: Control) -> void:
+	if is_instance_valid(_overlay_camera):
+		_overlay_camera = _editor_projection.refresh_camera(_overlay_camera)
 	if _selection == null or _overlay_camera == null or not is_instance_valid(_overlay_camera):
 		return
 	var label: Dictionary = SolidGizmo.operation_overlay_label(_selection.operation_preview, _overlay_camera)
