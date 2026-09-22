@@ -687,6 +687,9 @@ func _set_channel_texture(ch: int, tex: ImageTexture, mat: StandardMaterial3D = 
 			target.albedo_texture = tex
 		Channel.ROUGHNESS:
 			target.roughness_texture = tex
+			if tex != null:
+				target.roughness = 1.0
+				target.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		Channel.EMISSION:
 			target.emission_enabled = true
 			target.emission_texture = tex
@@ -898,6 +901,8 @@ func _snapshot_channel(mat: StandardMaterial3D, ch: int) -> Dictionary:
 			Channel.EMISSION: texture_present = mat.emission_texture != null
 	return {"material": mat, "channel": ch, "data": _encode_channel(_state_for_material(mat, ch)),
 		"texture_present": texture_present, "emission_enabled": mat.emission_enabled if mat != null else false,
+		"roughness": mat.roughness if mat != null else 0.5,
+		"roughness_texture": mat.roughness_texture if mat != null else null,
 		"roughness_component": mat.roughness_texture_channel if mat != null else BaseMaterial3D.TEXTURE_CHANNEL_RED}
 
 
@@ -946,6 +951,8 @@ func _restore_channel(snapshot: Dictionary) -> void:
 	if ch == Channel.EMISSION:
 		mat.emission_enabled = snapshot["emission_enabled"]
 	if ch == Channel.ROUGHNESS:
+		mat.roughness = snapshot["roughness"]
+		mat.roughness_texture = snapshot["roughness_texture"]
 		mat.roughness_texture_channel = snapshot["roughness_component"]
 	_persist_channel(mat, ch, state)
 	state.dirty = _channel_differs_from_saved(mat, ch, state)
@@ -1001,14 +1008,24 @@ func _bind_channel_texture(ch: int) -> void:
 func _roughness_image_from_material(mat: StandardMaterial3D) -> Image:
 	if mat == null:
 		return _filled_gray(DEFAULT_SIZE, mat.roughness if mat != null else 0.5)
-	if mat.roughness_texture is ImageTexture:
-		var live: Image = _cpu_image_from_texture(mat.roughness_texture)
-		if live != null and not live.is_empty():
-			return live
 	if mat.roughness_texture != null:
-		var from_tex: Image = _cpu_image_from_texture(mat.roughness_texture)
-		if from_tex != null and not from_tex.is_empty():
-			return from_tex
+		var source := _cpu_image_from_texture(mat.roughness_texture)
+		if source != null and not source.is_empty():
+			# Layers store effective roughness, independent of imported channel/scalar settings.
+			var result := Image.create(source.get_width(), source.get_height(), false, Image.FORMAT_RGBA8)
+			for y in source.get_height():
+				for x in source.get_width():
+					var pixel := source.get_pixel(x, y)
+					var value: float
+					match mat.roughness_texture_channel:
+						BaseMaterial3D.TEXTURE_CHANNEL_RED: value = pixel.r
+						BaseMaterial3D.TEXTURE_CHANNEL_GREEN: value = pixel.g
+						BaseMaterial3D.TEXTURE_CHANNEL_BLUE: value = pixel.b
+						BaseMaterial3D.TEXTURE_CHANNEL_ALPHA: value = pixel.a
+						BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE: value = (pixel.r + pixel.g + pixel.b) / 3.0
+					value *= mat.roughness
+					result.set_pixel(x, y, Color(value, value, value, 1.0))
+			return result
 	return _filled_gray(_new_texture_size(), mat.roughness)
 
 
@@ -1084,8 +1101,7 @@ func _ensure_channel_texture(ch: int) -> void:
 				var img := _filled_gray(size, _material.roughness)
 				img.generate_mipmaps()
 				var tex := ImageTexture.create_from_image(img)
-				_material.roughness_texture = tex
-				_material.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+				_set_channel_texture(ch, tex)
 		Channel.EMISSION:
 			if _material.emission_texture == null:
 				_material.emission_enabled = true
@@ -1214,27 +1230,22 @@ func cancel_stroke() -> void:
 	if not stroke_active:
 		return
 	stroke_active = false
-	if not _stroke_before.is_empty():
-		var img := Image.new()
-		if img.load_png_from_buffer(_stroke_before) == OK:
-			_overlay_image = img
-			_overlay_dirty = not _is_overlay_empty()
-	elif _overlay_image != null:
-		_clear_overlay()
-	_composite_overlay()
+	_restore_channel(_stroke_state)
 	_report("Paint stroke cancelled.")
 
 func save_png(path: String) -> int:
 	if _image == null:
 		_report("Nothing to save.")
 		return ERR_DOES_NOT_EXIST
-	if has_channel_overlay_strokes():
-		flatten()
+	var state := channel_state(channel)
+	var output := state.composite_all_layers(state.base_image)
 	_ensure_dir(path.get_base_dir())
-	var err: int = _image.save_png(path)
+	var err: int = output.save_png(path)
 	if err != OK:
 		_report("Could not save %s." % path)
 		return err
+	if has_channel_overlay_strokes():
+		flatten()
 	if _material != null:
 		_material.set_meta(_png_meta(channel), path)
 		_material.resource_local_to_scene = true
