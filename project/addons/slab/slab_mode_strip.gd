@@ -78,6 +78,7 @@ func refresh() -> void:
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	var button := Button.new()
 	button.icon = SlabIcons.texture(MODE_ICONS[mode], _metrics.scale())
+	button.add_theme_constant_override("icon_max_width", int(_metrics.px(16.0)))
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
 	var lines := PackedStringArray()
 	if not with_label:
@@ -102,7 +103,7 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.accessibility_name = SlabSelection.MODE_LABELS[mode] + " mode"
 	button.accessibility_description = MODE_HINTS[mode]
 	button.set_meta("slab_mode", mode)
-	button.custom_minimum_size = Vector2(_metrics.px(100.0 if with_label else 40.0), _metrics.px(36.0))
+	button.custom_minimum_size = Vector2(_metrics.px(80.0 if with_label else 28.0), _metrics.px(28.0))
 	button.add_theme_font_size_override("font_size", _metrics.font(15))
 	button.pressed.connect(func() -> void: _selection.request_mode(mode))
 	_buttons[mode] = button

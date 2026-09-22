@@ -1407,10 +1407,10 @@ func _paint_block() -> Control:
 	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_PASS
 	_paint_canvas.add_child(_paint_uv_hint)
 	_paint_uv_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_paint_uv_hint.offset_left = 6
-	_paint_uv_hint.offset_top = 4
-	_paint_uv_hint.offset_right = -104
-	_paint_uv_hint.offset_bottom = 28
+	_paint_uv_hint.offset_left = _scaled(6)
+	_paint_uv_hint.offset_top = _scaled(4)
+	_paint_uv_hint.offset_right = -_scaled(104)
+	_paint_uv_hint.offset_bottom = _scaled(28)
 	_paint_fit_uv = Button.new()
 	_paint_fit_uv.name = "PaintFitUv"
 	_paint_fit_uv.text = "Fit UV"
@@ -1419,16 +1419,16 @@ func _paint_block() -> Control:
 	_paint_fit_uv.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_paint_canvas.add_child(_paint_fit_uv)
 	_paint_fit_uv.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_paint_fit_uv.offset_left = -96
-	_paint_fit_uv.offset_top = 3
-	_paint_fit_uv.offset_right = -8
-	_paint_fit_uv.offset_bottom = 29
+	_paint_fit_uv.offset_left = -_scaled(96)
+	_paint_fit_uv.offset_top = _scaled(3)
+	_paint_fit_uv.offset_right = -_scaled(8)
+	_paint_fit_uv.offset_bottom = _scaled(29)
 	_paint_fit_uv.pressed.connect(_paint_canvas.frame_uv)
 	_uv_mode_strip = _build_uv_mode_strip()
 	_paint_canvas.add_child(_uv_mode_strip)
 	_uv_mode_strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	_uv_mode_strip.offset_left = 6
-	_uv_mode_strip.offset_top = 32
+	_uv_mode_strip.offset_left = _scaled(6)
+	_uv_mode_strip.offset_top = _scaled(32)
 	row.add_child(_paint_canvas)
 	split.add_child(row)
 	body.add_child(split)
