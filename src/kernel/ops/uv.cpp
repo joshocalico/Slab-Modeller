@@ -236,12 +236,13 @@ static int suggest_fitting_resolution(const std::vector<IslandBox> &p_boxes, con
 
 static void write_packed_mapping(MeshEdit &p_edit, FaceId p_face, const godot::Vector3 &p_u,
 		const godot::Vector3 &p_v, const godot::Vector2 &p_origin, const IslandPlacement &p_placement,
-		float p_scale) {
+		float p_scale, int p_texture_resolution) {
 	FaceAttrs attrs = p_edit.scratch().attrs(p_face);
 	const godot::Vector3 u = p_placement.rotated ? p_v : p_u;
 	const godot::Vector3 v = p_placement.rotated ? -p_u : p_v;
 	const godot::Vector2 origin = p_placement.rotated ? godot::Vector2(p_origin.y, -p_origin.x) : p_origin;
 	attrs.uv_unwrapped = true;
+	attrs.uv_texture_resolution = uint32_t(p_texture_resolution);
 	attrs.uv_u = u * p_scale;
 	attrs.uv_v = v * p_scale;
 	attrs.uv_origin = origin * p_scale + p_placement.offset;
@@ -481,7 +482,7 @@ UvUnwrapResult unwrap_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces,
 	for (const FaceId face : p_faces) {
 		const Mapping &mapping = maps.at(face.slot);
 		write_packed_mapping(p_edit, face, mapping.u, mapping.v, mapping.origin,
-				placements[mapping.island], 1.0f);
+				placements[mapping.island], 1.0f, p_texture_resolution);
 	}
 	result.fault = p_edit.last_fault();
 	result.island_count = island;
@@ -505,6 +506,10 @@ UvPackResult pack_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces, int p
 		}
 	}
 
+	const auto source_resolution = [&](FaceId face) {
+		const uint32_t stored = mesh.attrs(face).uv_texture_resolution;
+		return stored > 0 ? float(stored) : float(p_source_texture_resolution);
+	};
 	const float tolerance = 1e-4f;
 	std::unordered_map<uint32_t, int> island_of;
 	int island = 0;
@@ -525,6 +530,7 @@ UvPackResult pack_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces, int p
 				mesh.edge_faces(edge, a, b);
 				const FaceId other = a.slot == face.slot ? b : a;
 				if (!selected.count(other.slot) || island_of.count(other.slot)) continue;
+				if (source_resolution(face) != source_resolution(other)) continue;
 				VertexId va;
 				VertexId vb;
 				mesh.edge_vertices(edge, va, vb);
@@ -545,25 +551,27 @@ UvPackResult pack_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces, int p
 		std::vector<VertexId> corners;
 		mesh.face_corners(face, corners);
 		for (const VertexId vertex : corners) {
-			expand_box(boxes[island_of.at(face.slot)], current_uv(mesh, face, mesh.position(vertex)));
+			expand_box(boxes[island_of.at(face.slot)],
+					current_uv(mesh, face, mesh.position(vertex)) * source_resolution(face));
 		}
 	}
 	const std::vector<int> order = island_order(boxes);
 	std::vector<IslandPlacement> placements(island);
-	if (!pack_island_boxes(boxes, order, p_source_texture_resolution, p_texture_resolution, &placements)) {
+	if (!pack_island_boxes(boxes, order, 1, p_texture_resolution, &placements)) {
 		result.fault = invalid_selection();
 		result.atlas_overflow = true;
 		result.suggested_texture_resolution = suggest_fitting_resolution(boxes, order,
-				p_source_texture_resolution, p_texture_resolution);
+				1, p_texture_resolution);
 		return result;
 	}
-	const float scale = float(p_source_texture_resolution) / float(p_texture_resolution);
 	for (const FaceId face : p_faces) {
 		godot::Vector3 u;
 		godot::Vector3 v;
 		godot::Vector2 origin;
 		baked_current_mapping(mesh, face, u, v, origin);
-		write_packed_mapping(p_edit, face, u, v, origin, placements[island_of.at(face.slot)], scale);
+		const float scale = source_resolution(face) / float(p_texture_resolution);
+		write_packed_mapping(p_edit, face, u, v, origin, placements[island_of.at(face.slot)],
+				scale, p_texture_resolution);
 	}
 	result.fault = p_edit.last_fault();
 	result.island_count = island;

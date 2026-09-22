@@ -121,7 +121,6 @@ var uv_offset := Vector2.ZERO
 var uv_rotation_degrees: float = 0.0
 var uv_pixels_per_meter: float = 256.0
 var uv_texture_resolution: int = 1024
-var _uv_atlas_resolution: int = 0
 var material_slot: int = 0
 
 var shapes: RefCounted
@@ -962,7 +961,6 @@ func _unwrap_target(target: Node3D) -> String:
 	uv_scale = Vector2.ONE
 	uv_offset = Vector2.ZERO
 	uv_rotation_degrees = 0.0
-	_uv_atlas_resolution = uv_texture_resolution
 	if _undo != null and after != before:
 		_undo.create_action("Slab Unwrap UV", UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
@@ -978,8 +976,7 @@ func _pack_target(target: Node3D) -> String:
 		if not bool(attrs.get("unwrapped", false)):
 			return "Pack needs unwrapped islands. Unwrap first. The solid was unchanged."
 	var before: PackedByteArray = target.get("data")
-	var source: int = _uv_atlas_resolution if _uv_atlas_resolution > 0 else uv_texture_resolution
-	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, source)
+	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, 0)
 	if bool(result.get("atlas_overflow", false)):
 		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
 		return "Pack refused: islands exceed atlas. Increase Texture px to at least %d, or scale down Placement. The solid was unchanged." % suggested
@@ -990,7 +987,6 @@ func _pack_target(target: Node3D) -> String:
 	uv_scale = Vector2.ONE
 	uv_offset = Vector2.ZERO
 	uv_rotation_degrees = 0.0
-	_uv_atlas_resolution = uv_texture_resolution
 	if _undo != null and after != before:
 		_undo.create_action("Slab Pack UV", UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)

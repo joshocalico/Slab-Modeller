@@ -9,7 +9,7 @@ namespace slab {
 namespace {
 
 constexpr uint32_t MAGIC = 0x31424C53u;
-constexpr uint32_t VERSION = 3;
+constexpr uint32_t VERSION = 4;
 constexpr uint32_t VERSION_SLOT_U8 = 1;
 
 MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
@@ -163,6 +163,7 @@ std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 		write_f32(out, f.attrs.uv_origin.x);
 		write_f32(out, f.attrs.uv_origin.y);
 	}
+	for (const Face &f : p_mesh.faces) write_u32(out, f.attrs.uv_texture_resolution);
 	return out;
 }
 
@@ -176,7 +177,7 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 
 	const uint32_t magic = r.u32();
 	const uint32_t version = r.u32();
-	if (!r.ok || magic != MAGIC || (version != VERSION && version != 2 && version != VERSION_SLOT_U8)) {
+	if (!r.ok || magic != MAGIC || (version != VERSION && version != 3 && version != 2 && version != VERSION_SLOT_U8)) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
 
@@ -284,6 +285,9 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 			if (he.twin.i != INVALID_IDX && he.uv_seam != tmp.half_edges[he.twin.i].uv_seam)
 				return fault(MeshError::CORRUPT_DATA);
 		}
+	}
+	if (version >= 4) {
+		for (Face &f : tmp.faces) f.attrs.uv_texture_resolution = r.u32();
 	}
 	if (!r.ok || r.p != r.end) {
 		return fault(MeshError::CORRUPT_DATA);

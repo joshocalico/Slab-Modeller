@@ -3,6 +3,8 @@
 #include "kernel/mesh_edit.hpp"
 #include "kernel/ops/primitives.hpp"
 #include "kernel/ops/uv.hpp"
+#include "kernel/ops/region.hpp"
+#include "kernel/serialize.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -332,4 +334,56 @@ SLAB_TEST(uv_pack_refuses_planar_faces_without_mutating) {
 	expect(!edit.scratch().attrs(top).uv_unwrapped &&
 			edit.scratch().attrs(top).uv_scale.is_equal_approx(before.uv_scale),
 			"planar pack refusal leaves attributes unchanged");
+}
+
+SLAB_TEST(uv_pack_preserves_per_face_atlas_density_after_reload_and_topology) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	const FaceId a = faces[0], b = faces[1];
+	MeshEdit first(source);
+	expect(ops::unwrap_uv(first, {a}, 32.0f, 512).ok(), "first subset unwraps at 512");
+	expect(std::move(first).commit(source).ok(), "commit first subset");
+	MeshEdit second(source);
+	expect(ops::unwrap_uv(second, {b}, 64.0f, 2048).ok(), "second subset unwraps at 2048");
+	expect(std::move(second).commit(source).ok(), "commit second subset");
+	MeshEdit placed(source);
+	FaceAttrs attrs = placed.scratch().attrs(a);
+	attrs.uv_scale = godot::Vector2(2, 2);
+	attrs.uv_rotation = 0.3f;
+	attrs.uv_offset = godot::Vector2(1, -2);
+	placed.set_attrs(a, attrs);
+	expect(std::move(placed).commit(source).ok(), "commit placement");
+	const auto snapshot = serialize(source);
+	Mesh reloaded;
+	expect(deserialize(snapshot, reloaded).ok(), "reload mixed-resolution mapping");
+	std::vector<double> pixel_lengths;
+	for (FaceId face : {a, b}) {
+		std::vector<VertexId> corners;
+		reloaded.face_corners(face, corners);
+		const double placement = face.slot == a.slot ? 2.0 : 1.0;
+		pixel_lengths.push_back(uv_at(reloaded, face, corners[0]).distance_to(
+				uv_at(reloaded, face, corners[1])) * reloaded.attrs(face).uv_texture_resolution * placement);
+	}
+	MeshEdit packed(reloaded);
+	expect(ops::pack_uv(packed, {a, b}, 4096, 8192).ok(), "pack mixed sources ignoring unrelated fallback");
+	expect(std::move(packed).commit(reloaded).ok(), "commit packed mapping");
+	int i = 0;
+	for (FaceId face : {a, b}) {
+		std::vector<VertexId> corners;
+		reloaded.face_corners(face, corners);
+		expect_near(uv_at(reloaded, face, corners[0]).distance_to(uv_at(reloaded, face, corners[1])) * 4096,
+				pixel_lengths[i++], 0.001, "per-face pixel density and placement applied exactly once");
+		expect_eq(reloaded.attrs(face).uv_texture_resolution, 4096, "pack stores new source atlas");
+	}
+	expect(deserialize(snapshot, reloaded).ok(), "undo restores complete mapping snapshot");
+	expect_eq(reloaded.attrs(a).uv_texture_resolution, 512, "undo restores first source resolution");
+	expect_eq(reloaded.attrs(b).uv_texture_resolution, 2048, "undo restores second source resolution");
+	MeshEdit topology(reloaded);
+	expect(ops::extrude_region(topology, {a}, 0.25f).ok(), "extrude preserves mapping attributes");
+	expect(std::move(topology).commit(reloaded).ok(), "commit extruded mapping");
+	reloaded.all_faces(faces);
+	int copied = 0;
+	for (FaceId face : faces) if (reloaded.attrs(face).uv_texture_resolution == 512) copied++;
+	expect(copied > 0, "topology copies retain source atlas resolution");
 }

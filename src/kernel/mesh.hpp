@@ -31,6 +31,8 @@ struct FaceAttrs {
 	bool smooth = false;
 	// An unfolded planar face maps positions using these two covectors.
 	bool uv_unwrapped = false;
+	// Atlas width used to author this mapping. Zero means legacy/unknown.
+	uint32_t uv_texture_resolution = 0;
 	godot::Vector3 uv_u = godot::Vector3(1, 0, 0);
 	godot::Vector3 uv_v = godot::Vector3(0, 1, 0);
 	godot::Vector2 uv_origin;

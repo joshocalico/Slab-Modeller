@@ -33,8 +33,9 @@ UvUnwrapResult unwrap_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces,
 		float p_pixels_per_meter, int p_texture_resolution);
 
 // Re-atlas existing unwrapped islands without unfolding from 3D. Island size
-// follows current placement. `p_source_texture_resolution` is the atlas the
-// current UVs were authored for; 0 treats it as `p_texture_resolution`.
+// follows current placement and each face's saved source atlas resolution.
+// `p_source_texture_resolution` is a fallback for legacy mappings without that
+// value; 0 treats legacy UVs as authored for `p_texture_resolution`.
 UvPackResult pack_uv(MeshEdit &p_edit, const std::vector<FaceId> &p_faces,
 		int p_texture_resolution, int p_source_texture_resolution = 0);
 
