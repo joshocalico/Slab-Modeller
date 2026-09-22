@@ -237,7 +237,9 @@ func _run() -> void:
 	_check(after != before and not paint.uv_drag_active, "release_commits_uv")
 	await _history_shortcut(panel, false)
 	_check(solid.get("data") == before, "editor_undo_restores_uv")
-	_check(panel.get("_status").text == selection.describe(), "undo_replaces_stale_tool_report_with_current_selection")
+	_check(panel.get("_status").text.is_empty()
+		and panel.get("_selection_context").text == selection.compact_description(),
+		"undo_clears_stale_tool_report_and_keeps_current_selection_in_header")
 	await _history_shortcut(panel, true)
 	_check(solid.get("data") == after, "editor_redo_restores_uv")
 	_check(_uv_frame(canvas) == placement_frame, "UV move, cancellation and history preserve canvas framing")
