@@ -174,7 +174,6 @@ static func _load_mtl(path: String) -> Dictionary:
 					if parts.size() != 2:
 						return {"error": ERR_INVALID_DATA, "message": "Invalid MTL opacity"}
 					material.albedo_color.a = float(parts[1]) if parts[0] == "d" else 1.0 - float(parts[1])
-					material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if material.albedo_color.a < 1.0 else BaseMaterial3D.TRANSPARENCY_DISABLED
 				"map_Kd":
 					var texture_path: String = line.substr(6).strip_edges()
 					if texture_path.begins_with("-"):
@@ -184,6 +183,12 @@ static func _load_mtl(path: String) -> Dictionary:
 						return {"error": ERR_CANT_OPEN, "message": "Could not load MTL diffuse texture: %s" % texture_path}
 					material.albedo_texture = ImageTexture.create_from_image(image)
 	file.close()
+	# Resolve opacity after all statements so a later `d 1` cannot hide texture alpha.
+	for imported_material in materials.values():
+		var texture_alpha := false
+		if imported_material.albedo_texture != null:
+			texture_alpha = imported_material.albedo_texture.get_image().detect_alpha() != Image.ALPHA_NONE
+		imported_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if imported_material.albedo_color.a < 1.0 or texture_alpha else BaseMaterial3D.TRANSPARENCY_DISABLED
 	return {"materials": materials}
 
 

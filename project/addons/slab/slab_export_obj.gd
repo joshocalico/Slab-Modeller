@@ -7,7 +7,84 @@ const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 static func write(path: String, export_mesh: SlabExportMesh) -> int:
 	if export_mesh == null or export_mesh.vertex_count() == 0:
 		return ERR_INVALID_PARAMETER
-	# Write dependencies first; never report an OBJ success with missing materials/textures.
+	# Build the entire bundle beside its destination, then replace with backups.
+	var destination: String = path.get_base_dir()
+	var staging: String = destination.path_join(".slab-export-%d-%d" % [OS.get_process_id(), Time.get_ticks_usec()])
+	var error: int = DirAccess.make_dir_absolute(staging)
+	if error != OK:
+		return error
+	error = _write_staged(staging.path_join(path.get_file()), export_mesh)
+	if error != OK:
+		_remove_staging(staging)
+		return error
+	var files: PackedStringArray = DirAccess.get_files_at(staging)
+	# Install the entry point last, after every dependency is present.
+	var mtl_name: String = path.get_file().get_basename() + ".mtl"
+	files.erase(mtl_name)
+	files.erase(path.get_file())
+	files.append(mtl_name)
+	files.append(path.get_file())
+	var result: Dictionary = _replace_bundle(staging, destination, files)
+	if not result.get("recovery_needed", false):
+		_remove_staging(staging)
+	return int(result["error"])
+
+
+static func _replace_bundle(staging: String, destination: String, files: PackedStringArray) -> Dictionary:
+	# Probe existing files without truncating them before changing any dependency.
+	for name in files:
+		var target: String = destination.path_join(name)
+		if DirAccess.dir_exists_absolute(target):
+			return {"error": ERR_FILE_CANT_WRITE}
+		if FileAccess.file_exists(target):
+			var probe := FileAccess.open(target, FileAccess.READ_WRITE)
+			if probe == null:
+				return {"error": FileAccess.get_open_error()}
+			probe.close()
+	var backup_directory: String = staging.path_join("previous")
+	var error: int = DirAccess.make_dir_absolute(backup_directory)
+	if error != OK:
+		return {"error": error}
+	var installed: Array[String] = []
+	var backed_up: Array[String] = []
+	for name in files:
+		var target: String = destination.path_join(name)
+		if FileAccess.file_exists(target):
+			error = DirAccess.rename_absolute(target, backup_directory.path_join(name))
+			if error != OK:
+				break
+			backed_up.append(name)
+		error = DirAccess.rename_absolute(staging.path_join(name), target)
+		if error != OK:
+			break
+		installed.append(name)
+	if error == OK:
+		return {"error": OK}
+	var restored := true
+	for name in installed:
+		if DirAccess.remove_absolute(destination.path_join(name)) != OK:
+			restored = false
+	for name in backed_up:
+		if DirAccess.rename_absolute(backup_directory.path_join(name), destination.path_join(name)) != OK:
+			restored = false
+	if not restored:
+		push_error("OBJ export could not restore every file. Original backups remain in: %s" % backup_directory)
+	return {"error": error, "recovery_needed": not restored}
+
+
+static func _remove_staging(staging: String) -> void:
+	var backup_directory: String = staging.path_join("previous")
+	if DirAccess.dir_exists_absolute(backup_directory):
+		for name in DirAccess.get_files_at(backup_directory):
+			DirAccess.remove_absolute(backup_directory.path_join(name))
+		DirAccess.remove_absolute(backup_directory)
+	for name in DirAccess.get_files_at(staging):
+		DirAccess.remove_absolute(staging.path_join(name))
+	DirAccess.remove_absolute(staging)
+
+
+static func _write_staged(path: String, export_mesh: SlabExportMesh) -> int:
+	# These files remain isolated until the complete bundle is ready.
 	var base_name: String = path.get_file().get_basename()
 	var mtl_name: String = base_name + ".mtl"
 	var mtl_path: String = path.get_base_dir().path_join(mtl_name)
