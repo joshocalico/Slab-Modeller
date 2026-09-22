@@ -4,7 +4,7 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d /tmp/slab-install-XXXXXX)"
 mkdir -p "$fixture/addons" "$fixture/tests"
 cp -R "$repo_root/project/addons/slab" "$fixture/addons/slab"
-for script in native_gizmo_editor_smoke panel_editor_smoke install_editor_smoke; do
+for script in native_gizmo_editor_smoke panel_editor_smoke install_editor_smoke slab_test_gui; do
   cp "$repo_root/project/tests/$script.gd" "$fixture/tests/"
 done
 cat > "$fixture/project.godot" <<'PROJECT'

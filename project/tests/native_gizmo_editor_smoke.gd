@@ -40,24 +40,37 @@ func _run() -> void:
 	var scene_path: String = config.get("scene", "res://demo/modeller_lab.tscn")
 	editor.open_scene_from_path(scene_path)
 	editor.set_main_screen_editor("3D")
-	while editor.get_edited_scene_root() == null or editor.get_edited_scene_root().scene_file_path != scene_path:
-		if Time.get_ticks_msec() > deadline:
-			_fail("Scene initialization timed out")
-			return
+	# Startup may briefly expose a cached scene before session restoration replaces it.
+	# Acquire a target only after the requested scene is attached and stable.
+	var stable_scene: Node = null
+	var scene_frames := 0
+	while true:
 		await process_frame
-	var scene: Node = editor.get_edited_scene_root()
+		var candidate: Node = editor.get_edited_scene_root()
+		if candidate != null and candidate.is_inside_tree():
+			scene_frames = scene_frames + 1 if candidate == stable_scene else 1
+			stable_scene = candidate
+			if scene_frames >= 20:
+				if candidate.scene_file_path == scene_path:
+					break
+				print("NATIVE_SCENE_RESTORE current=", candidate.scene_file_path, " requested=", scene_path)
+				editor.open_scene_from_path(scene_path)
+				scene_frames = 0
+		else:
+			scene_frames = 0
+			stable_scene = null
+		if Time.get_ticks_msec() > deadline:
+			_fail("Scene initialization timed out; current=%s inside_tree=%s requested=%s" % [
+				candidate.scene_file_path if candidate != null else "none",
+				candidate.is_inside_tree() if candidate != null else false, scene_path])
+			return
+	var scene: Node = stable_scene
 	var solid := scene.get_node_or_null(NodePath(config.get("node", "Box2"))) as Node3D
 	if solid == null or not solid.is_class("SlabSolid"):
 		_fail("Requested SlabSolid was not found")
 		return
-	if config.has("rotation_degrees"):
-		solid.rotation_degrees = Vector3(config.rotation_degrees[0], config.rotation_degrees[1], config.rotation_degrees[2])
-	if config.has("scale"):
-		solid.scale = Vector3(config.scale[0], config.scale[1], config.scale[2])
+	_configure_target(editor, solid, config)
 	var plugin := _plugin(root)
-	editor.get_selection().clear()
-	editor.get_selection().add_node(solid)
-	editor.edit_node(solid)
 	await process_frame
 	var selection: RefCounted = plugin.get("_selection")
 	_prepare_selection(selection, solid, config)
@@ -86,13 +99,30 @@ func _run() -> void:
 	deadline = Time.get_ticks_msec() + 15000
 	while stable_frames < 20:
 		await process_frame
+		if not is_instance_valid(solid) or not solid.is_inside_tree() or editor.get_edited_scene_root() != scene:
+			# Rebind the entire fixture when Godot completes a deferred tab restoration.
+			# Never re-add a target belonging to the detached scene instance.
+			var current: Node = editor.get_edited_scene_root()
+			if current != null and current.is_inside_tree() and current.scene_file_path == scene_path:
+				scene = current
+				solid = scene.get_node_or_null(NodePath(config.get("node", "Box2"))) as Node3D
+				if solid == null or not solid.is_class("SlabSolid"):
+					_fail("Restored scene lost the configured SlabSolid")
+					return
+				_configure_target(editor, solid, config)
+				_prepare_selection(selection, solid, config)
+			stable_frames = 0
+			if Time.get_ticks_msec() > deadline:
+				_fail("Configured scene did not remain attached")
+				return
+			continue
 		frame = Frame.from_selection(selection)
 		if not frame.get("valid", false) or selection.solid != solid or selection.ids.is_empty():
 			stable_frames = 0
 			if not editor.get_selection().get_selected_nodes().has(solid):
+				editor.edit_node(solid)
 				editor.get_selection().clear()
 				editor.get_selection().add_node(solid)
-				editor.edit_node(solid)
 			_prepare_selection(selection, solid, config)
 		else:
 			stable_frames += 1
@@ -365,3 +395,13 @@ func _check(ok: bool, label: String) -> void:
 func _fail(message: String) -> void:
 	printerr("NATIVE_FAILURE ", message)
 	quit(1)
+
+
+func _configure_target(editor: Object, solid: Node3D, config: Dictionary) -> void:
+	if config.has("rotation_degrees"):
+		solid.rotation_degrees = Vector3(config.rotation_degrees[0], config.rotation_degrees[1], config.rotation_degrees[2])
+	if config.has("scale"):
+		solid.scale = Vector3(config.scale[0], config.scale[1], config.scale[2])
+	editor.edit_node(solid)
+	editor.get_selection().clear()
+	editor.get_selection().add_node(solid)
