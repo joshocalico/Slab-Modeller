@@ -380,8 +380,8 @@ func _zoom_at(pos: Vector2, factor: float) -> void:
 func _mapping_signature() -> Array:
 	if _paint == null or _paint.is_pixel():
 		return ["pixel"]
-	var solid: Node3D = _paint.get("_solid")
 	var selection: RefCounted = _paint.get("_selection")
+	var solid: Node3D = selection.solid if selection != null else null
 	var ids: PackedInt64Array = selection.ids if selection != null else PackedInt64Array()
 	var signature: Array = [solid.get_instance_id() if solid != null else 0, ids]
 	if solid != null:
@@ -414,9 +414,9 @@ static func _uv_loops_bounds(loops: Array) -> Rect2:
 
 
 func _draw_uv_element_selection() -> void:
-	if not is_uv_element_mode() or _paint == null:
+	if not is_uv_element_mode() or _paint == null or _selection == null:
 		return
-	var solid: Node3D = _paint.get("_solid")
+	var solid: Node3D = _selection.solid
 	var faces: PackedInt64Array = _selection.ids if _selection != null else PackedInt64Array()
 	if solid == null or faces.is_empty():
 		return
@@ -476,7 +476,7 @@ func _draw_uv_element_selection() -> void:
 func _pick_uv_at(pos: Vector2) -> Dictionary:
 	if _selection == null or _paint == null:
 		return {}
-	var solid: Node3D = _paint.get("_solid")
+	var solid: Node3D = _selection.solid
 	var faces: PackedInt64Array = _selection.ids if _selection != null else PackedInt64Array()
 	if solid == null or faces.is_empty():
 		return {}

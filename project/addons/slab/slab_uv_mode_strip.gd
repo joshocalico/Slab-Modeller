@@ -21,6 +21,10 @@ const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 var _selection: RefCounted
 var _metrics: RefCounted
 var _buttons: Dictionary = {}
+var active: bool = true:
+	set(value):
+		active = value
+		refresh()
 
 
 func setup(selection: RefCounted, metrics: RefCounted = null) -> void:
@@ -38,7 +42,7 @@ func setup(selection: RefCounted, metrics: RefCounted = null) -> void:
 func refresh() -> void:
 	for mode in _buttons:
 		var button: Button = _buttons[mode]
-		button.set_pressed_no_signal(mode == _selection.uv_mode)
+		button.set_pressed_no_signal(active and mode == _selection.uv_mode)
 
 
 func _make_button(mode: int, group: ButtonGroup) -> Button:

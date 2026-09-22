@@ -55,6 +55,9 @@ var _settings_title: Label
 var _undo_hook: Object = null
 var _paint: RefCounted
 var _workspace: int = Workspace.MODELLING
+var _uv_placement := true
+var _uv_place_button: Button
+var _uv_element_buttons: SlabUVModeStrip
 var _model_body: BoxContainer
 var _paint_body: Control
 var _uv_toggle: Button
@@ -459,7 +462,7 @@ func bind_paint(paint: RefCounted) -> void:
 		if not _paint.layers_changed.is_connected(_refresh_layer_list):
 			_paint.layers_changed.connect(_refresh_layer_list)
 	if _paint_canvas != null:
-		_paint_canvas.setup(_paint, _metrics)
+		_paint_canvas.setup(_paint, _metrics, _selection)
 		_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_on_paint_changed()
 
@@ -1449,9 +1452,33 @@ func _build_uv_mode_strip() -> Control:
 	var strip := SlabUVModeStrip.new()
 	strip.name = "UVModeStripButtons"
 	strip.setup(_selection, _metrics)
-	panel.add_child(strip)
+	_uv_element_buttons = strip
+	var tools := HBoxContainer.new()
+	tools.add_theme_constant_override("separation", 2)
+	_uv_place_button = Button.new()
+	_uv_place_button.name = "UVPlaceMapping"
+	_uv_place_button.text = "Place"
+	_uv_place_button.toggle_mode = true
+	_uv_place_button.accessibility_name = "Place UV mapping"
+	_uv_place_button.tooltip_text = "Move, scale or rotate texture placement on the selected 3D faces. UV element selection is a separate canvas tool."
+	_uv_place_button.custom_minimum_size.y = _scaled(28.0)
+	_uv_place_button.add_theme_font_size_override("font_size", _font(13))
+	_uv_place_button.pressed.connect(_set_uv_placement.bind(true))
+	tools.add_child(_uv_place_button)
+	tools.add_child(strip)
+	for button in strip.get_children():
+		if button is Button:
+			button.pressed.connect(_set_uv_placement.bind(false))
+	panel.add_child(tools)
 	panel.visible = false
 	return panel
+
+
+func _set_uv_placement(enabled: bool) -> void:
+	if _paint_canvas != null:
+		_paint_canvas.cancel()
+	_uv_placement = enabled
+	_refresh_paint_chrome()
 
 
 func _paint_target_row() -> Control:
@@ -1803,7 +1830,7 @@ func _brush_column() -> Control:
 	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
 	col.add_child(overlay_opacity_row)
 	
-	_flatten_button = _named_action("Flatten", "MoveDown", "Commit all visible layers to the base as one undoable action.", func() -> void:
+	_flatten_button = _named_action("Flatten", "Apply", "Commit all visible layers to the base as one undoable action.", func() -> void:
 		if _paint:
 			_paint.flatten()
 	)
@@ -2064,8 +2091,13 @@ func _refresh_paint_chrome() -> void:
 	_paint_palette.visible = is_uv_workspace
 	if _uv_mode_strip != null:
 		_uv_mode_strip.visible = is_uv_workspace
+	if _uv_place_button != null:
+		_uv_place_button.set_pressed_no_signal(_uv_placement)
+		_style_tool(_uv_place_button, _uv_placement)
+	if _uv_element_buttons != null:
+		_uv_element_buttons.active = not _uv_placement
 	if _paint_canvas != null:
-		_paint_canvas.set_uv_element_mode(is_uv_workspace)
+		_paint_canvas.set_uv_element_mode(is_uv_workspace and not _uv_placement)
 	_paint_save.visible = is_paint_workspace
 	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
 	_paint_resize.visible = is_paint_workspace
@@ -2495,4 +2527,6 @@ func _on_uv_element_picked(element_id: int, additive: bool) -> void:
 
 
 func _uv_mode_hint() -> String:
-	return SlabPaint.uv_canvas_hint()
+	if _uv_placement:
+		return SlabPaint.uv_canvas_hint()
+	return "Click selects UV elements. Shift-click adds or removes. Choose Place to edit face mapping."
