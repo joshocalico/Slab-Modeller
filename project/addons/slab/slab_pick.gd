@@ -20,7 +20,7 @@ static func pick(solid: Node3D, mode: int, camera: Camera3D, screen: Vector2, ra
 
 static func candidates(solid: Node3D, mode: int, camera: Camera3D, screen: Vector2,
 		radius: float = BASE_RADIUS, visible_only: bool = true) -> Array[Dictionary]:
-	if solid == null or camera == null or not POSITION_QUERY.has(mode):
+	if solid == null or camera == null or not POSITION_QUERY.has(mode) or not _display_visible(solid):
 		return []
 	var list := SlabTopology.query_for(mode)
 	if not solid.has_method(list) or not solid.has_method(POSITION_QUERY[mode]):
@@ -80,10 +80,19 @@ static func all_solids(root: Node) -> Array[Node3D]:
 
 
 static func _collect_solids(node: Node, out: Array[Node3D]) -> void:
-	if node is Node3D and SlabSelection.is_solid(node) and (node as Node3D).is_visible_in_tree():
+	if node is Node3D and SlabSelection.is_solid(node) and _display_visible(node):
 		out.append(node)
 	for child in node.get_children():
 		_collect_solids(child, out)
+
+
+static func _display_visible(solid: Node3D) -> bool:
+	if not solid.is_visible_in_tree():
+		return false
+	# Isolating a nested solid hides its ancestor's mesh, preserving the
+	# transform parent so the selected descendant remains visible.
+	var display: Node3D = solid.get_node_or_null("Mesh")
+	return display == null or display.is_visible_in_tree()
 
 
 static func _ray_depth(solid: Node3D, origin: Vector3, direction: Vector3) -> float:
