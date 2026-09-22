@@ -14,6 +14,7 @@ const SlabPanel := preload("res://addons/slab/slab_panel.gd")
 const SlabTestGui := preload("res://tests/slab_test_gui.gd")
 
 var _fails := 0
+var _test_recorders: Array[SlabTestUndo] = []
 
 
 func _init() -> void:
@@ -52,6 +53,7 @@ func _boot() -> void:
 	_check_multi_layer_management()
 	_check_channel_layer_strokes()
 	_check_channel_viewport_strokes()
+	_expect(_released_viewport_fixture().get_ref() == null, "viewport session releases after its fixture scope ends")
 	_finish()
 
 
@@ -78,7 +80,7 @@ func _check_brush_preview_caption() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([faces[0]]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	var assigned := StandardMaterial3D.new()
@@ -132,7 +134,7 @@ func _check_brush_preview_caption() -> void:
 	solid.call("set_face_material", PackedInt64Array([faces[1]]), 1)
 	selection.set_ids(PackedInt64Array([faces[0], faces[1]]))
 	var mixed_paint := SlabPaint.new()
-	mixed_paint.bind(selection, actions, SlabTestUndo.new())
+	mixed_paint.bind(selection, actions, _new_test_undo())
 	mixed_paint.enter()
 	_expect(mixed_paint.brush_preview_caption().begins_with("Selected: Mixed"),
 		"mixed selection without a brush gives truthful recovery guidance")
@@ -155,7 +157,7 @@ func _check_uv_drag_transaction() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([_top_face(solid)]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -213,7 +215,7 @@ func _check_texture_resolution_coherence() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var panel_undo := SlabTestUndo.new()
+	var panel_undo := _new_test_undo()
 	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, panel_undo)
@@ -253,7 +255,7 @@ func _check_resize_paint_image() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([_top_face(solid)]))
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var actions := SlabActions.new(selection, undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
@@ -356,7 +358,7 @@ func _check_numeric_uv_apply_and_selection_sync() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_objects([solid])
 	selection.set_ids(PackedInt64Array([top]))
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var actions := SlabActions.new(selection, undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
@@ -491,7 +493,7 @@ func _check_unique_paint_undo_save() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -567,7 +569,7 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	var actions := SlabActions.new(selection)
 	session.bind_actions(actions)
 	var paint := SlabPaint.new()
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	paint.bind(selection, actions, undo)
 	session.bind_paint(paint)
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
@@ -715,7 +717,7 @@ func _check_unique_copies_full_material_and_needs_a_face() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var steel := StandardMaterial3D.new()
 	steel.resource_name = "Teal Steel"
@@ -751,7 +753,7 @@ func _check_undo_after_switching_slots() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -815,7 +817,7 @@ func _check_dark_texture_preserved() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = tex
@@ -853,7 +855,7 @@ func _check_imported_svg_unique_stroke_roundtrip() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var shared: StandardMaterial3D = (src_mat as StandardMaterial3D).duplicate()
 	solid.set("materials", [shared])
@@ -882,7 +884,7 @@ func _check_imported_svg_unique_stroke_roundtrip() -> void:
 	selection2.set_ids(PackedInt64Array([top]))
 	var actions2 := SlabActions.new(selection2)
 	var paint2 := SlabPaint.new()
-	paint2.bind(selection2, actions2, SlabTestUndo.new())
+	paint2.bind(selection2, actions2, _new_test_undo())
 	paint2.enter()
 	var reopened_slot: int = int(inst.call("face_uv", top).get("slot", 0))
 	actions2.material_slot = reopened_slot
@@ -975,7 +977,7 @@ func _check_canvas_letterbox_and_press() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var panel_undo := SlabTestUndo.new()
+	var panel_undo := _new_test_undo()
 	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, panel_undo)
@@ -1376,7 +1378,7 @@ func _check_scene_roundtrip() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	solid.set("materials", [StandardMaterial3D.new()])
 	(solid.get("materials")[0] as StandardMaterial3D).albedo_color = Color(0.2, 0.4, 0.8)
@@ -1403,7 +1405,7 @@ func _check_scene_roundtrip() -> void:
 	selection2.set_ids(PackedInt64Array([top]))
 	var actions2 := SlabActions.new(selection2)
 	var paint2 := SlabPaint.new()
-	paint2.bind(selection2, actions2, SlabTestUndo.new())
+	paint2.bind(selection2, actions2, _new_test_undo())
 	paint2.enter()
 	var slot: int = int(inst.call("face_uv", top).get("slot", 0))
 	actions2.material_slot = slot
@@ -1460,7 +1462,7 @@ func _check_overlay_layer_and_flatten() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -1537,7 +1539,7 @@ func _check_channel_switching() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -1578,7 +1580,7 @@ func _check_multi_layer_management() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -1647,7 +1649,7 @@ func _check_channel_layer_strokes() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -1773,7 +1775,7 @@ func _check_channel_viewport_strokes() -> void:
 	var actions := SlabActions.new(selection)
 	session.bind_actions(actions)
 	var paint := SlabPaint.new()
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	paint.bind(selection, actions, undo)
 	session.bind_paint(paint)
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
@@ -1847,7 +1849,29 @@ func _expect(ok: bool, what: String) -> bool:
 	return ok
 
 
+func _released_viewport_fixture() -> WeakRef:
+	var session := SlabViewport.new(SlabTestHost.over(root))
+	var actions := SlabActions.new(session.state())
+	var paint := SlabPaint.new()
+	paint.bind(session.state(), actions, null)
+	session.bind_actions(actions)
+	session.bind_paint(paint)
+	return weakref(session)
+
+
+func _new_test_undo() -> SlabTestUndo:
+	var recorder := SlabTestUndo.new()
+	_test_recorders.append(recorder)
+	return recorder
+
+
 func _finish() -> void:
+	# Recorded Callables retain their paint controller, which owns the recorder.
+	# Release completed fixture history before testing process shutdown.
+	for recorder in _test_recorders:
+		recorder.actions.clear()
+		recorder.set("_open", {})
+	_test_recorders.clear()
 	if _fails != 0:
 		push_error(str(_fails) + " paint_smoke failures")
 		quit(1)

@@ -93,7 +93,7 @@ func _init(host: RefCounted) -> void:
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
 	_create = SlabCreatePlacement.new(_host, _actions)
-	_create.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_create.reported.connect(_report_tool_message)
 	_actions.create_placement_requested.connect(_begin_create)
 	_actions.create_settings_changed.connect(_create_settings_changed)
 	_actions.object_order_changed.connect(_host.replace_selection)
@@ -102,30 +102,14 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions.operation_segments_changed.connect(_change_operation_segments)
 	_actions.operation_apply_requested.connect(_confirm_operation)
 	_actions.operation_cancel_requested.connect(_cancel_operation)
-	_selection.changed.connect(func() -> void: _cancel_operation_with_reason("exit"))
-	_actions.plane_requested.connect(func() -> void:
-		_cancel_create()
-		if _loop != null and _loop.active:
-			_loop.cancel()
-		_cancel_array()
-		_cancel_snap_align()
-		_cancel_operation_with_reason("superseded")
-		_exit_paint()
-	)
-	_actions.loop_requested.connect(func() -> void:
-		_cancel_create()
-		if _plane != null and _plane.active:
-			_plane.cancel()
-		_cancel_array()
-		_cancel_snap_align()
-		_cancel_operation_with_reason("superseded")
-		_exit_paint()
-	)
+	_selection.changed.connect(_on_selection_changed)
+	_actions.plane_requested.connect(_on_plane_requested)
+	_actions.loop_requested.connect(_on_loop_requested)
 	_plane = SlabPlaneCut.new(_selection, _actions, _host)
 	_loop = SlabLoopCut.new(_selection, _actions, _host)
 	_array = SlabArray.new(_host)
 	_array.preview_changed.connect(_on_array_preview)
-	_array.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_array.reported.connect(_report_tool_message)
 	_actions.array_requested.connect(_begin_array)
 	_actions.array_settings_changed.connect(_refresh_array)
 	_actions.array_apply_requested.connect(_confirm_array)
@@ -133,7 +117,7 @@ func bind_actions(actions: RefCounted) -> void:
 	_selection.changed.connect(_array_selection_changed)
 	_snap_align = SlabSnapAlign.new(_selection, _host)
 	_snap_align.preview_changed.connect(_on_snap_align_preview)
-	_snap_align.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_snap_align.reported.connect(_report_tool_message)
 	_actions.snap_vertex_requested.connect(_begin_vertex_snap)
 	_actions.align_face_requested.connect(_begin_face_align)
 	_actions.snap_align_settings_changed.connect(_refresh_snap_align)
@@ -144,17 +128,47 @@ func bind_actions(actions: RefCounted) -> void:
 func bind_paint(paint: RefCounted) -> void:
 	_paint = paint
 	if _paint != null and _paint.has_signal("changed"):
-		_paint.changed.connect(func() -> void:
-			if _paint.active:
-				_cancel_create()
-				_cancel_array()
-				_cancel_snap_align()
-				_cancel_operation_with_reason("exit")
-				if _plane != null and _plane.active:
-					_plane.cancel()
-				if _loop != null and _loop.active:
-					_loop.cancel()
-		)
+		_paint.changed.connect(_on_paint_changed)
+
+
+func _report_tool_message(message: String) -> void:
+	_actions.reported.emit(message)
+
+
+func _on_selection_changed() -> void:
+	_cancel_operation_with_reason("exit")
+
+
+func _on_plane_requested() -> void:
+	_cancel_create()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation_with_reason("superseded")
+	_exit_paint()
+
+
+func _on_loop_requested() -> void:
+	_cancel_create()
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation_with_reason("superseded")
+	_exit_paint()
+
+
+func _on_paint_changed() -> void:
+	if _paint.active:
+		_cancel_create()
+		_cancel_array()
+		_cancel_snap_align()
+		_cancel_operation_with_reason("exit")
+		if _plane != null and _plane.active:
+			_plane.cancel()
+		if _loop != null and _loop.active:
+			_loop.cancel()
 
 
 static func after_gui_input(verdict: int) -> int:

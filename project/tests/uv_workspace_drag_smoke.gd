@@ -110,5 +110,6 @@ func _run() -> void:
 	undo.clear_history()
 	panel.free()
 	solid.free()
+	undo.free()
 	print("uv_workspace_drag_smoke: %d failures" % failures)
 	quit(1 if failures else 0)

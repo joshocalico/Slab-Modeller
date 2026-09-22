@@ -2,13 +2,32 @@ extends "res://tests/panel_editor_smoke.gd"
 
 # Rendered editor acceptance. Sends held mouse events through the real GUI.
 # scripts/godot --editor --path project --script res://tests/paint_editor_smoke.gd
-# The lab scene is never saved.
+# The lab scene is never saved. Temporary PNGs are removed at teardown.
+
+var _paint_test_panel: Control
+var _paint_test_editor: Object
+var _original_window_size := Vector2i.ZERO
+var _original_window_mode: int
+var _original_window_position := Vector2i.ZERO
+var _created_pngs: Array[String] = []
+
+
+func _initialize() -> void:
+	create_timer(180.0).timeout.connect(func() -> void: _fail("Paint editor test exceeded 180 seconds"))
+	_run.call_deferred()
+
+
 func _run() -> void:
 	if not Engine.is_editor_hint():
 		_fail("Requires --editor")
 		return
 	var editor := Engine.get_singleton("EditorInterface")
+	_paint_test_editor = editor
+	var startup_deadline := Time.get_ticks_msec() + 30000
 	while editor.get_resource_filesystem().is_scanning() or _plugin(root) == null:
+		if Time.get_ticks_msec() > startup_deadline:
+			_fail("Paint editor initialization timed out")
+			return
 		await process_frame
 	# Session restore can reopen the previous scene after the first scan.
 	await create_timer(1.5).timeout
@@ -31,6 +50,11 @@ func _run() -> void:
 	await create_timer(0.5).timeout
 	var plugin := _plugin(root)
 	var panel: Control = plugin.get("_panel")
+	_paint_test_panel = panel
+	_original_window_size = root.size
+	_original_window_mode = root.mode
+	_original_window_position = root.position
+	await _set_test_window(panel, Vector2i(1440, 800))
 	plugin.call("make_bottom_panel_item_visible", panel)
 	await process_frame
 	var selection: RefCounted = plugin.get("_selection")
@@ -41,13 +65,7 @@ func _run() -> void:
 			selection.set_ids(PackedInt64Array([id]))
 	_check(not solid.has_meta("_edit_lock_"), "solid_unlocked_before_paint")
 	await _click(_button_named(panel, "UV"))
-	# Wait for paint workspace layout to propagate after entering UV mode.
-	for i in 10: await process_frame
-	# Debug layout widths for CI diagnostics
-	var _paint_inspector: Control = panel.find_child("PaintInspector", true, false)
-	var _paint_split: Control = panel.find_child("PaintWorkspaceSplit", true, false)
-	if _paint_inspector and _paint_split:
-		print("LAYOUT: panel=%.0f split=%.0f inspector=%.0f" % [panel.get_global_rect().size.x, _paint_split.get_global_rect().size.x, _paint_inspector.get_global_rect().size.x])
+	await _wait_layout([panel, panel.find_child("PaintInspector", true, false), panel.find_child("PaintCanvas", true, false)])
 	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
 		"uv_entry_hides_native_gizmo_via_edit_lock")
 	_check(panel.current_workspace() == panel.Workspace.UV, "uv_button_enters_uv_workspace")
@@ -60,11 +78,7 @@ func _run() -> void:
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
-	# Wait for EditorResourcePicker to finish layout (first-frame width can be < 200)
-	for i in 30:
-		if picker.get_global_rect().size.x >= 200.0:
-			break
-		await process_frame
+	await _wait_layout([panel, picker, picker_wrap])
 	var resource_button_width := 0.0
 	var resource_button: Button
 	for child in picker.find_children("*", "Button", true, false):
@@ -72,9 +86,9 @@ func _run() -> void:
 			if child.get_global_rect().size.x > resource_button_width:
 				resource_button_width = child.get_global_rect().size.x
 				resource_button = child
-	_check(picker.is_visible_in_tree() and picker.get_global_rect().size.x >= 200.0, "material_picker_is_visible")
+	_check(picker.is_visible_in_tree() and picker.get_global_rect().size.x >= 200.0 * _paint_scale(), "material_picker_is_visible")
 	_check(picker_wrap.get_global_rect().encloses(picker.get_global_rect()), "material_picker_fits_its_slot")
-	_check(resource_button_width >= 120.0, "material_picker_resource_button_is_readable")
+	_check(resource_button_width >= 120.0 * _paint_scale(), "material_picker_resource_button_is_readable")
 	var imported := ResourceLoader.load("res://demo/signal_foundry/materials/brick.tres") as StandardMaterial3D
 	var before_picker_materials: Array = (solid.get("materials") as Array).duplicate()
 	var before_picker_data: PackedByteArray = solid.get("data")
@@ -268,12 +282,11 @@ func _run() -> void:
 	frame.pressed = true
 	var surface: Control = _surface(viewport.get_parent().get_parent())
 	surface.grab_focus()
-	surface.get_viewport().push_input(frame)
+	surface.get_viewport().push_input(frame, true)
 	await create_timer(0.5).timeout
 	_check(paint.active and viewport.get_camera_3d().global_transform != camera_before, "frame_selection_works_while_uv")
 	await _click(_button_named(panel, "Paint"))
-	# Wait for paint workspace layout to propagate
-	for i in 10: await process_frame
+	await _wait_layout([panel, canvas, panel.find_child("PaintInspector", true, false)])
 	_check(panel.current_workspace() == panel.Workspace.PAINT, "paint_button_enters_paint_workspace")
 	var paint_workspace: Button = panel.find_child("PaintWorkspace", true, false)
 	_check(paint_workspace.button_pressed, "paint_workspace_button_shows_pressed")
@@ -287,8 +300,7 @@ func _run() -> void:
 	var resize_before_data: PackedByteArray = solid.get("data")
 	var resize_before_size: Vector2i = paint.image().get_size()
 	await _click(_button_named(panel, "Resize…"))
-	# Wait for async _reveal_paint_resize_form to complete (ensure_control_visible)
-	for i in 5: await process_frame
+	await _wait_layout([panel.find_child("PaintResizeForm", true, false), panel.find_child("PaintInspector", true, false)])
 	var resize_form: VBoxContainer = panel.find_child("PaintResizeForm", true, false)
 	_check(resize_form != null and resize_form.is_visible_in_tree(), "owned Pixel artwork reveals the inline Resize form")
 	var resize_width: SpinBox = resize_form.find_child("PaintResizeWidth", true, false)
@@ -321,9 +333,9 @@ func _run() -> void:
 	_check(paint.image().get_size() == resize_before_size and paint.material() == resize_material
 		and solid.get("data") == resize_before_data,
 		"Resize Undo restores exact dimensions without changing UV geometry or material identity")
-	var channel_label: Label = panel.find_child("ChannelLabel", true, false)
-	_check(channel_label != null and channel_label.visible and channel_label.text == "Albedo",
-		"Pixel workspace shows Albedo channel label")
+	var albedo_channel: Button = panel.find_child("ChannelAlbedo", true, false)
+	_check(albedo_channel != null and albedo_channel.is_visible_in_tree() and albedo_channel.button_pressed,
+		"Pixel workspace visibly selects the Albedo channel")
 	var overlay_opacity_row: Control = panel.find_child("overlay_opacity", true, false)
 	_check(overlay_opacity_row != null and overlay_opacity_row.is_visible_in_tree(),
 		"Pixel workspace has overlay opacity control")
@@ -333,7 +345,7 @@ func _run() -> void:
 	_check(flatten_button.disabled, "Flatten is disabled without overlay strokes")
 	var fitted: Rect2 = canvas.image_rect()
 	var image_center: Vector2 = canvas.global_position + fitted.get_center()
-	_click_at(panel, image_center)
+	await _click_at(panel, image_center)
 	await create_timer(0.2).timeout
 	_check(paint.has_overlay_strokes(), "canvas click creates overlay strokes")
 	_check(not flatten_button.disabled, "Flatten enabled after overlay strokes")
@@ -354,8 +366,11 @@ func _run() -> void:
 	await _history_shortcut(panel, true)
 	_check(not paint.has_overlay_strokes(), "Flatten Redo clears overlay strokes")
 	_check(flatten_button.disabled, "Flatten disabled after Redo")
+	await _layer_and_channel_controls(panel, canvas, paint, solid)
+	await _width_matrix(panel, editor)
 	await _capture(editor, {"capture_prefix": "/tmp/slab-paint-editor"}, "after")
 	print("SLAB_PAINT_EDITOR ", JSON.stringify({"failures": failures}))
+	_cleanup_paint_test()
 	quit(1 if failures else 0)
 
 
@@ -363,8 +378,7 @@ func _pending_uv_value(panel: Control, solid: Node3D, selection: RefCounted) -> 
 	var before: PackedByteArray = solid.get("data")
 	var field: Node = panel.find_child("paint_uv_rotation", true, false)
 	var spin: SpinBox = field.find_children("*", "SpinBox", true, false)[0]
-	spin.get_line_edit().grab_focus()
-	spin.get_line_edit().text = "15"
+	await _type_spin_text(spin, "15")
 	await _click(_button_named(panel.find_child("PaintUvControls", true, false), "Apply UV"))
 	var rotation: float = solid.call("face_uv", selection.ids[0]).get("rotation", 0.0)
 	_check(is_equal_approx(rotation, deg_to_rad(15.0)), "apply_uv_uses_typed_rotation_without_enter")
@@ -385,10 +399,10 @@ func _history_shortcut(panel: Control, redo: bool) -> void:
 	key.ctrl_pressed = OS.get_name() != "macOS"
 	key.shift_pressed = redo
 	key.pressed = true
-	panel.get_viewport().push_input(key)
+	panel.get_viewport().push_input(key, true)
 	key = key.duplicate()
 	key.pressed = false
-	panel.get_viewport().push_input(key)
+	panel.get_viewport().push_input(key, true)
 	await create_timer(0.2).timeout
 
 
@@ -406,7 +420,7 @@ func _uv_gesture(canvas: Control, cancel_drag: bool, mode: int = 0) -> void:
 	_modifier_flags(modifier, mode)
 	if mode != paint.UV_MOVE:
 		canvas.grab_focus()
-		canvas.get_viewport().push_input(modifier)
+		canvas.get_viewport().push_input(modifier, true)
 		await process_frame
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -415,7 +429,7 @@ func _uv_gesture(canvas: Control, cancel_drag: bool, mode: int = 0) -> void:
 	press.position = start
 	press.global_position = start
 	_modifier_flags(press, mode)
-	canvas.get_viewport().push_input(press)
+	canvas.get_viewport().push_input(press, true)
 	await process_frame
 	var motion := InputEventMouseMotion.new()
 	motion.button_mask = MOUSE_BUTTON_MASK_LEFT
@@ -423,7 +437,7 @@ func _uv_gesture(canvas: Control, cancel_drag: bool, mode: int = 0) -> void:
 	motion.global_position = end
 	motion.relative = end - start
 	_modifier_flags(motion, mode)
-	canvas.get_viewport().push_input(motion)
+	canvas.get_viewport().push_input(motion, true)
 	await process_frame
 	_check(canvas.get("_paint").uv_drag_active, "canvas_mouse_drag_started")
 	_check(_uv_frame(canvas) == view_before, "held UV drag keeps a stable canvas frame")
@@ -434,17 +448,17 @@ func _uv_gesture(canvas: Control, cancel_drag: bool, mode: int = 0) -> void:
 		var escape := InputEventKey.new()
 		escape.keycode = KEY_ESCAPE
 		escape.pressed = true
-		canvas.get_viewport().push_input(escape)
+		canvas.get_viewport().push_input(escape, true)
 		await process_frame
 	press.pressed = false
 	press.button_mask = 0
 	press.position = end
 	press.global_position = end
-	canvas.get_viewport().push_input(press)
+	canvas.get_viewport().push_input(press, true)
 	if mode != paint.UV_MOVE:
 		modifier.pressed = false
 		_modifier_flags(modifier, 0)
-		canvas.get_viewport().push_input(modifier)
+		canvas.get_viewport().push_input(modifier, true)
 	await create_timer(0.2).timeout
 
 
@@ -525,10 +539,10 @@ func _uv_wheel(canvas: Control, position: Vector2, button: MouseButton) -> void:
 	event.pressed = true
 	event.position = canvas.global_position + position
 	event.global_position = event.position
-	canvas.get_viewport().push_input(event)
+	canvas.get_viewport().push_input(event, true)
 	event = event.duplicate()
 	event.pressed = false
-	canvas.get_viewport().push_input(event)
+	canvas.get_viewport().push_input(event, true)
 	await create_timer(0.2).timeout
 
 
@@ -599,7 +613,7 @@ func _click_at(control: Control, pos: Vector2) -> void:
 	press.pressed = true
 	press.position = pos
 	press.global_position = pos
-	vp.push_input(press)
+	vp.push_input(press, true)
 	await create_timer(0.05).timeout
 	var release := InputEventMouseButton.new()
 	release.button_index = MOUSE_BUTTON_LEFT
@@ -607,5 +621,191 @@ func _click_at(control: Control, pos: Vector2) -> void:
 	release.pressed = false
 	release.position = pos
 	release.global_position = pos
-	vp.push_input(release)
+	vp.push_input(release, true)
 	await create_timer(0.15).timeout
+
+
+func _paint_scale() -> float:
+	return _paint_test_panel.get("_metrics").scale() if _paint_test_panel != null else 1.0
+
+
+func _set_test_window(panel: Control, logical_size: Vector2i) -> void:
+	root.mode = Window.MODE_WINDOWED
+	var requested := Vector2i(Vector2(logical_size) * _paint_scale())
+	var usable := DisplayServer.screen_get_usable_rect(root.current_screen)
+	root.position = usable.position + (usable.size - requested) / 2
+	root.size = requested
+	print("PAINT_WINDOW ", JSON.stringify({"usable": str(usable), "position": str(root.position), "requested": str(requested), "actual": str(root.size), "editor_scale": _paint_test_editor.get_editor_scale()}))
+	await _wait_layout([panel])
+	_check(root.size == requested, "window reaches requested %s logical pixels, actual %s" % [logical_size, root.size])
+
+
+func _wait_layout(controls: Array, context: String = "paint layout") -> void:
+	var deadline := Time.get_ticks_msec() + 5000
+	var prior: Array = []
+	var stable := 0
+	while stable < 6:
+		await process_frame
+		var current: Array = []
+		var ready := true
+		for control: Control in controls:
+			if control == null or not is_instance_valid(control) or not control.is_visible_in_tree():
+				ready = false
+				continue
+			current.append([control.get_global_rect(), control.get_combined_minimum_size()])
+			ready = ready and control.size.x > 0.0 and control.size.y > 0.0
+		stable = stable + 1 if ready and current == prior else 0
+		prior = current
+		if Time.get_ticks_msec() > deadline:
+			_dump_layout(context)
+			_fail("Layout did not stabilize: " + context)
+			return
+
+
+func _click(button: Button) -> void:
+	if button == null or not is_instance_valid(button) or button.disabled or not button.is_visible_in_tree():
+		_fail("Requested paint button is unavailable")
+		return
+	var ancestor := button.get_parent()
+	while ancestor != null:
+		if ancestor is ScrollContainer:
+			(ancestor as ScrollContainer).ensure_control_visible(button)
+			await process_frame
+		ancestor = ancestor.get_parent()
+	await _wait_layout([button], "before clicking " + button.text)
+	# Native window activation and mouse-enter notifications are asynchronous on macOS.
+	# Wait for the real GUI hit target before sending a single press/release pair.
+	button.get_window().grab_focus()
+	button.get_viewport().warp_mouse(button.get_global_rect().get_center())
+	var mouse_deadline := Time.get_ticks_msec() + 3000
+	var hovered: Control
+	while true:
+		await process_frame
+		var hover_event := InputEventMouseMotion.new()
+		hover_event.window_id = button.get_window().get_window_id()
+		hover_event.position = button.get_global_rect().get_center()
+		hover_event.global_position = hover_event.position
+		button.get_viewport().push_input(hover_event, true)
+		hovered = button.get_viewport().gui_get_hovered_control()
+		if button.get_window().has_focus() and (hovered == button or (hovered != null and button.is_ancestor_of(hovered))):
+			break
+		if Time.get_ticks_msec() > mouse_deadline:
+			_fail("Native mouse did not reach %s; hover=%s rect=%s focus=%s" % [button.text, hovered, button.get_global_rect(), button.get_window().has_focus()])
+			return
+	var already_latched := button.toggle_mode and button.button_group != null and button.button_pressed
+	var hits := {"n": 0}
+	var pressed := func() -> void: hits["n"] += 1
+	button.pressed.connect(pressed)
+	await _click_at(button, button.get_global_rect().get_center())
+	if is_instance_valid(button) and button.pressed.is_connected(pressed):
+		button.pressed.disconnect(pressed)
+	if hits["n"] == 0 and not already_latched:
+		_fail("Viewport click did not fire pressed on %s; hover=%s rect=%s" % [button.text, hovered, button.get_global_rect()])
+
+
+func _check(ok: bool, label: String) -> void:
+	if not ok:
+		failures += 1
+		_dump_layout(label)
+	print("NATIVE_CHECK ", JSON.stringify({"check": label, "passed": ok}))
+
+
+func _dump_layout(label: String) -> void:
+	var bounds: Array = []
+	if _paint_test_panel != null:
+		for control_name in ["PaintWorkspaceSplit", "PaintInspector", "PaintActions", "PaintMaterialPickerWrap", "PaintMaterialPicker", "PaintCanvas", "ChannelPicker", "LayerList", "PaintResizeForm"]:
+			var control: Control = _paint_test_panel.find_child(control_name, true, false)
+			if control != null:
+				bounds.append({"name": control_name, "rect": str(control.get_global_rect()), "minimum": str(control.get_combined_minimum_size()), "visible": control.is_visible_in_tree()})
+	print("PAINT_LAYOUT ", JSON.stringify({"context": label, "window": str(root.size), "scale": _paint_scale(), "controls": bounds}))
+	if _paint_test_editor != null and DisplayServer.get_name() != "headless":
+		RenderingServer.force_sync()
+		RenderingServer.force_draw(true)
+		var shot: Image = _paint_test_editor.get_base_control().get_viewport().get_texture().get_image()
+		var path := "/tmp/slab-paint-editor-failure-%d.png" % failures
+		shot.save_png(path)
+		print("PAINT_FAILURE_CAPTURE ", path)
+
+
+func _cleanup_paint_test() -> void:
+	for path in _created_pngs:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+		if FileAccess.file_exists(path + ".import"):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(path + ".import"))
+	_created_pngs.clear()
+	if _original_window_size != Vector2i.ZERO:
+		root.position = _original_window_position
+		root.size = _original_window_size
+		root.mode = _original_window_mode
+
+
+func _fail(message: String) -> void:
+	_dump_layout(message)
+	printerr("NATIVE_FAILURE ", message)
+	_cleanup_paint_test()
+	quit(1)
+
+
+func _width_matrix(panel: Control, editor: Object) -> void:
+	for logical_size in [Vector2i(1440, 800), Vector2i(1280, 800)]:
+		await _set_test_window(panel, logical_size)
+		await _click(_button_named(panel, "UV"))
+		var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
+		var wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
+		var inspector: Control = panel.find_child("PaintInspector", true, false)
+		var canvas: Control = panel.find_child("PaintCanvas", true, false)
+		await _wait_layout([picker, wrap, inspector, canvas])
+		var readable := false
+		for child: Button in picker.find_children("*", "Button", true, false):
+			if child.is_visible_in_tree() and child.size.x >= 120.0 * _paint_scale():
+				readable = true
+		_check(picker.size.x >= 200.0 * _paint_scale() and readable,
+			"%s UV resource picker retains readable widths" % logical_size.x)
+		_check(wrap.get_global_rect().encloses(picker.get_global_rect())
+			and inspector.get_global_rect().grow(1.0).encloses(wrap.get_global_rect())
+			and not inspector.get_global_rect().intersects(canvas.get_global_rect()),
+			"%s UV picker stays inside its dock without covering the canvas" % logical_size.x)
+		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-uv-%s" % logical_size.x}, "after")
+		await _click(_button_named(panel, "Paint"))
+		var channels: Control = panel.find_child("ChannelPicker", true, false)
+		await _click(panel.find_child("ChannelAlbedo", true, false))
+		await _wait_layout([inspector, channels, canvas])
+		_check(inspector.get_global_rect().grow(1.0).encloses(channels.get_global_rect())
+			and not inspector.get_global_rect().intersects(canvas.get_global_rect()),
+			"%s Paint channel buttons fit their dock without covering canvas" % logical_size.x)
+		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-pixel-%s" % logical_size.x}, "after")
+
+
+func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCounted, solid: Node3D) -> void:
+	var before_count: int = paint.layer_count()
+	await _click(panel.find_child("AddLayer", true, false))
+	_check(paint.layer_count() == before_count + 1 and paint.active_layer_index() == before_count,
+		"Add Layer button selects its new layer")
+	await _click(panel.find_child("DeleteLayer", true, false))
+	_check(paint.layer_count() == before_count, "Delete Layer button removes the selected layer")
+	await _history_shortcut(panel, false)
+	_check(paint.layer_count() == before_count + 1, "Delete Layer keyboard Undo restores its layer")
+	await _history_shortcut(panel, true)
+	_check(paint.layer_count() == before_count, "Delete Layer keyboard Redo removes its layer")
+	var saved_name := solid.name
+	solid.name = "PaintEditorSmoke_%s" % Time.get_ticks_msec()
+	var paths: Array[String] = []
+	for channel_button in ["ChannelAlbedo", "ChannelRoughness"]:
+		await _click(panel.find_child(channel_button, true, false))
+		await _wait_layout([canvas])
+		await _click_at(canvas, canvas.global_position + canvas.image_rect().get_center())
+		_check(paint.has_channel_overlay_strokes(), "%s canvas click creates editable artwork" % channel_button)
+		var expected: PackedByteArray = paint.texture().get_image().save_png_to_buffer()
+		var path: String = paint.default_save_path()
+		_check(not FileAccess.file_exists(path), "Save fixture owns a new PNG path")
+		if FileAccess.file_exists(path):
+			_fail("Save fixture would overwrite an existing PNG")
+			return
+		_created_pngs.append(path)
+		await _click(panel.find_child("PaintSave", true, false))
+		var saved := Image.load_from_file(path)
+		_check(saved != null and saved.save_png_to_buffer() == expected,
+			"%s Save Paint button writes exact displayed pixels" % channel_button)
+		paths.append(path)
+	_check(paths[0] != paths[1], "Albedo and Roughness Save buttons target different PNGs")
+	solid.name = saved_name
