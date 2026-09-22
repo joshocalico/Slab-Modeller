@@ -205,6 +205,8 @@ var _dirty_ids: Dictionary = {}
 var _pending_scene_saves: Dictionary = {}
 var _locked_solid: Node3D = null
 var _had_prior_lock: bool = false
+var _prior_lock_value: Variant = null
+var _lock_suspended_for_save: bool = false
 
 
 func bind(selection: RefCounted, actions: RefCounted, undo: Object, host: RefCounted = null) -> void:
@@ -237,7 +239,7 @@ func enter() -> void:
 	_lock_transform_gizmo()
 	_adopt_selection_material()
 	if tool == Tool.PIXEL:
-		_report("Paint workspace. Brush paints albedo; switch to UV workspace for material placement.")
+		_report("Paint workspace. Brush paints %s; switch to UV workspace for material placement." % channel_name(channel).to_lower())
 	else:
 		_report("UV workspace. Place textures and materials; switch to Paint workspace for pixel painting.")
 
@@ -609,6 +611,27 @@ func resize_image(width: int, height: int, smooth: bool = true, expected_materia
 	return true
 
 
+func can_fill_layer() -> bool:
+	return (can_resize_image() and channel_state(channel).active_layer() != null
+		and (_actions == null or not _actions.operation_active))
+
+
+func fill_layer() -> bool:
+	if not can_fill_layer():
+		_report("Select an editable Paint layer and finish the active gesture before filling.")
+		return false
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
+	var state := channel_state(channel)
+	var color := brush_color
+	color.a *= clampf(brush_opacity, 0.0, 1.0)
+	state.active_layer().image.fill(color)
+	_load_channel_overlay(channel)
+	_commit_channel_edit("Slab Fill %s Layer" % channel_name(channel), before)
+	_report("Filled the active %s layer." % channel_name(channel))
+	return true
+
+
 func can_flatten() -> bool:
 	return (active and _material != null and _is_unique(_material)
 		and _image != null and not _image.is_empty() and _solid != null
@@ -803,6 +826,7 @@ func begin_stroke() -> bool:
 	_stroke_before = _overlay_image.save_png_to_buffer() if _overlay_image != null and not _overlay_image.is_empty() else PackedByteArray()
 	_stroke_material = _material
 	_last_pixel = Vector2(-1, -1)
+	changed.emit()
 	return true
 
 
@@ -824,6 +848,7 @@ func end_stroke() -> void:
 		return
 	stroke_active = false
 	if _overlay_image == null or _overlay_image.is_empty() or _overlay_image.save_png_to_buffer() == _stroke_before:
+		changed.emit()
 		return
 	_save_current_overlay_to_channel(channel)
 	_commit_channel_edit("Slab Paint Stroke", _stroke_state)
@@ -1916,27 +1941,47 @@ func _lock_transform_gizmo() -> void:
 	if target == null or not is_instance_valid(target):
 		return
 	_locked_solid = target
-	_had_prior_lock = _locked_solid.has_meta("_edit_lock_") and _locked_solid.get_meta("_edit_lock_") == true
-	if not _had_prior_lock:
-		_locked_solid.set_meta("_edit_lock_", true)
+	_had_prior_lock = target.has_meta("_edit_lock_")
+	_prior_lock_value = target.get_meta("_edit_lock_") if _had_prior_lock else null
+	target.set_meta("_edit_lock_", true)
 	if _host != null and _host.has_method("refresh_native_selection"):
-		_host.refresh_native_selection(_locked_solid)
+		_host.refresh_native_selection(target)
+
+
+func _restore_authored_lock() -> void:
+	if not is_instance_valid(_locked_solid):
+		return
+	if _had_prior_lock:
+		_locked_solid.set_meta("_edit_lock_", _prior_lock_value)
+	elif _locked_solid.has_meta("_edit_lock_"):
+		_locked_solid.remove_meta("_edit_lock_")
+
+
+func suspend_transform_lock_for_save() -> void:
+	if _lock_suspended_for_save or not is_instance_valid(_locked_solid):
+		return
+	_lock_suspended_for_save = true
+	_restore_authored_lock()
+
+
+func resume_transform_lock_after_save() -> void:
+	if not _lock_suspended_for_save:
+		return
+	_lock_suspended_for_save = false
+	if not active or not is_instance_valid(_locked_solid) or _selection == null or _selection.solid != _locked_solid:
+		_unlock_transform_gizmo()
+		return
+	_locked_solid.set_meta("_edit_lock_", true)
 
 
 func _unlock_transform_gizmo() -> void:
-	if _locked_solid == null:
-		return
-	var solid: Node3D = _locked_solid
-	var restore_lock: bool = _had_prior_lock
+	var solid: Node3D = _locked_solid if is_instance_valid(_locked_solid) else null
+	_restore_authored_lock()
 	_locked_solid = null
 	_had_prior_lock = false
-	if not is_instance_valid(solid):
-		return
-	if restore_lock:
-		pass
-	elif solid.has_meta("_edit_lock_"):
-		solid.remove_meta("_edit_lock_")
-	if _host != null and _host.has_method("refresh_native_selection"):
+	_prior_lock_value = null
+	_lock_suspended_for_save = false
+	if is_instance_valid(solid) and _host != null and _host.has_method("refresh_native_selection"):
 		_host.refresh_native_selection(solid)
 
 

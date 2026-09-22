@@ -45,6 +45,8 @@ To clear the transform widget from the painting view, open the view-name menu at
 
 **Save Paint** writes the current channel's composite image, then flattens its visible layers and reports the image path. If writing the image fails, the editable layers stay intact. Albedo uses `res://slab_paint/<solid>_m<slot>.png`. Roughness and Emission add `_roughness` and `_emission` before `.png`. Save each channel you paint, then save the scene to keep the material, editable layers, and mapping changes.
 
+Use **Fill Layer** to replace the active layer with the Brush Color and Opacity in one undoable action. For an opaque black fill, use black with full color alpha, Brush Opacity 1, and layer Opacity 1.
+
 Use **Layers +** to add a layer. Click a layer row to select it, use the eye control to hide or show it, and set its layer Opacity. **Flatten** combines visible layers into the current channel's base image. Hidden layers stay editable after Flatten and after a scene save and reload.
 
 Undo and redo restore the edited material and channel even when you have switched to another target. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes the active workspace.

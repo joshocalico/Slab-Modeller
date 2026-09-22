@@ -131,6 +131,7 @@ func _run() -> void:
 	_check_failed_save()
 	_check_roughness_scalar()
 	_check_emission_operator()
+	_check_fill_layer()
 	quit(1 if failures else 0)
 
 func _check_layer_persistence() -> void:
@@ -325,3 +326,67 @@ func _check_emission_operator() -> void:
 			and _pixels(loaded.emission_texture) == painted and is_equal_approx(loaded.emission_energy_multiplier, 3.2),
 			"Emission mask settings and exact pixels survive resource reload")
 		_dispose(f)
+
+
+func _check_fill_layer() -> void:
+	var f := _fixture()
+	var paint: RefCounted = f.paint
+	var mat: StandardMaterial3D = paint.material()
+	var albedo := _pixels(mat.albedo_texture)
+	paint.channel = Paint.Channel.EMISSION
+	var reports: Array[String] = []
+	paint.reported.connect(func(message: String) -> void: reports.append(message))
+	paint.exit()
+	paint.enter()
+	_check(paint.channel == Paint.Channel.EMISSION and reports.back().contains("paints emission"),
+		"reopening Paint reports the preserved active channel")
+	paint.add_layer("Indicator")
+	_stroke(paint)
+	paint.set_layer_visible(1, false)
+	paint.set_active_layer(0)
+	var state = paint.channel_state(Paint.Channel.EMISSION)
+	var base: PackedByteArray = state.base_image.save_png_to_buffer()
+	var hidden: PackedByteArray = state.layers[1].image.save_png_to_buffer()
+	var before: Dictionary = mat.get_meta("slab_paint_layers").duplicate(true)
+	var panel := preload("res://addons/slab/slab_panel.gd").new()
+	panel.setup(f.selection, f.actions)
+	panel.bind_paint(paint)
+	var fill: Button = panel.find_child("PaintFillLayer", true, false)
+	_check(fill != null and not fill.disabled, "Fill Layer is available on an editable Paint target")
+	paint.brush_color = Color.BLACK
+	paint.brush_opacity = 1.0
+	var version: int = f.undo.get_version()
+	fill.pressed.emit()
+	_check(f.undo.get_version() == version + 1, "Fill Layer creates one Undo action")
+	var expected := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	expected.fill(Color.BLACK)
+	_check(_pixels(mat.emission_texture) == expected.save_png_to_buffer(), "Fill Layer makes every Emission texel exact black")
+	_check(state.base_image.save_png_to_buffer() == base and state.layers[1].image.save_png_to_buffer() == hidden
+		and not state.layers[1].visible and _pixels(mat.albedo_texture) == albedo,
+		"Fill preserves base, hidden artwork, visibility and other channels")
+	var filled: Dictionary = mat.get_meta("slab_paint_layers").duplicate(true)
+	paint.channel = Paint.Channel.ALBEDO
+	f.undo.undo()
+	_check(mat.get_meta("slab_paint_layers") == before and _pixels(mat.albedo_texture) == albedo,
+		"Fill Undo restores exact layer state after switching channel")
+	f.undo.redo()
+	_check(mat.get_meta("slab_paint_layers") == filled and _pixels(mat.emission_texture) == expected.save_png_to_buffer(),
+		"Fill Redo restores exact black pixels on its original channel")
+	paint.channel = Paint.Channel.EMISSION
+	paint.brush_color = Color(0.8, 0.4, 0.2, 0.5)
+	paint.brush_opacity = 0.5
+	_check(paint.fill_layer(), "Fill accepts brush opacity and color alpha")
+	var pixel: Color = paint.channel_state(Paint.Channel.EMISSION).active_layer().image.get_pixel(0, 0)
+	_check(absf(pixel.a - 0.25) < 0.005 and absf(pixel.r - 0.8) < 0.005,
+		"Fill stores brush color with combined alpha and opacity")
+	paint.begin_stroke()
+	_check(fill.disabled and not paint.fill_layer(), "Fill refuses and disables during a stroke")
+	paint.end_stroke()
+	_check(not fill.disabled, "ending an empty stroke restores Fill availability")
+	f.actions.operation_active = true
+	_check(not paint.can_fill_layer(), "Fill refuses during a modelling operation")
+	f.actions.operation_active = false
+	mat.set_meta(Paint.OWNED_META, false)
+	_check(not paint.can_fill_layer() and not paint.fill_layer(), "Fill refuses an unowned material")
+	panel.free()
+	_dispose(f)

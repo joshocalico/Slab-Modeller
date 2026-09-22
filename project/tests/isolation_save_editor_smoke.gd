@@ -20,6 +20,8 @@ func _run() -> void:
 		solid.owner = fixture
 		solid.call("make_box", Vector3.ONE)
 		solid.visible = label != "Hidden"
+		if label != "Selected":
+			solid.set_meta("_edit_lock_", label == "Hidden")
 	var packed := PackedScene.new()
 	_check(packed.pack(fixture) == OK, "fixture packs")
 	_check(ResourceSaver.save(packed, FIXTURE) == OK, "fixture saves")
@@ -46,6 +48,56 @@ func _run() -> void:
 	_check(reopened.get_node("Other").visible, "saved scene preserves other visibility")
 	_check(not reopened.get_node("Hidden").visible, "saved scene preserves intentional hiding")
 	reopened.free()
+	var paint: RefCounted = plugin.get("_paint")
+	for label in ["Selected", "Other", "Hidden"]:
+		var target: Node3D = scene.get_node(label)
+		editor.get_selection().clear()
+		editor.get_selection().add_node(target)
+		await process_frame
+		# This save-boundary fixture prepares the Slab target directly, as above.
+		# Native selection gestures are covered by the separate editor input gates.
+		selection.set_objects([target])
+		paint.enter()
+		await process_frame
+		_check(target.get_meta("_edit_lock_", null) == true, "Paint temporarily locks " + label)
+		_check(editor.save_scene() == OK, "EditorInterface saves while Paint is active on " + label)
+		await process_frame
+		_check(paint.active and target.get_meta("_edit_lock_", null) == true, "Paint lock resumes after save on " + label)
+		saved = ResourceLoader.load(FIXTURE, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
+		reopened = saved.instantiate()
+		var loaded: Node3D = reopened.get_node(label)
+		_check(not loaded.has_meta("_edit_lock_") if label == "Selected" else loaded.get_meta("_edit_lock_", null) == (label == "Hidden"),
+			"saved Paint target preserves authored lock presence/value on " + label)
+		reopened.free()
+		paint.exit()
+		_check(not target.has_meta("_edit_lock_") if label == "Selected" else target.get_meta("_edit_lock_", null) == (label == "Hidden"),
+			"exiting Paint restores authored lock on " + label)
+	# Failed saves do not emit scene_saved; the deferred fallback must resume the lock.
+	editor.get_selection().clear()
+	editor.get_selection().add_node(scene.get_node("Selected"))
+	editor.edit_node(scene.get_node("Selected"))
+	await process_frame
+	selection.set_objects([scene.get_node("Selected")])
+	paint.enter()
+	await process_frame
+	plugin._apply_changes()
+	_check(not scene.get_node("Selected").has_meta("_edit_lock_"), "pre-save callback removes temporary Paint lock")
+	await process_frame
+	_check(scene.get_node("Selected").get_meta("_edit_lock_", null) == true, "deferred fallback resumes lock without scene_saved")
+	plugin._apply_changes()
+	paint.exit()
+	await process_frame
+	_check(not scene.get_node("Selected").has_meta("_edit_lock_"), "exit before deferred resume never relocks target")
+	var deleted: Node3D = ClassDB.instantiate("SlabSolid")
+	scene.add_child(deleted)
+	deleted.call("make_box", Vector3.ONE)
+	selection.set_objects([deleted])
+	paint.enter()
+	paint.suspend_transform_lock_for_save()
+	deleted.free()
+	paint.resume_transform_lock_after_save()
+	_check(paint.get("_locked_solid") == null, "deleted target is not relocked after save")
+	paint.exit()
 	plugin._on_scene_changed(null)
 	_check(not selection.isolated and scene.get_node("Other").visible, "scene switch restores visibility")
 	selection.set_objects([scene.get_node("Selected")])

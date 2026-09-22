@@ -186,6 +186,7 @@ Paint hides Assign, Sample, the material picker, the material palette, Mapping, 
 | Control | Result |
 | --- | --- |
 | Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
+| Fill Layer | Replaces the active layer with Brush Color and Opacity. Preserves other layers and the base image; supports Undo and Redo. |
 | Save Paint | Flattens visible layers and writes the current channel. Albedo uses `<solid>_m<slot>.png` under `res://slab_paint/`; Roughness and Emission add `_roughness` and `_emission`. Save each painted channel, then save the scene. |
 | Resize… | Expands Width and Height controls beside the image, with Keep aspect and Smooth or Nearest resampling. Apply Resize preserves UV placement and supports Undo. Cancel keeps the current image. Save Paint and the scene afterward. |
 | New image px | Sets the square image size used by Make Unique when the material has no artwork. For existing artwork, the read-only Texture px field shows its width. |

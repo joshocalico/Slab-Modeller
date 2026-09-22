@@ -210,10 +210,13 @@ func _on_main_screen_changed(screen_name: String) -> void:
 
 
 func _apply_changes() -> void:
-	# Godot calls this before packing a scene. Isolation is editor-only state.
+	# Godot calls this before packing a scene. Restore authored editor metadata.
 	if _selection != null:
 		_selection.suspend_isolation_for_save()
 		_selection.resume_isolation_after_save.call_deferred()
+	if _paint != null:
+		_paint.suspend_transform_lock_for_save()
+		_paint.resume_transform_lock_after_save.call_deferred()
 
 
 func _on_scene_changed(_scene_root: Node) -> void:
@@ -227,6 +230,7 @@ func _on_scene_saved(path: String) -> void:
 	if _selection != null:
 		_selection.resume_isolation_after_save()
 	if _paint != null:
+		_paint.resume_transform_lock_after_save()
 		_paint.scene_saved(path)
 
 

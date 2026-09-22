@@ -109,6 +109,7 @@ var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
 var _overlay_opacity: SpinBox
 var _flatten_button: Button
+var _fill_layer_button: Button
 var _channel_label: Label
 var _channel_picker: HBoxContainer
 var _layer_list: VBoxContainer
@@ -1864,12 +1865,29 @@ func _brush_column() -> Control:
 	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
 	col.add_child(overlay_opacity_row)
 	
+	var layer_actions := HFlowContainer.new()
+	layer_actions.name = "LayerActions"
+	layer_actions.add_theme_constant_override("h_separation", 4)
+	layer_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(layer_actions)
+	_fill_layer_button = Button.new()
+	_fill_layer_button.name = "PaintFillLayer"
+	_fill_layer_button.text = "Fill Layer"
+	_fill_layer_button.accessibility_name = "Fill active paint layer"
+	_fill_layer_button.tooltip_text = "Replace the active layer with Brush Color and Opacity. Other layers stay unchanged."
+	_fill_layer_button.add_theme_font_size_override("font_size", _font(15))
+	_fill_layer_button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	_fill_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.fill_layer()
+	)
+	layer_actions.add_child(_fill_layer_button)
 	_flatten_button = _named_action("Flatten", "Apply", "Commit all visible layers to the base as one undoable action.", func() -> void:
 		if _paint:
 			_paint.flatten()
 	)
 	_flatten_button.name = "PaintFlatten"
-	col.add_child(_flatten_button)
+	layer_actions.add_child(_flatten_button)
 	
 	col.add_child(HSeparator.new())
 	
@@ -2203,6 +2221,8 @@ func _refresh_paint_chrome() -> void:
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
 	if _overlay_opacity != null and _paint != null:
 		_overlay_opacity.set_value_no_signal(_paint.overlay_opacity)
+	if _fill_layer_button != null:
+		_fill_layer_button.disabled = _paint == null or not _paint.can_fill_layer()
 	if _flatten_button != null:
 		var can_flatten: bool = _paint != null and _paint.can_flatten()
 		_flatten_button.disabled = not can_flatten
