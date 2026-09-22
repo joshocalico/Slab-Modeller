@@ -409,6 +409,49 @@ func case_command_icons_are_unique_inside_each_mode() -> void:
 					seen[name] = row["id"]
 
 
+func case_compact_toolbar_preserves_commands_and_profile_selection() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	for mode in [SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]:
+		selection.mode = mode
+		var primary: HFlowContainer = panel.find_child("PrimaryCommands", true, false)
+		expect(primary != null, "component mode exposes one wrapping command toolbar")
+		for section in actions.command_sections_for(mode):
+			if section["heading"] == SlabActions.SECTION_SELECTION:
+				continue
+			for row in section["rows"]:
+				var button: Button = primary.get_node_or_null(str(row["id"]))
+				expect(button != null, "%s remains discoverable in the primary toolbar" % row["id"])
+				if button != null:
+					expect(button.disabled == not actions.disabled_reason(row).is_empty(),
+						"toolbar preserves %s availability" % row["id"])
+		var disclosure: Button = panel.find_child("SectionSelection", true, false)
+		expect(not disclosure.button_pressed, "Selection remains collapsed on first use")
+	var bevel: Button = panel.find_child("bevel_edges", true, false)
+	var extrude: Button = panel.find_child("extrude_faces", true, false)
+	expect(bevel.get_parent() == extrude.get_parent(), "Face Bevel sits beside the other Face actions")
+	expect(not panel.find_child("SettingsColumn", true, false).visible,
+		"Face mode releases the empty settings column")
+	var status: Label = panel.get_node("Status")
+	expect(status.visible and status.text.contains("Select a solid") and not status.text.contains("No solid selected"),
+		"empty state gives one instruction rather than repeating header identity")
+	var menu: MenuButton = panel.find_child("ShortcutsMenu", true, false)
+	expect(menu != null and menu.text == "Shortcuts" and menu.focus_mode == Control.FOCUS_ALL
+		and not menu.accessibility_name.is_empty(), "shortcut profiles have a compact keyboard-accessible menu")
+	var popup := menu.get_popup()
+	popup.id_pressed.emit(2)
+	expect(actions.keybind_profiles.profile() == 2, "menu selection updates the active keyboard profile")
+	for index in popup.item_count:
+		expect(popup.is_item_checked(index) == (index == 2), "only the chosen keyboard profile is checked")
+	actions.keybind_profiles.set_profile(0)
+	expect(popup.is_item_checked(0) and not popup.is_item_checked(2), "external profile changes refresh menu checks")
+	selection.mode = SlabSelection.Mode.OBJECT
+	expect(panel.find_child("SettingsColumn", true, false).visible, "Object mode restores creation settings")
+	panel.free()
+
+
 func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
@@ -424,8 +467,9 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to UV workspace")
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
-	expect(_label_for(panel, "Face") != null and panel.find_child("SectionSelection", true, false) != null,
-		"Face mode renders the Face and Selection headings")
+	expect(_label_for(panel, "Face") == null and _label_for(panel, "Edge") == null
+		and panel.find_child("SectionSelection", true, false) != null,
+		"Face actions share one toolbar and retain the Selection disclosure")
 	expect(panel.find_child("SectionUV", true, false) == null and panel.find_child("MaterialChips", true, false) == null,
 		"Face mode does not duplicate UV workspace material and UV controls")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
@@ -998,13 +1042,13 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 		and context.get_combined_minimum_size().x <= 1.0,
 		"long selection names stay complete in the tooltip without adding a text-width minimum")
 	target.name = "RenamedRoom"
-	expect(panel.get_node("Status").text.contains("RenamedRoom"), "renaming the selected solid updates status immediately")
+	expect(not panel.get_node("Status").visible, "renaming a selected solid does not repeat its identity in status")
 	expect(context.text == "RenamedRoom" and context.tooltip_text == "RenamedRoom",
 		"renaming the selected solid updates permanent header context")
 	actions.reported.emit("Current report")
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([1, 2]))
-	expect(context.text == "2 faces · RenamedRoom" and panel.get_node("Status").text == selection.describe(),
+	expect(context.text == "2 faces · RenamedRoom" and not panel.get_node("Status").visible,
 		"element selection updates header context and clears superseded feedback")
 	actions.reported.emit("Current report")
 	cutter.name = "UnselectedCutter"

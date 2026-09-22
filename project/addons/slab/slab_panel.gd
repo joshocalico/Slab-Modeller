@@ -114,7 +114,7 @@ var _channel_picker: HBoxContainer
 var _layer_list: VBoxContainer
 var _add_layer_button: Button
 var _delete_layer_button: Button
-var _keybind_dropdown: OptionButton
+var _shortcuts_menu: MenuButton
 var _selection_controls: Control
 var _operation_row: Control
 var _loop_action_group: HBoxContainer
@@ -588,7 +588,7 @@ func refresh() -> void:
 	_settings.visible = _show_settings()
 	_refresh_create_strip_visibility()
 	_refresh_selection_context()
-	set_status(_last_report if _last_report != "" else _selection.describe())
+	set_status(_last_report if _last_report != "" else _selection_instruction())
 	if _paint != null and _paint.active:
 		_refresh_paint_chrome()
 
@@ -634,8 +634,18 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for child in _create_chips.get_children():
 		_create_chips.remove_child(child)
 		child.free()
+	var primary_rows: Array[Dictionary] = []
+	if _selection.mode != SlabSelection.Mode.OBJECT:
+		for section in sections:
+			if section["heading"] != SlabActions.SECTION_SELECTION:
+				primary_rows.append_array(section["rows"])
+		var primary := _section_flow(primary_rows)
+		primary.name = "PrimaryCommands"
+		_command_column.add_child(primary)
 	for section in sections:
 		var heading: String = section["heading"]
+		if _selection.mode != SlabSelection.Mode.OBJECT and heading != SlabActions.SECTION_SELECTION:
+			continue
 		if heading == SlabActions.SECTION_CREATE:
 			for row in section["rows"]:
 				_create_chips.add_child(_action_button(row))
@@ -972,6 +982,18 @@ func set_status(text: String) -> void:
 	if _status:
 		_status.text = text
 		_status.tooltip_text = text
+		_status.visible = (_paint != null and _paint.active) or not text.is_empty()
+
+
+func _selection_instruction() -> String:
+	if _selection.objects.is_empty():
+		return "Select a solid in the viewport, or switch to Object to create one." if _selection.mode != SlabSelection.Mode.OBJECT else "Choose a shape to create, or select a solid in the viewport."
+	if _selection.mode != SlabSelection.Mode.OBJECT and _selection.ids.is_empty():
+		match _selection.mode:
+			SlabSelection.Mode.VERTEX: return "Click a vertex in the viewport to select it."
+			SlabSelection.Mode.EDGE: return "Click an edge in the viewport to select it."
+			SlabSelection.Mode.FACE: return "Click a face in the viewport to select it."
+	return ""
 
 
 func _on_reported(text: String) -> void:
@@ -1017,7 +1039,7 @@ func _exit_tree() -> void:
 
 func _reset_status() -> void:
 	_last_report = ""
-	set_status(_selection.describe())
+	set_status(_selection_instruction())
 
 
 func _sync_edit_fields() -> void:
@@ -1072,8 +1094,8 @@ func _header() -> Control:
 	_paint_toggle.pressed.connect(_toggle_paint_workspace)
 	row.add_child(_paint_toggle)
 	row.add_child(VSeparator.new())
-	_keybind_dropdown = _build_keybind_dropdown()
-	row.add_child(_keybind_dropdown)
+	_shortcuts_menu = _build_shortcuts_menu()
+	row.add_child(_shortcuts_menu)
 	_selection_context = Label.new()
 	_selection_context.name = "SelectionContext"
 	_selection_context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1095,34 +1117,40 @@ func _refresh_selection_context() -> void:
 	_selection_context.tooltip_text = _selection_context.text
 
 
-func _build_keybind_dropdown() -> OptionButton:
-	var dropdown := OptionButton.new()
-	dropdown.name = "KeybindProfile"
-	dropdown.focus_mode = Control.FOCUS_ALL
-	dropdown.add_theme_font_size_override("font_size", _font(13))
-	dropdown.custom_minimum_size.x = _scaled(140.0)
-	dropdown.tooltip_text = "Choose a keyboard shortcut profile. Slab is the default; Familiar profiles remap common modelling shortcuts."
-	dropdown.accessibility_name = "Keyboard profile"
-	dropdown.accessibility_description = dropdown.tooltip_text
+func _build_shortcuts_menu() -> MenuButton:
+	var menu := MenuButton.new()
+	menu.name = "ShortcutsMenu"
+	menu.text = "Shortcuts"
+	menu.focus_mode = Control.FOCUS_ALL
+	menu.add_theme_font_size_override("font_size", _font(13))
+	menu.tooltip_text = "Choose a keyboard shortcut profile."
+	menu.accessibility_name = "Keyboard shortcuts"
+	menu.accessibility_description = "Choose a profile from the menu. The active profile is checked."
+	var popup := menu.get_popup()
 	if _actions != null and _actions.keybind_profiles != null:
-		for label in _actions.keybind_profiles.all_profile_labels():
-			dropdown.add_item(label)
-		dropdown.select(_actions.keybind_profiles.profile())
-		dropdown.item_selected.connect(_on_keybind_profile_changed)
+		var labels: Array[String] = _actions.keybind_profiles.all_profile_labels()
+		for index in labels.size():
+			popup.add_radio_check_item(labels[index], index)
+			popup.set_item_checked(index, index == _actions.keybind_profiles.profile())
+		popup.id_pressed.connect(_on_keybind_profile_changed)
 		_actions.keybind_profiles.profile_changed.connect(func(_p: int) -> void:
 			_on_profile_updated()
 		)
-	return dropdown
+	return menu
 
 
 func _on_keybind_profile_changed(index: int) -> void:
 	if _actions == null or _actions.keybind_profiles == null:
 		return
 	_actions.keybind_profiles.set_profile(index)
-	_on_profile_updated()
 
 
 func _on_profile_updated() -> void:
+	if _shortcuts_menu != null and _actions.keybind_profiles != null:
+		var popup := _shortcuts_menu.get_popup()
+		for index in popup.item_count:
+			popup.set_item_checked(index, popup.get_item_id(index) == _actions.keybind_profiles.profile())
+		_shortcuts_menu.tooltip_text = "Keyboard profile: %s" % SlabKeybindProfiles.label_of(_actions.keybind_profiles.profile())
 	var conflicts: Array[String] = []
 	if _actions != null and _actions.keybind_profiles != null:
 		conflicts = _actions.keybind_profiles.conflicts_with_godot()
@@ -1140,7 +1168,13 @@ func _build_settings_column() -> Control:
 	_create_strip = _build_create_strip()
 	_settings_column.add_child(_create_strip)
 	_settings_column.add_child(_settings_block())
+	_create_strip.visibility_changed.connect(_sync_settings_column_visibility)
+	_settings.visibility_changed.connect(_sync_settings_column_visibility)
 	return _settings_column
+
+
+func _sync_settings_column_visibility() -> void:
+	_settings_column.visible = _create_strip.visible or _settings.visible
 
 
 func _settings_block() -> Control:
@@ -2046,6 +2080,8 @@ func _on_paint_changed() -> void:
 	custom_minimum_size.x = _paint_workspace_minimum_width() if on else 0.0
 	custom_minimum_size.y = _scaled(SlabPaint.PAINT_HEIGHT if on else PANEL_HEIGHT)
 	if _status != null:
+		# Reserve the same feedback row in UV and Paint so reports do not resize the canvas.
+		_status.visible = on or not _status.text.is_empty()
 		_status.autowrap_mode = TextServer.AUTOWRAP_OFF if on else TextServer.AUTOWRAP_WORD_SMART
 		_status.clip_text = on
 		_status.max_lines_visible = 1 if on else -1

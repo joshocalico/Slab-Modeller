@@ -4,7 +4,7 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **UV** for materials and UVs.
+The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes show their primary actions together in one wrapping toolbar. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **UV** for materials and UVs.
 
 Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
@@ -16,7 +16,9 @@ Commands have icons and labels. A command disables when the selection does not m
 
 The header keeps the current selection visible, for example `1 face · Box`. Long names shorten with an ellipsis; the tooltip contains the full summary. The status line below shows tool instructions, results, and recovery messages without replacing the header selection.
 
-On a wide panel, settings sit beside the command groups. On a narrow panel, settings stack below them.
+Use **Shortcuts** in the header to choose a keyboard profile; the active profile is checked.
+
+On a wide panel, settings sit beside the commands. On a narrow panel, settings stack below them. Empty settings areas stay hidden.
 
 ## Settings
 
