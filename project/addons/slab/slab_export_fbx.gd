@@ -11,7 +11,7 @@ static func write(path: String, export_mesh: SlabExportMesh) -> int:
 	if file == null:
 		return FileAccess.get_open_error()
 
-	var model_name: String = path.get_file().get_basename()
+	var model_name: String = SlabExportMesh._sanitize_name(path.get_file().get_basename())
 	var geometry_id: int = 1000000
 	var model_id: int = 2000000
 	var material_ids: PackedInt64Array = PackedInt64Array()
@@ -52,7 +52,7 @@ static func _write_global_settings(file: FileAccess) -> void:
 	file.store_line("\t\tP: \"FrontAxisSign\", \"int\", \"Integer\", \"\", 1")
 	file.store_line("\t\tP: \"CoordAxis\", \"int\", \"Integer\", \"\", 0")
 	file.store_line("\t\tP: \"CoordAxisSign\", \"int\", \"Integer\", \"\", 1")
-	file.store_line("\t\tP: \"UnitScaleFactor\", \"double\", \"Number\", \"\", 1")
+	file.store_line("\t\tP: \"UnitScaleFactor\", \"double\", \"Number\", \"\", 100")
 	file.store_line("\t}")
 	file.store_line("}")
 	file.store_line("")
@@ -201,7 +201,7 @@ static func _write_layer_element_uv(file: FileAccess, export_mesh: SlabExportMes
 	file.store_string("\t\t\tUV: *%d {\n\t\t\t\ta: " % [export_mesh.uvs.size() * 2])
 	var uv_parts: PackedStringArray = PackedStringArray()
 	for uv in export_mesh.uvs:
-		uv_parts.append("%.6f,%.6f" % [uv.x, uv.y])
+		uv_parts.append("%.6f,%.6f" % [uv.x, 1.0 - uv.y])
 	file.store_line(",".join(uv_parts))
 	file.store_line("\t\t\t}")
 

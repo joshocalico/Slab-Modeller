@@ -36,6 +36,7 @@ func bake(solids: Array[Node3D]) -> int:
 
 	var global_material_index: int = 0
 	var material_to_index: Dictionary = {}
+	var used_names: Dictionary = {}
 
 	for solid in valid:
 		var mesh: ArrayMesh = _get_mesh(solid)
@@ -43,7 +44,8 @@ func bake(solids: Array[Node3D]) -> int:
 			continue
 		var materials: Array = _get_materials(solid)
 		var solid_xform: Transform3D = solid.global_transform if solid.is_inside_tree() else solid.transform
-		var base_vertex: int = positions.size()
+		# Export formats use counterclockwise fronts. A reflection reverses them again.
+		var reverse_winding: bool = solid_xform.basis.determinant() > 0.0
 
 		for surface_idx in mesh.get_surface_count():
 			var arrays: Array = mesh.surface_get_arrays(surface_idx)
@@ -56,11 +58,17 @@ func bake(solids: Array[Node3D]) -> int:
 			var mat: Material = materials[surface_idx] if surface_idx < materials.size() else null
 			var mat_name: String = _material_name(mat, surface_idx)
 			var mat_global_idx: int
-			if material_to_index.has(mat_name):
-				mat_global_idx = material_to_index[mat_name]
+			if material_to_index.has(mat):
+				mat_global_idx = material_to_index[mat]
 			else:
 				mat_global_idx = global_material_index
-				material_to_index[mat_name] = mat_global_idx
+				material_to_index[mat] = mat_global_idx
+				var base_name: String = mat_name
+				var suffix := 2
+				while used_names.has(mat_name):
+					mat_name = "%s_%d" % [base_name, suffix]
+					suffix += 1
+				used_names[mat_name] = true
 				material_names.append(mat_name)
 				global_material_index += 1
 			var surf_base: int = positions.size()
@@ -82,14 +90,14 @@ func bake(solids: Array[Node3D]) -> int:
 			if surf_indices.is_empty():
 				for i in range(0, surf_verts.size(), 3):
 					indices.append(surf_base + i)
-					indices.append(surf_base + i + 1)
-					indices.append(surf_base + i + 2)
+					indices.append(surf_base + i + (2 if reverse_winding else 1))
+					indices.append(surf_base + i + (1 if reverse_winding else 2))
 					material_per_triangle.append(mat_global_idx)
 			else:
 				for i in range(0, surf_indices.size(), 3):
 					indices.append(surf_base + surf_indices[i])
-					indices.append(surf_base + surf_indices[i + 1])
-					indices.append(surf_base + surf_indices[i + 2])
+					indices.append(surf_base + surf_indices[i + (2 if reverse_winding else 1)])
+					indices.append(surf_base + surf_indices[i + (1 if reverse_winding else 2)])
 					material_per_triangle.append(mat_global_idx)
 
 		solid_count += 1
@@ -109,9 +117,12 @@ func _get_mesh(node: Node3D) -> ArrayMesh:
 
 func _get_materials(node: Node3D) -> Array:
 	if SlabSelection.is_external_mesh(node):
-		return node.get_materials() if node.has_method("get_materials") else []
+		var materials: Array = []
+		for surface in node.mesh.get_surface_count():
+			materials.append(node.get_active_material(surface))
+		return materials
 	if SlabSelection.is_solid(node):
-		return node.get("materials") if "materials" in node else []
+		return node.call("get_mesh_materials")
 	return []
 
 
@@ -173,7 +184,7 @@ func _material_name(mat: Material, slot: int) -> String:
 static func _sanitize_name(name: String) -> String:
 	var out := ""
 	for c in name:
-		if c.is_valid_identifier() or c == "_":
+		if c.is_valid_identifier() or c.is_valid_int() or c == "_":
 			out += c
 		elif c == " " or c == "-":
 			out += "_"
