@@ -41,7 +41,7 @@ Turn on **Show UV** to see the selected faces' outlines over the image. If the h
 
 **Texture** names the image you are painting. A mark appears at every repeat of that image on the model. A 3D stroke stays on the clicked face's material and skips other materials and backfaces. Faces sharing the same paintable material share its artwork, including faces on other solids.
 
-To clear the transform widget from the painting view, open the view-name menu at the upper left of Godot's 3D viewport, then turn off **View Transform Gizmo**. The menu may be named **Perspective** or **Front Orthogonal**, depending on the camera. This keeps the selected solid and Inspector available. Turn the option on again when you want the transform handles.
+UV and Paint temporarily lock the target's transform gizmo while keeping it selected. Leaving the workspace restores its previous lock state. Saving while the workspace is open preserves that original state.
 
 **Save Paint** writes the current channel's composite image, then flattens its visible layers and reports the image path. If writing the image fails, the editable layers stay intact. Albedo uses `res://slab_paint/<solid>_m<slot>.png`. Roughness and Emission add `_roughness` and `_emission` before `.png`. Save each channel you paint, then save the scene to keep the material, editable layers, and mapping changes.
 
