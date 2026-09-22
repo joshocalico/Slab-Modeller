@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Reject duplicate Godot resource identifiers in the imported project tree."""
+import argparse
+import os
+from pathlib import Path
+import re
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("project", nargs="?", type=Path,
+                    default=Path(__file__).resolve().parent.parent / "project")
+root = parser.parse_args().project.resolve()
+if not root.is_dir():
+    parser.error(f"Project directory does not exist: {root}")
+
+owners = {}
+for directory, children, files in os.walk(root):
+    if ".gdignore" in files:
+        children.clear()
+        continue
+    children[:] = sorted(name for name in children if name not in (".godot", ".git"))
+    for name in sorted(files):
+        path = Path(directory) / name
+        if path.suffix not in (".uid", ".import", ".tscn", ".tres"):
+            continue
+        contents = path.read_text(encoding="utf-8")
+        if path.suffix == ".uid":
+            match = re.fullmatch(r"(uid://[a-z0-9]+)\s*", contents)
+        elif path.suffix == ".import":
+            match = re.search(r'^uid="(uid://[a-z0-9]+)"', contents, re.MULTILINE)
+        else:
+            header = contents.splitlines()[0] if contents else ""
+            match = re.search(r'\buid="(uid://[a-z0-9]+)"', header)
+        if match:
+            owners.setdefault(match[1], []).append(path.relative_to(root))
+
+duplicates = {uid: paths for uid, paths in owners.items() if len(paths) > 1}
+for uid, paths in sorted(duplicates.items()):
+    print(f"Duplicate {uid}:")
+    for path in paths:
+        print(f"  {path}")
+if duplicates:
+    raise SystemExit(1)
+print(f"PASS: {len(owners)} unique resource identifiers.")
