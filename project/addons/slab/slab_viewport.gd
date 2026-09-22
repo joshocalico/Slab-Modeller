@@ -93,7 +93,7 @@ func _init(host: RefCounted) -> void:
 func bind_actions(actions: RefCounted) -> void:
 	_actions = actions
 	_create = SlabCreatePlacement.new(_host, _actions)
-	_create.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_create.reported.connect(_report_tool_message)
 	_actions.create_placement_requested.connect(_begin_create)
 	_actions.create_settings_changed.connect(_create_settings_changed)
 	_actions.object_order_changed.connect(_host.replace_selection)
@@ -102,30 +102,14 @@ func bind_actions(actions: RefCounted) -> void:
 	_actions.operation_segments_changed.connect(_change_operation_segments)
 	_actions.operation_apply_requested.connect(_confirm_operation)
 	_actions.operation_cancel_requested.connect(_cancel_operation)
-	_selection.changed.connect(_cancel_operation)
-	_actions.plane_requested.connect(func() -> void:
-		_cancel_create()
-		if _loop != null and _loop.active:
-			_loop.cancel()
-		_cancel_array()
-		_cancel_snap_align()
-		_cancel_operation()
-		_exit_paint()
-	)
-	_actions.loop_requested.connect(func() -> void:
-		_cancel_create()
-		if _plane != null and _plane.active:
-			_plane.cancel()
-		_cancel_array()
-		_cancel_snap_align()
-		_cancel_operation()
-		_exit_paint()
-	)
+	_selection.changed.connect(_on_selection_changed)
+	_actions.plane_requested.connect(_on_plane_requested)
+	_actions.loop_requested.connect(_on_loop_requested)
 	_plane = SlabPlaneCut.new(_selection, _actions, _host)
 	_loop = SlabLoopCut.new(_selection, _actions, _host)
 	_array = SlabArray.new(_host)
 	_array.preview_changed.connect(_on_array_preview)
-	_array.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_array.reported.connect(_report_tool_message)
 	_actions.array_requested.connect(_begin_array)
 	_actions.array_settings_changed.connect(_refresh_array)
 	_actions.array_apply_requested.connect(_confirm_array)
@@ -133,7 +117,7 @@ func bind_actions(actions: RefCounted) -> void:
 	_selection.changed.connect(_array_selection_changed)
 	_snap_align = SlabSnapAlign.new(_selection, _host)
 	_snap_align.preview_changed.connect(_on_snap_align_preview)
-	_snap_align.reported.connect(func(message: String) -> void: _actions.reported.emit(message))
+	_snap_align.reported.connect(_report_tool_message)
 	_actions.snap_vertex_requested.connect(_begin_vertex_snap)
 	_actions.align_face_requested.connect(_begin_face_align)
 	_actions.snap_align_settings_changed.connect(_refresh_snap_align)
@@ -144,17 +128,47 @@ func bind_actions(actions: RefCounted) -> void:
 func bind_paint(paint: RefCounted) -> void:
 	_paint = paint
 	if _paint != null and _paint.has_signal("changed"):
-		_paint.changed.connect(func() -> void:
-			if _paint.active:
-				_cancel_create()
-				_cancel_array()
-				_cancel_snap_align()
-				_cancel_operation()
-				if _plane != null and _plane.active:
-					_plane.cancel()
-				if _loop != null and _loop.active:
-					_loop.cancel()
-		)
+		_paint.changed.connect(_on_paint_changed)
+
+
+func _report_tool_message(message: String) -> void:
+	_actions.reported.emit(message)
+
+
+func _on_selection_changed() -> void:
+	_cancel_operation_with_reason("exit")
+
+
+func _on_plane_requested() -> void:
+	_cancel_create()
+	if _loop != null and _loop.active:
+		_loop.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation_with_reason("superseded")
+	_exit_paint()
+
+
+func _on_loop_requested() -> void:
+	_cancel_create()
+	if _plane != null and _plane.active:
+		_plane.cancel()
+	_cancel_array()
+	_cancel_snap_align()
+	_cancel_operation_with_reason("superseded")
+	_exit_paint()
+
+
+func _on_paint_changed() -> void:
+	if _paint.active:
+		_cancel_create()
+		_cancel_array()
+		_cancel_snap_align()
+		_cancel_operation_with_reason("exit")
+		if _plane != null and _plane.active:
+			_plane.cancel()
+		if _loop != null and _loop.active:
+			_loop.cancel()
 
 
 static func after_gui_input(verdict: int) -> int:
@@ -220,7 +234,7 @@ func adopt_host_selection() -> void:
 		_loop.cancel()
 	_cancel_array()
 	_cancel_snap_align()
-	_cancel_operation()
+	_cancel_operation_with_reason("exit")
 	if _grab.dragging():
 		_cancel()
 	_selection.set_editor_objects(_host.selected_nodes())
@@ -234,7 +248,7 @@ func _on_mode_requested() -> void:
 		_loop.cancel()
 	_cancel_array()
 	_cancel_snap_align()
-	_cancel_operation()
+	_cancel_operation_with_reason("exit")
 	if _grab.active():
 		_cancel()
 
@@ -244,7 +258,7 @@ func _begin_create(row: Dictionary, plan: Dictionary) -> void:
 	if _loop != null and _loop.active: _loop.cancel()
 	_cancel_array()
 	_cancel_snap_align()
-	_cancel_operation()
+	_cancel_operation_with_reason("superseded")
 	_exit_paint()
 	_create.begin(row, plan)
 
@@ -300,7 +314,7 @@ func _begin_array() -> void:
 	if _loop != null and _loop.active:
 		_loop.cancel()
 	_cancel_snap_align()
-	_cancel_operation()
+	_cancel_operation_with_reason("superseded")
 	_exit_paint()
 	_sync_array_settings()
 	_actions.array_active = _array.begin(_selection.solid)
@@ -375,7 +389,7 @@ func _exit_paint() -> void:
 
 func _begin_vertex_snap() -> void:
 	_cancel_create()
-	_cancel_operation()
+	_cancel_operation_with_reason("superseded")
 	_cancel_other_modals_for_snap()
 	_actions.snap_align_active = _snap_align.begin_vertex_snap()
 	_actions.snap_align_mode = SlabActions.SNAP_VERTEX if _actions.snap_align_active else SlabActions.SNAP_NONE
@@ -384,7 +398,7 @@ func _begin_vertex_snap() -> void:
 
 func _begin_face_align() -> void:
 	_cancel_create()
-	_cancel_operation()
+	_cancel_operation_with_reason("superseded")
 	_cancel_other_modals_for_snap()
 	_snap_align.oppose_face_normals = _actions.align_oppose_normals
 	_actions.snap_align_active = _snap_align.begin_face_align()
@@ -557,6 +571,12 @@ func _on_key(event: InputEventKey) -> int:
 	if event.ctrl_pressed or event.meta_pressed:
 		return Verdict.PASS
 	if event.keycode == KEY_ESCAPE:
+		if _selection.face_isolated:
+			_selection.exit_face_isolation()
+			return Verdict.STOP
+		if _selection.isolated:
+			_selection.exit_isolation()
+			return Verdict.STOP
 		_selection.mode = SlabSelection.Mode.OBJECT
 		return Verdict.STOP
 	var mode: int = SlabModeStrip.mode_for_keycode(event.keycode)
@@ -800,22 +820,56 @@ static func screen_of(event: InputEventMouseButton) -> Vector2:
 
 func _begin_operation(kind: int) -> void:
 	_cancel_create()
-	_cancel_operation()
-	if _selection.solid == null or _selection.ids.is_empty() or _selection.mode != (SlabSelection.Mode.EDGE if kind == 2 else SlabSelection.Mode.FACE):
-		_actions.reported.emit("Bevel needs one or more selected edges." if kind == 2 else "%s needs one or more selected faces." % ["Extrude" if kind == 0 else "Inset"])
+	_cancel_operation_with_reason("superseded")
+	var is_bevel: bool = kind == 2
+	var mode_ok: bool = false
+	if is_bevel:
+		mode_ok = _selection.mode == SlabSelection.Mode.EDGE or _selection.mode == SlabSelection.Mode.FACE
+	else:
+		mode_ok = _selection.mode == SlabSelection.Mode.FACE
+	if _selection.solid == null or _selection.ids.is_empty() or not mode_ok:
+		_actions.reported.emit("Bevel needs one or more selected edges or faces." if is_bevel else "%s needs one or more selected faces." % ["Extrude" if kind == 0 else "Inset"])
 		return
 	_cancel_array()
 	_cancel_snap_align()
 	_exit_paint()
 	if _plane != null and _plane.active: _plane.cancel()
 	if _loop != null and _loop.active: _loop.cancel()
-	if _operation.begin(kind, _selection.solid, _selection.ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
-		_publish_operation()
+
+	var op_ids := PackedInt64Array(_selection.ids)
+	var source_mode: int = -1
+	var source_face_ids := PackedInt64Array()
+
+	if is_bevel and _selection.mode == SlabSelection.Mode.FACE:
+		var boundary := _compute_face_boundary(_selection.solid, _selection.ids)
+		if boundary.is_empty():
+			_actions.reported.emit("The selected faces have no boundary edges to bevel.")
+			return
+		source_mode = SlabSelection.Mode.FACE
+		source_face_ids = PackedInt64Array(_selection.ids)
+		op_ids = boundary
+
+	if _operation.begin(kind, _selection.solid, op_ids, _actions.operation_amount_for(kind), _actions.bevel_segments):
+		_operation.source_mode = source_mode
+		_operation.source_face_ids = source_face_ids
+		_publish_operation(true)
 	else:
-		_actions.reported.emit("Bevel could not place a handle on these edges. Choose live edges joined to faces." if kind == 2 else "%s needs one face or a connected face region with a shared direction." % ["Extrude" if kind == 0 else "Inset"])
+		_actions.reported.emit("Bevel could not place a handle on these edges. Choose live edges joined to faces." if is_bevel else "%s needs one face or a connected face region with a shared direction." % ["Extrude" if kind == 0 else "Inset"])
 
 
-func _publish_operation() -> void:
+func _compute_face_boundary(solid: Node3D, face_ids: PackedInt64Array) -> PackedInt64Array:
+	var boundary := PackedInt64Array()
+	for edge in PackedInt64Array(solid.call("get_edges")):
+		var selected_incidents := 0
+		for face in PackedInt64Array(solid.call("edge_faces", edge)):
+			if face_ids.has(int(face)):
+				selected_incidents += 1
+		if selected_incidents == 1:
+			boundary.append(edge)
+	return boundary
+
+
+func _publish_operation(started: bool = false) -> void:
 	if not _operation.active: return
 	var shape: Dictionary = _operation.geometry()
 	shape["solid"] = _operation.solid
@@ -825,6 +879,12 @@ func _publish_operation() -> void:
 	_actions.operation_active = true
 	_actions.operation_amount = _operation.amount
 	_actions.remember_operation_amount(_operation.kind, _operation.amount)
+	var apply_enabled: bool = _operation.error == OK
+	_actions._op_session_apply_enabled = apply_enabled
+	if started:
+		_actions.notify_op_session_start(_operation.kind)
+	else:
+		_actions.notify_op_session_update(apply_enabled)
 	_actions.operation_state_changed.emit()
 	_selection.hover_changed.emit()
 	var action_id := "extrude_faces" if _operation.kind == 0 else ("bevel_edges" if _operation.kind == 2 else "")
@@ -873,11 +933,17 @@ func _handle_operation(camera: Camera3D, event: InputEvent) -> int:
 
 
 func _cancel_operation() -> void:
-	var was_active: bool = _operation.active
+	_cancel_operation_with_reason("cancel")
+
+
+func _cancel_operation_with_reason(reason: String) -> void:
+	var was_active: bool = _operation.active or (_actions != null and _actions.op_session_active())
 	_operation.cancel()
 	_operation_dragging = false
 	_selection.operation_preview = {}
 	if _actions != null:
+		if was_active:
+			_actions.notify_op_session_end(reason)
 		_actions.operation_active = false
 		_actions.operation_state_changed.emit()
 		if was_active: _actions.status_reset_requested.emit()
@@ -886,26 +952,45 @@ func _cancel_operation() -> void:
 
 func _confirm_operation() -> void:
 	var before_ids: PackedInt64Array = _selection.ids.duplicate()
+	var before_mode: int = _selection.mode
 	var operation_name: String = ["Extrude", "Inset", "Bevel"][_operation.kind]
+	var source_mode: int = _operation.source_mode
+	var source_face_ids := PackedInt64Array(_operation.source_face_ids)
 	var result: Dictionary = _operation.confirm()
 	if result.is_empty():
 		if not _operation.active:
-			_cancel_operation()
+			_cancel_operation_with_reason("exit")
 			_actions.reported.emit("Preview cancelled because the solid changed. Start the tool again.")
 		return
-	_cancel_operation()
+	_cancel_operation_with_reason("apply")
 	var after_ids: PackedInt64Array = result["result_ids"]
 	if after_ids.is_empty(): after_ids = before_ids
 	var undo: Object = _host.undo()
-	if undo != null:
-		undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
-		undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
-		undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
-		undo.commit_action(false)
-	_selection.set_ids(after_ids)
+
+	if source_mode == SlabSelection.Mode.FACE and not source_face_ids.is_empty():
+		if undo != null:
+			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
+			undo.add_do_method(self, "_restore_face_bevel_operation", result["solid"], result["after"], source_face_ids)
+			undo.add_undo_method(self, "_restore_face_bevel_operation", result["solid"], result["before"], source_face_ids)
+			undo.commit_action(false)
+		_selection.mode = SlabSelection.Mode.FACE
+		_selection.set_ids(source_face_ids)
+	else:
+		if undo != null:
+			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
+			undo.add_do_method(self, "_restore_operation", result["solid"], result["after"], after_ids)
+			undo.add_undo_method(self, "_restore_operation", result["solid"], result["before"], before_ids)
+			undo.commit_action(false)
+		_selection.set_ids(after_ids)
 	_actions.reported.emit(operation_name + " applied. Undo restores the previous solid.")
 
 
 func _restore_operation(solid: Node3D, data: PackedByteArray, ids: PackedInt64Array) -> void:
 	solid.set("data", data)
 	_selection.set_ids(ids)
+
+
+func _restore_face_bevel_operation(solid: Node3D, data: PackedByteArray, face_ids: PackedInt64Array) -> void:
+	solid.set("data", data)
+	_selection.mode = SlabSelection.Mode.FACE
+	_selection.set_ids(face_ids)

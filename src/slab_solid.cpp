@@ -6,6 +6,7 @@
 #include "kernel/ops/boolean.hpp"
 #include "kernel/ops/bridge.hpp"
 #include "kernel/ops/edit.hpp"
+#include "kernel/ops/import.hpp"
 #include "kernel/ops/inset.hpp"
 #include "kernel/ops/loop.hpp"
 #include "kernel/ops/offset_loop.hpp"
@@ -26,6 +27,7 @@
 
 #include <cstring>
 #include <map>
+#include <unordered_set>
 #include <utility>
 
 using namespace godot;
@@ -67,12 +69,20 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("volume"), &SlabSolid::volume);
 	ClassDB::bind_method(D_METHOD("get_local_aabb"), &SlabSolid::get_local_aabb);
 	ClassDB::bind_method(D_METHOD("build_mesh"), &SlabSolid::build_mesh);
+	ClassDB::bind_method(D_METHOD("get_mesh_materials"), &SlabSolid::get_mesh_materials);
 	ClassDB::bind_method(D_METHOD("set_display_preview", "data"), &SlabSolid::set_display_preview);
 	ClassDB::bind_method(D_METHOD("clear_display_preview"), &SlabSolid::clear_display_preview);
 	ClassDB::bind_method(D_METHOD("has_display_preview"), &SlabSolid::has_display_preview);
+	ClassDB::bind_method(D_METHOD("set_display_face_mask", "faces"), &SlabSolid::set_display_face_mask);
+	ClassDB::bind_method(D_METHOD("clear_display_face_mask"), &SlabSolid::clear_display_face_mask);
+	ClassDB::bind_method(D_METHOD("has_display_face_mask"), &SlabSolid::has_display_face_mask);
+	ClassDB::bind_method(D_METHOD("get_display_face_mask"), &SlabSolid::get_display_face_mask);
+	ClassDB::bind_method(D_METHOD("is_display_face_visible", "face"), &SlabSolid::is_display_face_visible);
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
+	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices", "uvs", "material_slots"), &SlabSolid::import_from_mesh,
+			DEFVAL(PackedVector2Array()), DEFVAL(PackedInt32Array()));
 	ClassDB::bind_method(D_METHOD("make_stair", "size", "steps"), &SlabSolid::make_stair);
 	ClassDB::bind_method(D_METHOD("make_cylinder", "radius", "height", "sides"), &SlabSolid::make_cylinder);
 	ClassDB::bind_method(D_METHOD("make_arch", "span", "depth", "segments", "thickness", "arc"), &SlabSolid::make_arch, DEFVAL(Math_PI));
@@ -88,6 +98,8 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_face_uv", "faces", "scale", "offset", "rotation"), &SlabSolid::set_face_uv);
 	ClassDB::bind_method(D_METHOD("mark_uv_seams", "edges", "marked"), &SlabSolid::mark_uv_seams);
 	ClassDB::bind_method(D_METHOD("unwrap_uv", "faces", "pixels_per_meter", "texture_resolution"), &SlabSolid::unwrap_uv);
+	ClassDB::bind_method(D_METHOD("pack_uv", "faces", "texture_resolution", "source_texture_resolution"),
+			&SlabSolid::pack_uv, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("set_face_material", "faces", "slot"), &SlabSolid::set_face_material);
 
 	ClassDB::bind_method(D_METHOD("bevel_edges", "edges", "amount", "segments"), &SlabSolid::bevel_edges, DEFVAL(1));
@@ -362,6 +374,7 @@ Dictionary SlabSolid::face_uv(int64_t p_face) const {
 	out["rotation"] = attrs.uv_rotation;
 	out["axis"] = int(attrs.uv_axis);
 	out["unwrapped"] = attrs.uv_unwrapped;
+	out["texture_resolution"] = int(attrs.uv_texture_resolution);
 	out["u"] = attrs.uv_u;
 	out["v"] = attrs.uv_v;
 	out["origin"] = attrs.uv_origin;
@@ -406,6 +419,21 @@ Ref<ArrayMesh> SlabSolid::build_mesh() const {
 	return empty;
 }
 
+TypedArray<Material> SlabSolid::get_mesh_materials() const {
+	// Match build_mesh() surface order, including when a preview or isolation
+	// mask changes the surfaces currently shown by the editor.
+	TypedArray<Material> result;
+	for (uint32_t slot : committed_surface_slots) {
+		Ref<Material> material;
+		if (slot < uint32_t(materials.size())) {
+			material = materials[slot];
+		}
+		if (material.is_null()) material = prototype_material;
+		result.append(material);
+	}
+	return result;
+}
+
 bool SlabSolid::set_display_preview(const PackedByteArray &p_data) {
 	std::vector<uint8_t> bytes(size_t(p_data.size()));
 	if (!bytes.empty()) std::memcpy(bytes.data(), p_data.ptr(), bytes.size());
@@ -423,11 +451,53 @@ void SlabSolid::clear_display_preview() {
 	if (!display_preview_active) return;
 	display_preview_active = false;
 	_ensure_children();
-	_assign_display(committed_mesh, committed_surface_slots);
+	_assign_committed_display();
 }
 
 bool SlabSolid::has_display_preview() const {
 	return display_preview_active;
+}
+
+bool SlabSolid::set_display_face_mask(const PackedInt64Array &p_faces) {
+	display_face_mask.clear();
+	for (int i = 0; i < p_faces.size(); i++) {
+		display_face_mask.insert(p_faces[i]);
+	}
+	display_face_mask_active = !display_face_mask.empty();
+	if (!display_preview_active) {
+		_assign_committed_display();
+	}
+	return display_face_mask_active;
+}
+
+void SlabSolid::clear_display_face_mask() {
+	if (!display_face_mask_active && display_face_mask.empty()) {
+		return;
+	}
+	display_face_mask_active = false;
+	display_face_mask.clear();
+	if (!display_preview_active) {
+		_assign_committed_display();
+	}
+}
+
+bool SlabSolid::has_display_face_mask() const {
+	return display_face_mask_active;
+}
+
+PackedInt64Array SlabSolid::get_display_face_mask() const {
+	PackedInt64Array out;
+	out.resize(int64_t(display_face_mask.size()));
+	int64_t i = 0;
+	for (const int64_t id : display_face_mask) {
+		out.set(i, id);
+		i++;
+	}
+	return out;
+}
+
+bool SlabSolid::is_display_face_visible(int64_t p_face) const {
+	return !display_face_mask_active || display_face_mask.count(p_face) > 0;
 }
 
 int SlabSolid::make_box(const Vector3 &p_size) {
@@ -437,6 +507,71 @@ int SlabSolid::make_box(const Vector3 &p_size) {
 		return _reject(edit.scratch(), fault);
 	}
 	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
+		const PackedVector2Array &p_uvs, const PackedInt32Array &p_material_slots) {
+	Dictionary out;
+	std::vector<slab::IVec3> verts;
+	verts.reserve(size_t(p_vertices.size()));
+	for (int i = 0; i < p_vertices.size(); i++) {
+		slab::IVec3 q;
+		if (!slab::quantize(p_vertices[i], q)) {
+			out["error"] = int(slab::MeshError::COORD_OUT_OF_RANGE);
+			out["refuse_reason"] = "non-manifold";
+			return out;
+		}
+		verts.push_back(q);
+	}
+	std::vector<int32_t> indices;
+	indices.reserve(size_t(p_indices.size()));
+	for (int i = 0; i < p_indices.size(); i++) {
+		indices.push_back(p_indices[i]);
+	}
+
+	const int64_t index_count = p_indices.is_empty() ? p_vertices.size() : p_indices.size();
+	if (index_count % 3 != 0 || (!p_uvs.is_empty() && p_uvs.size() != p_vertices.size()) ||
+			(!p_material_slots.is_empty() && p_material_slots.size() != index_count / 3)) {
+		out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+		out["refuse_reason"] = "malformed attributes";
+		return out;
+	}
+	std::vector<slab::ops::ImportTriangleAttrs> attrs;
+	if (!p_uvs.is_empty() || !p_material_slots.is_empty()) {
+		attrs.resize(size_t(index_count / 3));
+		for (int64_t t = 0; t < index_count / 3; t++) {
+			if (!p_material_slots.is_empty() && p_material_slots[t] < 0) {
+				out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+				out["refuse_reason"] = "malformed material slots";
+				return out;
+			}
+			auto &triangle = attrs[size_t(t)];
+			triangle.material_slot = p_material_slots.is_empty() ? 0 : uint32_t(p_material_slots[t]);
+			triangle.has_uvs = !p_uvs.is_empty();
+			for (int k = 0; k < 3 && triangle.has_uvs; k++) {
+				const int64_t index = p_indices.is_empty() ? t * 3 + k : p_indices[t * 3 + k];
+				if (index < 0 || index >= p_uvs.size()) {
+					out["error"] = int(slab::MeshError::DEGENERATE_FACE);
+					out["refuse_reason"] = "malformed indices";
+					return out;
+				}
+				triangle.uvs[size_t(k)] = p_uvs[index];
+			}
+		}
+	}
+	const slab::ops::ImportResult imported = slab::ops::import_from_triangles(verts, indices, attrs);
+	if (!imported.fault.ok()) {
+		out["error"] = int(imported.fault.code);
+		out["refuse_reason"] = String(imported.refuse_reason.c_str());
+		return out;
+	}
+
+	live_mesh = imported.mesh;
+	_rebuild();
+	emit_signal("topology_changed");
+	out["error"] = 0;
+	out["refuse_reason"] = "";
+	return out;
 }
 
 int SlabSolid::extrude_faces(const PackedInt64Array &p_faces, float p_distance) {
@@ -525,6 +660,33 @@ Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_
 	if (error == 0) {
 		out["islands"] = result.island_count;
 		out["auto_seams"] = auto_seams;
+		out["faces"] = p_faces;
+		out["atlas_overflow"] = false;
+	}
+	return out;
+}
+
+Dictionary SlabSolid::pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution,
+		int p_source_texture_resolution) {
+	Dictionary out;
+	std::vector<slab::FaceId> ids;
+	if (!_face_ids(p_faces, ids)) {
+		out["error"] = int(slab::MeshError::STALE_HANDLE);
+		return out;
+	}
+	slab::MeshEdit edit(live_mesh);
+	const slab::ops::UvPackResult result = slab::ops::pack_uv(edit, ids, p_texture_resolution,
+			p_source_texture_resolution);
+	if (!result.ok()) {
+		out["error"] = int(result.fault.code);
+		out["atlas_overflow"] = result.atlas_overflow;
+		if (result.atlas_overflow) out["suggested_texture_resolution"] = result.suggested_texture_resolution;
+		return out;
+	}
+	const int error = _commit(std::move(edit));
+	out["error"] = error;
+	if (error == 0) {
+		out["islands"] = result.island_count;
 		out["faces"] = p_faces;
 		out["atlas_overflow"] = false;
 	}
@@ -1183,7 +1345,8 @@ void SlabSolid::_rebuild() {
 }
 
 Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
-		PackedVector3Array *r_verts, PackedInt32Array *r_indices) const {
+		PackedVector3Array *r_verts, PackedInt32Array *r_indices,
+		const std::unordered_set<int64_t> *p_face_mask) const {
 	slab::EmitOut emitted;
 	slab::emit_arrays(p_mesh, emitted);
 
@@ -1222,6 +1385,9 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 		std::map<uint32_t, Bucket> buckets;
 		std::vector<uint32_t> order;
 		for (size_t t = 0; t < emitted.provenance.size(); t++) {
+			if (p_face_mask != nullptr && p_face_mask->count(slab::pack(emitted.provenance[t])) == 0) {
+				continue;
+			}
 			const uint32_t slot = t < emitted.slots.size() ? emitted.slots[t] : 0;
 			if (buckets.find(slot) == buckets.end()) {
 				order.push_back(slot);
@@ -1265,7 +1431,11 @@ void SlabSolid::_rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision)
 		committed_mesh = array_mesh;
 		committed_surface_slots = surface_slots;
 	}
-	_assign_display(array_mesh, surface_slots);
+	if (display_preview_active || !display_face_mask_active) {
+		_assign_display(array_mesh, surface_slots);
+	} else {
+		_assign_committed_display();
+	}
 	if (!p_update_collision) return;
 
 	if (collision_enabled && indices.size() >= 3) {
@@ -1283,6 +1453,17 @@ void SlabSolid::_rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision)
 	}
 	collider->set_disabled(!collision_enabled);
 	body->set_visible(collision_enabled);
+}
+
+void SlabSolid::_assign_committed_display() {
+	_ensure_children();
+	if (!display_face_mask_active) {
+		_assign_display(committed_mesh, committed_surface_slots);
+		return;
+	}
+	std::vector<uint32_t> slots;
+	const Ref<ArrayMesh> masked = _build_mesh_from(live_mesh, slots, nullptr, nullptr, &display_face_mask);
+	_assign_display(masked, slots);
 }
 
 void SlabSolid::_assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots) {

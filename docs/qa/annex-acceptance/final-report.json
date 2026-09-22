@@ -1,0 +1,457 @@
+{
+  "scene": "res://demo/signal_relay_annex/signal_relay_annex.tscn",
+  "scene_sha256": "f287a2a1a8a9a8bdc83c4a9bf45ff226e7ce5430ea40078739da0470abc1b0b7",
+  "godot_version": "4.7.2.stable.official.ed1daf0bf",
+  "date": "2026-09-23",
+  "solid_count": 38,
+  "valid_editable_solids": 38,
+  "enabled_colliding_solids": 38,
+  "editor_metadata": [],
+  "geometry": {
+    "stair_top_y": 2.14453125,
+    "loft_top_y": 2.14980459213257,
+    "landing_lip_m": 0.005273342132570136,
+    "stair_loft_z_overlap_m": 0.020585834980010986,
+    "loft_headroom_m": 2.35019540786743,
+    "east_wall_clearance_m": 0.29980516433716,
+    "rack_ceiling_clearance_m": 0.3901953697204599,
+    "note": "AABB landing overlap is necessary but not sufficient; inspect highest tread corners in scene dump and rendered walk evidence.",
+    "highest_tread_landing_overlap_m": 0.01374989748001094
+  },
+  "palette_coverage": [
+    {
+      "node": "BayFloor",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "375b7a",
+      "floor": 0.9,
+      "footprint_texels": 173056,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "WallN",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "WallE",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "WallW",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "14 zero-area UV triangles excluded",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "WallS_L",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "WallS_R",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "DoorLintel",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "DoorJambL",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "110f0c",
+      "floor": 0.8,
+      "footprint_texels": 63962,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "DoorJambR",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "110f0c",
+      "floor": 0.8,
+      "footprint_texels": 708819,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "Ceiling",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "282623",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "BayPier",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "BayHalfWall",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "c68437",
+      "floor": 0.85,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "LoftDeck",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "b7602d",
+      "floor": 0.9,
+      "footprint_texels": 1048576,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "RelayRack",
+      "surface": 0,
+      "tint": "ffffffff",
+      "target_hex": "0c0c0f",
+      "floor": 0.9,
+      "footprint_texels": 57785,
+      "note": "",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31
+    },
+    {
+      "node": "RelayRack",
+      "surface": 1,
+      "tint": "ffffffff",
+      "target_hex": "f28c14",
+      "floor": 0.95,
+      "footprint_texels": 935,
+      "note": "1 zero-area UV triangles excluded",
+      "pixel_paint_coverage": 1.0,
+      "passes": true,
+      "palette_max_channel_tolerance": 31,
+      "emission_image_size": [
+        256,
+        256
+      ],
+      "emission_nonblack_pixels_whole_image": 69,
+      "emission_bbox_pixels": [
+        20,
+        37,
+        28,
+        45
+      ],
+      "emission_extent_pixels": [
+        9,
+        9
+      ],
+      "emission_operator": 1,
+      "emission_energy": 3.20000004768372,
+      "emission_lit_pixels_in_uv_footprint": 69,
+      "emission_note": "whole-image blob size only; not substituted for UV coverage"
+    }
+  ],
+  "unwrap_counts": {
+    "ExteriorPad": [
+      0,
+      6
+    ],
+    "Stoop": [
+      0,
+      6
+    ],
+    "BayFloor": [
+      6,
+      6
+    ],
+    "WallN": [
+      0,
+      6
+    ],
+    "WallE": [
+      0,
+      6
+    ],
+    "WallW": [
+      0,
+      12
+    ],
+    "WallS_L": [
+      0,
+      6
+    ],
+    "WallS_R": [
+      0,
+      6
+    ],
+    "DoorLintel": [
+      0,
+      6
+    ],
+    "DoorJambL": [
+      6,
+      6
+    ],
+    "DoorJambR": [
+      0,
+      6
+    ],
+    "DoorSill": [
+      0,
+      6
+    ],
+    "Ceiling": [
+      0,
+      6
+    ],
+    "BayPier": [
+      0,
+      6
+    ],
+    "BayHalfWall": [
+      0,
+      6
+    ],
+    "LoftDeck": [
+      0,
+      6
+    ],
+    "LoftSupportE": [
+      0,
+      6
+    ],
+    "LoftSupportW": [
+      0,
+      6
+    ],
+    "LoftBeam": [
+      0,
+      6
+    ],
+    "LoftRail": [
+      0,
+      6
+    ],
+    "LoftRailPost1": [
+      0,
+      6
+    ],
+    "LoftRailPost2": [
+      0,
+      6
+    ],
+    "LoftRailPost3": [
+      0,
+      6
+    ],
+    "LoftRailPost4": [
+      0,
+      6
+    ],
+    "LoftRailCap": [
+      0,
+      6
+    ],
+    "AnnexStair": [
+      0,
+      24
+    ],
+    "StairRail": [
+      0,
+      6
+    ],
+    "StairRailPost": [
+      0,
+      6
+    ],
+    "RackPlinth": [
+      0,
+      6
+    ],
+    "RelayRack": [
+      21,
+      21
+    ],
+    "RackNicheL": [
+      0,
+      6
+    ],
+    "RackNicheR": [
+      0,
+      6
+    ],
+    "Crate": [
+      0,
+      6
+    ],
+    "CableRun": [
+      0,
+      6
+    ],
+    "CableDrop": [
+      0,
+      6
+    ],
+    "OverheadLight": [
+      0,
+      6
+    ],
+    "LoftPlaque": [
+      0,
+      6
+    ],
+    "LoftPlaqueR": [
+      0,
+      6
+    ]
+  },
+  "images": [
+    {
+      "example_assignment": "BayFloor/surface0/albedo",
+      "sha256": "731ea77a23eb12d4b0af012dbf42eacef168c42fe8a0958b7689f0381880767c",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "BayHalfWall/surface0/albedo",
+      "sha256": "86cf96eeef2d1f07faadb972796867ec2e69efc56a2eb0ef830dcf0f9691ade3",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "Ceiling/surface0/albedo",
+      "sha256": "3651d934f79fda066e103d2fc97827e06404ce50cfd8f04d33405a3c57f300f1",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "DoorJambL/surface0/albedo",
+      "sha256": "1e4615ca90696b8ba8844efb452da027abdf6e472183248c612c468e08c7081e",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "LoftDeck/surface0/albedo",
+      "sha256": "741e77a651dc502141185ae13d5ed3b4c8cb300ff07ab3f100040f96a20efc8d",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "RelayRack/surface0/albedo",
+      "sha256": "409ebc4b99e3e37c01fb414d50b8c8f67abb7261c99807cfa3bb48b94385894a",
+      "size": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "example_assignment": "RelayRack/surface1/albedo",
+      "sha256": "9cf3fe6dfa95395f5d9e378ee9f2147f0c898364d577685b90ee09e2c325d591",
+      "size": [
+        256,
+        256
+      ]
+    },
+    {
+      "example_assignment": "RelayRack/surface1/emission",
+      "sha256": "a773f8896e83733832dc6b5977d1309af7490b29fe2a61048024df99cea77686",
+      "size": [
+        256,
+        256
+      ]
+    }
+  ],
+  "pixel_comparison": {
+    "preexisting_albedo_pixels_unchanged": true,
+    "intentional_changes": [
+      "RelayRack/surface1/emission: full flood replaced by isolated white blob",
+      "BayPier/surface0/albedo: previously absent, assigned existing ochre image",
+      "BayHalfWall/surface0/albedo: previously absent, assigned existing ochre image"
+    ]
+  },
+  "limitations": [
+    "Remaining walls, ceiling, loft deck and right jamb use projected UVs, not saved unwrap/pack mappings.",
+    "Coverage counts unique texel centers inside generated UV triangle unions per material surface, not per-face island area or rendered lighting.",
+    "Palette classification allows maximum RGB channel distance31/255 and requires alpha>=230/255; material tint does not contribute.",
+    "Zero-area UV triangles contribute no footprint; WallW has14 and rack bezel has1.",
+    "Collider presence and geometric clearance do not establish player climbability."
+  ]
+}

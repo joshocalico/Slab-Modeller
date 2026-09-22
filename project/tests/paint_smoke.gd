@@ -11,8 +11,10 @@ const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabTestHost := preload("res://tests/slab_test_host.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPanel := preload("res://addons/slab/slab_panel.gd")
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
 
 var _fails := 0
+var _test_recorders: Array[SlabTestUndo] = []
 
 
 func _init() -> void:
@@ -46,6 +48,12 @@ func _boot() -> void:
 	await process_frame
 	await process_frame
 	_check_viewport_paint_does_not_extrude()
+	_check_overlay_layer_and_flatten()
+	_check_channel_switching()
+	_check_multi_layer_management()
+	_check_channel_layer_strokes()
+	_check_channel_viewport_strokes()
+	_expect(_released_viewport_fixture().get_ref() == null, "viewport session releases after its fixture scope ends")
 	_finish()
 
 
@@ -72,7 +80,7 @@ func _check_brush_preview_caption() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([faces[0]]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	var assigned := StandardMaterial3D.new()
@@ -126,7 +134,7 @@ func _check_brush_preview_caption() -> void:
 	solid.call("set_face_material", PackedInt64Array([faces[1]]), 1)
 	selection.set_ids(PackedInt64Array([faces[0], faces[1]]))
 	var mixed_paint := SlabPaint.new()
-	mixed_paint.bind(selection, actions, SlabTestUndo.new())
+	mixed_paint.bind(selection, actions, _new_test_undo())
 	mixed_paint.enter()
 	_expect(mixed_paint.brush_preview_caption().begins_with("Selected: Mixed"),
 		"mixed selection without a brush gives truthful recovery guidance")
@@ -149,7 +157,7 @@ func _check_uv_drag_transaction() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([_top_face(solid)]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -207,7 +215,7 @@ func _check_texture_resolution_coherence() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var panel_undo := SlabTestUndo.new()
+	var panel_undo := _new_test_undo()
 	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, panel_undo)
@@ -247,7 +255,7 @@ func _check_resize_paint_image() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([_top_face(solid)]))
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var actions := SlabActions.new(selection, undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
@@ -350,7 +358,7 @@ func _check_numeric_uv_apply_and_selection_sync() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_objects([solid])
 	selection.set_ids(PackedInt64Array([top]))
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var actions := SlabActions.new(selection, undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
@@ -485,7 +493,7 @@ func _check_unique_paint_undo_save() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -500,35 +508,37 @@ func _check_unique_paint_undo_save() -> void:
 	_expect(int(solid.call("face_uv", top).get("slot", -1)) == slot, "selected face uses the unique slot")
 	var before_faces: int = solid.call("face_count")
 	paint.tool = SlabPaint.Tool.PIXEL
+	var base_before_stroke: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
 	_expect(paint.begin_stroke(), "pixel stroke starts on a unique material")
 	paint.dab_uv(Vector2(0.5, 0.5))
 	paint.dab_uv(Vector2(0.7, 0.5))
 	paint.end_stroke()
 	_expect(solid.call("face_count") == before_faces, "painting never changes geometry")
-	var painted: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(painted.r > 0.4, "the stroke wrote red into the albedo, %s" % painted)
-	var painted_mip_color := _mip_center(paint.image(), 1)
-	_expect(painted_mip_color.r > 0.35 and painted_mip_color.r > painted_mip_color.b * 1.4,
-		"live paint regenerates the minified mip level, got %s" % painted_mip_color)
+	_expect(paint.has_overlay_strokes(), "stroke creates overlay strokes")
+	var overlay_painted: Color = paint.overlay_image().get_pixel(paint.overlay_image().get_width() / 2, paint.overlay_image().get_height() / 2)
+	_expect(overlay_painted.r > 0.4 and overlay_painted.a > 0.1, "the stroke wrote red into the overlay, %s" % overlay_painted)
+	var base_after_stroke: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(base_after_stroke.is_equal_approx(base_before_stroke), "base image unchanged during overlay painting")
+	var composited: Image = paint.texture().get_image()
+	var composited_color: Color = composited.get_pixel(composited.get_width() / 2, composited.get_height() / 2)
+	_expect(composited_color.r > 0.4, "composited texture shows stroke, %s" % composited_color)
 	_expect(undo.actions.size() >= 2, "unique and stroke recorded undo")
 	var stroke_action: Dictionary = undo.actions[undo.actions.size() - 1]
 	_expect(String(stroke_action.get("name", "")) == "Slab Paint Stroke",
 		"the last undo action is the stroke, got %s" % stroke_action.get("name", ""))
 	var do_ops: Array = stroke_action.get("do_ops", [])
-	_expect(do_ops.size() > 0 and do_ops[0].has("property") and not do_ops[0].has("callable"),
-		"stroke undo uses add_do_property, not Callable.bind")
-	_expect(str(do_ops[0].get("property", "")) == "albedo_texture",
-		"stroke records albedo_texture, got %s" % do_ops[0].get("property", ""))
+	_expect(do_ops.size() > 0 and do_ops[0].has("callable"),
+		"stroke undo uses add_do_method with callable for overlay restore")
 	undo.undo()
-	var restored: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(restored.r < painted.r - 0.1, "undo restores the pre-stroke albedo, %s" % restored)
-	_expect(_mip_center(paint.image(), 1).r < painted_mip_color.r - 0.1,
-		"undo restores the prior minified mip level")
+	_expect(not paint.has_overlay_strokes(), "undo clears overlay strokes")
+	var composited_after_undo: Image = paint.texture().get_image()
+	var restored: Color = composited_after_undo.get_pixel(composited_after_undo.get_width() / 2, composited_after_undo.get_height() / 2)
+	_expect(restored.r < composited_color.r - 0.1, "undo restores pre-stroke display, %s" % restored)
 	undo.redo()
-	var redone: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(redone.r > 0.4, "redo reapplies the stroke")
-	_expect(_mip_center(paint.image(), 1).r > 0.35,
-		"redo reapplies the painted minified mip level")
+	_expect(paint.has_overlay_strokes(), "redo restores overlay strokes")
+	var composited_after_redo: Image = paint.texture().get_image()
+	var redone: Color = composited_after_redo.get_pixel(composited_after_redo.get_width() / 2, composited_after_redo.get_height() / 2)
+	_expect(redone.r > 0.4, "redo reapplies the stroke to display, %s" % redone)
 	var path: String = "user://slab_paint_test/paintbox.png"
 	_expect(paint.save_png(path) == OK, "save writes a PNG")
 	_expect(FileAccess.file_exists(path), "the PNG exists on disk")
@@ -559,7 +569,7 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	var actions := SlabActions.new(selection)
 	session.bind_actions(actions)
 	var paint := SlabPaint.new()
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	paint.bind(selection, actions, undo)
 	session.bind_paint(paint)
 	var solid: Node3D = ClassDB.instantiate("SlabSolid")
@@ -661,13 +671,13 @@ func _check_viewport_paint_does_not_extrude() -> void:
 	key.keycode = KEY_E
 	key.pressed = true
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.STOP, "E is swallowed while painting")
-	_expect(solid.call("face_count") == faces, "E does not extrude in Surface Paint")
+	_expect(solid.call("face_count") == faces, "E does not extrude in UV workspace")
 	key.keycode = KEY_F
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active, "F remains available to frame the painted object")
 	for navigation_key in [KEY_KP_8, KEY_KP_2, KEY_KP_4, KEY_KP_6, KEY_KP_1, KEY_KP_3, KEY_KP_5, KEY_KP_7]:
 		key.keycode = navigation_key
 		_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS and paint.active,
-			"native keypad view key %s passes through Surface Paint" % navigation_key)
+			"native keypad view key %s passes through UV workspace" % navigation_key)
 	key.keycode = KEY_Z
 	key.meta_pressed = true
 	_expect(session.handle(cam, key) == SlabViewport.Verdict.PASS, "Cmd-Z reaches editor Undo while painting")
@@ -707,7 +717,7 @@ func _check_unique_copies_full_material_and_needs_a_face() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var steel := StandardMaterial3D.new()
 	steel.resource_name = "Teal Steel"
@@ -743,7 +753,7 @@ func _check_undo_after_switching_slots() -> void:
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
-	var undo := SlabTestUndo.new()
+	var undo := _new_test_undo()
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, undo)
 	paint.enter()
@@ -761,8 +771,10 @@ func _check_undo_after_switching_slots() -> void:
 	_expect(paint.begin_stroke(), "stroke starts on unique B")
 	paint.dab_uv(Vector2(0.5, 0.5))
 	paint.end_stroke()
-	var painted_b: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(painted_b.r > 0.4, "B received the red dab")
+	_expect(paint.has_overlay_strokes(), "B has overlay strokes after painting")
+	var overlay_b: Image = paint.overlay_image()
+	var painted_b: Color = overlay_b.get_pixel(overlay_b.get_width() / 2, overlay_b.get_height() / 2)
+	_expect(painted_b.r > 0.4 and painted_b.a > 0.1, "B overlay received the red dab, %s" % painted_b)
 	var mats: Array = solid.get("materials")
 	var image_a: Image = (mats[slot_a] as StandardMaterial3D).albedo_texture.get_image()
 	var before_a: Color = image_a.get_pixel(image_a.get_width() / 2, image_a.get_height() / 2)
@@ -776,11 +788,12 @@ func _check_undo_after_switching_slots() -> void:
 		"undoing B's stroke does not rewrite A")
 	actions.material_slot = slot_b
 	paint.rebind()
-	var restored_b: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(restored_b.r < painted_b.r - 0.1, "undo restores B after the editor left that slot")
+	_expect(not paint.has_overlay_strokes(), "undo clears B's overlay strokes")
 	undo.redo()
-	var redone_b: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(redone_b.r > 0.4, "redo paints B again, not A")
+	_expect(paint.has_overlay_strokes(), "redo restores B's overlay strokes")
+	var overlay_b_redo: Image = paint.overlay_image()
+	var redone_b: Color = overlay_b_redo.get_pixel(overlay_b_redo.get_width() / 2, overlay_b_redo.get_height() / 2)
+	_expect(redone_b.r > 0.4 and redone_b.a > 0.1, "redo restores B's overlay dab, %s" % redone_b)
 	paint.exit()
 	solid.free()
 
@@ -804,7 +817,7 @@ func _check_dark_texture_preserved() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = tex
@@ -842,7 +855,7 @@ func _check_imported_svg_unique_stroke_roundtrip() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	var shared: StandardMaterial3D = (src_mat as StandardMaterial3D).duplicate()
 	solid.set("materials", [shared])
@@ -856,8 +869,9 @@ func _check_imported_svg_unique_stroke_roundtrip() -> void:
 	_expect(paint.begin_stroke(), "pixel stroke starts on the imported unique copy")
 	paint.dab_uv(Vector2(0.5, 0.5))
 	paint.end_stroke()
-	var painted: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(painted.r > 0.6, "the stroke wrote red into the imported albedo, %s" % painted)
+	_expect(paint.has_overlay_strokes(), "stroke creates overlay strokes on imported material")
+	var overlay_painted: Color = paint.overlay_image().get_pixel(paint.overlay_image().get_width() / 2, paint.overlay_image().get_height() / 2)
+	_expect(overlay_painted.r > 0.6 and overlay_painted.a > 0.1, "the stroke wrote red into the imported overlay, %s" % overlay_painted)
 	var path: String = "user://slab_paint_test/imported_limestone.png"
 	_expect(paint.save_png(path) == OK, "imported paint saves a PNG")
 	var packed := PackedScene.new()
@@ -870,7 +884,7 @@ func _check_imported_svg_unique_stroke_roundtrip() -> void:
 	selection2.set_ids(PackedInt64Array([top]))
 	var actions2 := SlabActions.new(selection2)
 	var paint2 := SlabPaint.new()
-	paint2.bind(selection2, actions2, SlabTestUndo.new())
+	paint2.bind(selection2, actions2, _new_test_undo())
 	paint2.enter()
 	var reopened_slot: int = int(inst.call("face_uv", top).get("slot", 0))
 	actions2.material_slot = reopened_slot
@@ -913,8 +927,9 @@ func _check_engine_undo_switch_save_escape() -> void:
 	_expect(paint.begin_stroke(), "engine undo: stroke starts")
 	paint.dab_uv(Vector2(0.5, 0.5))
 	paint.end_stroke()
-	var painted: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(painted.r > 0.4, "engine undo: stroke wrote red, %s" % painted)
+	_expect(paint.has_overlay_strokes(), "engine undo: stroke created overlay strokes")
+	var overlay_painted: Color = paint.overlay_image().get_pixel(paint.overlay_image().get_width() / 2, paint.overlay_image().get_height() / 2)
+	_expect(overlay_painted.r > 0.4 and overlay_painted.a > 0.1, "engine undo: stroke wrote red to overlay, %s" % overlay_painted)
 	var slot_a: int = paint.slot()
 	selection.set_objects([solid_b])
 	selection.set_ids(PackedInt64Array([_top_face(solid_b)]))
@@ -924,14 +939,15 @@ func _check_engine_undo_switch_save_escape() -> void:
 	selection.set_ids(PackedInt64Array([top_a]))
 	actions.material_slot = slot_a
 	paint.rebind()
-	var restored: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(restored.r < painted.r - 0.1, "engine undo restores A after switching solids, %s" % restored)
+	_expect(not paint.has_overlay_strokes(), "engine undo clears overlay strokes after switching solids")
 	undo.redo()
-	var redone: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
-	_expect(redone.r > 0.4, "engine redo paints A again, %s" % redone)
+	_expect(paint.has_overlay_strokes(), "engine redo restores overlay strokes")
+	var overlay_redone: Color = paint.overlay_image().get_pixel(paint.overlay_image().get_width() / 2, paint.overlay_image().get_height() / 2)
+	_expect(overlay_redone.r > 0.4 and overlay_redone.a > 0.1, "engine redo restores overlay dab, %s" % overlay_redone)
 	var path: String = "user://slab_paint_test/engine_undo.png"
-	_expect(paint.save_png(path) == OK, "engine undo: save writes a PNG")
+	_expect(paint.save_png(path) == OK, "engine undo: save writes a PNG (auto-flattens)")
 	_expect(not paint.dirty, "engine undo: save clears dirty")
+	_expect(not paint.has_overlay_strokes(), "engine undo: save auto-flattens overlay")
 	undo.undo()
 	_expect(paint.dirty, "engine undo after save marks unsaved")
 	undo.redo()
@@ -961,7 +977,7 @@ func _check_canvas_letterbox_and_press() -> void:
 	selection.set_objects([solid])
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([top]))
-	var panel_undo := SlabTestUndo.new()
+	var panel_undo := _new_test_undo()
 	var actions := SlabActions.new(selection, panel_undo)
 	var paint := SlabPaint.new()
 	paint.bind(selection, actions, panel_undo)
@@ -1020,6 +1036,53 @@ func _check_canvas_letterbox_and_press() -> void:
 		"Pixel exposes Save Paint for its editable texture")
 	_expect(not _rects_overlap(actions_row.get_global_rect(), canvas.get_global_rect()),
 		"compact Pixel actions do not overlap the larger canvas")
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	var flatten_button: Button = panel.find_child("PaintFlatten", true, false)
+	var brush_color: ColorPickerButton = panel.find_child("BrushColor", true, false)
+	var radius_row: Control = panel.find_child("brush_radius", true, false)
+	var opacity_row: Control = panel.find_child("brush_opacity", true, false)
+	_expect(inspector != null and flatten_button != null and brush_color != null
+		and radius_row != null and opacity_row != null,
+		"Pixel exposes Flatten and the brush Color / Radius / Opacity column")
+	_expect(canvas.get_global_rect().position.x + 0.5 >= inspector.get_global_rect().end.x,
+		"Pixel canvas starts after the dock, dock=%s canvas=%s" % [inspector.get_global_rect(), canvas.get_global_rect()])
+	for paint_field in [flatten_button, brush_color, radius_row, opacity_row]:
+		if paint_field == null:
+			continue
+		var field_rect: Rect2 = paint_field.get_global_rect()
+		var dock_rect: Rect2 = inspector.get_global_rect()
+		_expect(paint_field.is_visible_in_tree()
+			and paint_field.size.x + 0.5 >= paint_field.get_combined_minimum_size().x
+			and field_rect.position.x + 0.5 >= dock_rect.position.x
+			and field_rect.end.x <= dock_rect.end.x + 1.0
+			and not _rects_overlap(field_rect, canvas.get_global_rect()),
+			"Pixel %s is complete and beside the canvas, field=%s dock=%s canvas=%s" % [
+				paint_field.name, field_rect, dock_rect, canvas.get_global_rect()
+			])
+	flatten_button.custom_minimum_size.x = 240.0
+	brush_color.custom_minimum_size.x = 240.0
+	panel.call("_refresh_paint_chrome")
+	await process_frame
+	await process_frame
+	_expect(inspector.size.x + 0.5 >= 240.0,
+		"Pixel dock grows with Flatten and Color instead of letting the canvas cover them, got %s" % inspector.size.x)
+	var wide_flatten := flatten_button.get_global_rect()
+	var wide_color := brush_color.get_global_rect()
+	var wide_dock := inspector.get_global_rect()
+	_expect(canvas.get_global_rect().position.x + 0.5 >= wide_dock.end.x
+		and wide_flatten.position.x + 0.5 >= wide_dock.position.x and wide_flatten.end.x <= wide_dock.end.x + 1.0
+		and wide_color.position.x + 0.5 >= wide_dock.position.x and wide_color.end.x <= wide_dock.end.x + 1.0
+		and not _rects_overlap(wide_flatten, canvas.get_global_rect())
+		and not _rects_overlap(wide_color, canvas.get_global_rect()),
+		"wide Flatten and Color stay in the dock column and clear of the canvas")
+	if inspector is ScrollContainer:
+		(inspector as ScrollContainer).ensure_control_visible(flatten_button)
+	await process_frame
+	_hover_at(panel, flatten_button.get_global_rect().get_center())
+	await process_frame
+	var flatten_hover: Control = panel.get_viewport().gui_get_hovered_control()
+	_expect(flatten_hover == flatten_button or (flatten_hover != null and flatten_button.is_ancestor_of(flatten_hover)),
+		"gui_get_hovered_control on Flatten is Flatten, not the canvas, got %s" % flatten_hover)
 	var pixel_canvas_height := canvas.size.y
 	var pixel_canvas_width := canvas.size.x
 	var pixel_help: Label = panel.find_child("PaintHelp", true, false)
@@ -1030,8 +1093,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(mapping != null and mapping.is_visible_in_tree()
 		and panel.find_child("PaintMappingState", true, false).visible == false
 		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible == false
-		and panel.find_child("PaintUnwrap", true, false).visible == false,
-		"Pixel reduces Mapping to image-size controls")
+		and panel.find_child("PaintUnwrap", true, false).visible == false
+		and panel.find_child("PaintPack", true, false).visible == false,
+		"Pixel reduces Mapping to image-size controls and hides Pack")
 	_expect(not mapping_resolution.editable
 		and (mapping_resolution.get_parent().get_child(0) as Label).text == "Texture px",
 		"existing Pixel artwork reports its dimensions without offering a resize")
@@ -1091,9 +1155,11 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(hovered == canvas or (hovered != null and canvas.is_ancestor_of(hovered)),
 		"gui_get_hovered_control at the albedo is the canvas, got %s" % hovered)
 	_click_at(panel, image_center)
+	_expect(paint.has_overlay_strokes(), "canvas click creates overlay strokes")
 	var px: Vector2 = canvas.canvas_to_pixel(fitted.get_center())
-	var dab: Color = paint.image().get_pixel(clampi(int(px.x), 0, paint.image().get_width() - 1), clampi(int(px.y), 0, paint.image().get_height() - 1))
-	_expect(dab.r > 0.3, "viewport push_input on the dock canvas paints, %s" % dab)
+	var overlay_img: Image = paint.overlay_image()
+	var dab: Color = overlay_img.get_pixel(clampi(int(px.x), 0, overlay_img.get_width() - 1), clampi(int(px.y), 0, overlay_img.get_height() - 1))
+	_expect(dab.r > 0.3 and dab.a > 0.1, "viewport push_input on the dock canvas paints overlay, %s" % dab)
 	_expect(paint.save_status() != "", "a finished stroke reports paint status")
 	var bar: Vector2 = canvas.global_position + Vector2(3.0, canvas.size.y * 0.5)
 	_expect(not canvas.hits_image(bar - canvas.global_position), "the letterbox bar is outside the albedo")
@@ -1149,8 +1215,9 @@ func _check_canvas_letterbox_and_press() -> void:
 	_expect(mapping_resolution.editable, "Material/UV can set the reference atlas resolution")
 	_expect(panel.find_child("PaintMappingState", true, false).visible
 		and panel.find_child("paint_uv_pixels_per_meter", true, false).visible
-		and panel.find_child("PaintUnwrap", true, false).visible,
-		"Material/UV exposes mapping state, density, and Unwrap")
+		and panel.find_child("PaintUnwrap", true, false).visible
+		and panel.find_child("PaintPack", true, false).visible,
+		"Material/UV exposes mapping state, density, Unwrap, and Pack")
 	_expect(panel.find_child("PaintPlacementTitle", true, false).text == "Placement",
 		"Mapping and Placement are distinct inspector sections")
 	var repeat_u: SpinBox = panel.find_child("paint_uv_repeat_u", true, false).get_child(1) as SpinBox
@@ -1163,11 +1230,17 @@ func _check_canvas_letterbox_and_press() -> void:
 		if String(button.get_meta("slab_label", "")) == "Repeat ×2": repeat_up = button
 		if String(button.get_meta("slab_label", "")) == "Repeat ÷2": repeat_down = button
 	var repeat_undo_before: int = panel_undo.actions.size()
-	repeat_up.pressed.emit()
+	var repeat_up_hits := {"n": 0}
+	repeat_up.pressed.connect(func() -> void: repeat_up_hits["n"] += 1)
+	await _gui_click(repeat_up)
+	_expect(repeat_up_hits["n"] == 1, "Repeat ×2 viewport mouse click fires pressed")
 	_expect(actions.uv_scale == Vector2(4.0, 6.0) and repeat_u.value == 4.0 and repeat_v.value == 6.0
 		and panel_undo.actions.size() == repeat_undo_before + 1,
 		"Repeat ×2 flushes typed U/V fields and applies one undoable edit")
-	repeat_down.pressed.emit()
+	var repeat_down_hits := {"n": 0}
+	repeat_down.pressed.connect(func() -> void: repeat_down_hits["n"] += 1)
+	await _gui_click(repeat_down)
+	_expect(repeat_down_hits["n"] == 1, "Repeat ÷2 viewport mouse click fires pressed")
 	_expect(actions.uv_scale == Vector2(2.0, 3.0) and repeat_u.value == 2.0 and repeat_v.value == 3.0
 		and panel_undo.actions.size() == repeat_undo_before + 2,
 		"Repeat ÷2 halves both fields and applies one undoable edit, got %s fields %s/%s undo %s" % [actions.uv_scale, repeat_u.value, repeat_v.value, panel_undo.actions.size() - repeat_undo_before])
@@ -1254,6 +1327,17 @@ func _buttons_under(node: Node) -> Array[Button]:
 	return out
 
 
+func _gui_click(button: Button) -> void:
+	if button == null:
+		return
+	SlabTestGui.ensure_scrolled(button)
+	await process_frame
+	SlabTestGui.hover(button)
+	await process_frame
+	SlabTestGui.mouse_click(button)
+	await process_frame
+
+
 func _hover_at(control: Control, pos: Vector2) -> void:
 	var vp: Viewport = control.get_viewport()
 	if vp == null:
@@ -1294,7 +1378,7 @@ func _check_scene_roundtrip() -> void:
 	selection.set_ids(PackedInt64Array([top]))
 	var actions := SlabActions.new(selection)
 	var paint := SlabPaint.new()
-	paint.bind(selection, actions, SlabTestUndo.new())
+	paint.bind(selection, actions, _new_test_undo())
 	paint.enter()
 	solid.set("materials", [StandardMaterial3D.new()])
 	(solid.get("materials")[0] as StandardMaterial3D).albedo_color = Color(0.2, 0.4, 0.8)
@@ -1321,7 +1405,7 @@ func _check_scene_roundtrip() -> void:
 	selection2.set_ids(PackedInt64Array([top]))
 	var actions2 := SlabActions.new(selection2)
 	var paint2 := SlabPaint.new()
-	paint2.bind(selection2, actions2, SlabTestUndo.new())
+	paint2.bind(selection2, actions2, _new_test_undo())
 	paint2.enter()
 	var slot: int = int(inst.call("face_uv", top).get("slot", 0))
 	actions2.material_slot = slot
@@ -1367,6 +1451,395 @@ func _top_face(solid: Node3D) -> int:
 	return best
 
 
+func _check_overlay_layer_and_flatten() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "OverlayPaintBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := _new_test_undo()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.2, 0.4, 0.8)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	var base_before: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(not paint.has_overlay_strokes(), "no overlay strokes before painting")
+	_expect(not paint.can_flatten(), "cannot flatten without overlay strokes")
+	_expect(paint.begin_stroke(), "overlay stroke starts on unique material")
+	paint.dab_uv(Vector2(0.5, 0.5))
+	paint.dab_uv(Vector2(0.6, 0.5))
+	paint.end_stroke()
+	_expect(paint.has_overlay_strokes(), "has overlay strokes after painting")
+	_expect(paint.can_flatten(), "can flatten with overlay strokes")
+	var overlay_img: Image = paint.overlay_image()
+	_expect(overlay_img != null and not overlay_img.is_empty(), "overlay image exists after stroke")
+	var overlay_center: Color = overlay_img.get_pixel(overlay_img.get_width() / 2, overlay_img.get_height() / 2)
+	_expect(overlay_center.a > 0.1, "overlay has painted alpha at stroke center, %s" % overlay_center)
+	var base_after_stroke: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(base_after_stroke.is_equal_approx(base_before),
+		"base image unchanged during overlay painting, base=%s after=%s" % [base_before, base_after_stroke])
+	var undo_count_before: int = undo.actions.size()
+	undo.undo()
+	_expect(not paint.has_overlay_strokes(), "undo clears overlay strokes")
+	undo.redo()
+	_expect(paint.has_overlay_strokes(), "redo restores overlay strokes")
+	var overlay_opacity_before := paint.overlay_opacity
+	paint.overlay_opacity = 0.5
+	_expect(is_equal_approx(paint.overlay_opacity, 0.5), "overlay opacity set to 0.5")
+	paint.overlay_opacity = overlay_opacity_before
+	var flatten_undo_before: int = undo.actions.size()
+	var overlay_before_flatten: PackedByteArray = paint.overlay_image().save_png_to_buffer()
+	_expect(paint.flatten(), "flatten succeeds with overlay strokes")
+	_expect(undo.actions.size() == flatten_undo_before + 1, "flatten records one undo action")
+	var base_after_flatten: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(base_after_flatten.r > base_before.r + 0.1,
+		"base has stroke color after flatten, base=%s after=%s" % [base_before, base_after_flatten])
+	_expect(not paint.has_overlay_strokes(), "no overlay strokes after flatten")
+	_expect(not paint.can_flatten(), "cannot flatten after flatten clears overlay")
+	undo.undo()
+	var base_after_flatten_undo: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(base_after_flatten_undo.is_equal_approx(base_before),
+		"flatten undo restores base, expected=%s got=%s" % [base_before, base_after_flatten_undo])
+	_expect(paint.has_overlay_strokes(), "flatten undo restores overlay strokes for re-editing")
+	_expect(paint.can_flatten(), "flatten undo enables re-flatten")
+	var overlay_after_undo: Image = paint.overlay_image()
+	_expect(overlay_after_undo != null and not overlay_after_undo.is_empty(), "flatten undo restores overlay image")
+	var overlay_center_after_undo: Color = overlay_after_undo.get_pixel(overlay_after_undo.get_width() / 2, overlay_after_undo.get_height() / 2)
+	_expect(overlay_center_after_undo.a > 0.1,
+		"flatten undo restores overlay stroke alpha, got %s" % overlay_center_after_undo)
+	undo.redo()
+	var base_after_flatten_redo: Color = paint.image().get_pixel(paint.image().get_width() / 2, paint.image().get_height() / 2)
+	_expect(base_after_flatten_redo.is_equal_approx(base_after_flatten),
+		"flatten redo restores flattened base")
+	_expect(not paint.has_overlay_strokes(), "flatten redo clears overlay strokes")
+	_expect(not paint.can_flatten(), "flatten redo disables re-flatten")
+	paint.exit()
+	solid.free()
+
+
+func _check_channel_switching() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "ChannelSwitchBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := _new_test_undo()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.2, 0.4, 0.8)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	_expect(paint.channel == SlabPaint.Channel.ALBEDO, "default channel is Albedo")
+	_expect(paint.current_channel_name() == "Albedo", "channel name is Albedo")
+	
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.channel == SlabPaint.Channel.ROUGHNESS, "switched to Roughness channel")
+	_expect(paint.current_channel_name() == "Roughness", "channel name is Roughness")
+	
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.channel == SlabPaint.Channel.EMISSION, "switched to Emission channel")
+	_expect(paint.current_channel_name() == "Emission", "channel name is Emission")
+	
+	paint.channel = SlabPaint.Channel.ALBEDO
+	_expect(paint.channel == SlabPaint.Channel.ALBEDO, "switched back to Albedo channel")
+	
+	paint.exit()
+	solid.free()
+
+
+func _check_multi_layer_management() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "MultiLayerBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := _new_test_undo()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.2, 0.4, 0.8)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	_expect(paint.layer_count() == 1, "starts with one layer")
+	_expect(paint.active_layer_index() == 0, "active layer is 0")
+	
+	var layer_info := paint.layer_info(0)
+	_expect(layer_info.name == "Layer 1", "first layer named Layer 1")
+	_expect(layer_info.visible == true, "first layer visible")
+	_expect(is_equal_approx(layer_info.opacity, 1.0), "first layer opacity 1.0")
+	
+	var new_index := paint.add_layer()
+	_expect(new_index == 1, "add_layer returns index 1")
+	_expect(paint.layer_count() == 2, "now has two layers")
+	_expect(paint.active_layer_index() == 1, "new layer is active")
+	
+	var all_layers := paint.all_layers_info()
+	_expect(all_layers.size() == 2, "all_layers_info returns 2 layers")
+	_expect(all_layers[0].name == "Layer 1", "first layer name correct")
+	_expect(all_layers[1].name == "Layer 2", "second layer name correct")
+	_expect(all_layers[1].active == true, "second layer marked active")
+	
+	paint.set_active_layer(0)
+	_expect(paint.active_layer_index() == 0, "switched to layer 0")
+	
+	paint.set_layer_visible(1, false)
+	var updated_info := paint.layer_info(1)
+	_expect(updated_info.visible == false, "layer 1 now hidden")
+	
+	paint.set_layer_opacity(1, 0.5)
+	updated_info = paint.layer_info(1)
+	_expect(is_equal_approx(updated_info.opacity, 0.5), "layer 1 opacity set to 0.5")
+	
+	paint.set_layer_name(1, "My Paint")
+	updated_info = paint.layer_info(1)
+	_expect(updated_info.name == "My Paint", "layer 1 renamed to My Paint")
+	
+	_expect(paint.remove_layer(0), "can delete the active layer while another layer remains")
+	undo.undo()
+	_expect(paint.layer_count() == 2 and paint.active_layer_index() == 0, "delete Undo restores the active layer and stack")
+	paint.set_active_layer(1)
+	_expect(paint.remove_layer(0), "can delete layer 0 when layer 1 exists")
+	_expect(paint.layer_count() == 1, "now has one layer after delete")
+	_expect(paint.active_layer_index() == 0, "active layer adjusted after delete")
+	
+	paint.exit()
+	solid.free()
+
+
+func _check_channel_layer_strokes() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.name = "ChannelLayerStrokeBox"
+	solid.call("make_box", Vector3(2, 3, 2))
+	var top: int = _top_face(solid)
+	var selection := SlabSelection.new()
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	var actions := SlabActions.new(selection)
+	var undo := _new_test_undo()
+	var paint := SlabPaint.new()
+	paint.bind(selection, actions, undo)
+	paint.enter()
+	var shared := StandardMaterial3D.new()
+	shared.albedo_color = Color(0.5, 0.5, 0.5)
+	solid.set("materials", [shared])
+	actions.material_slot = 0
+	paint.rebind()
+	paint.make_unique()
+	paint.tool = SlabPaint.Tool.PIXEL
+	
+	paint.brush_color = Color(1.0, 0.0, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on Albedo channel")
+	paint.dab_uv(Vector2(0.25, 0.25))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Albedo has strokes")
+	
+	paint.add_layer()
+	_expect(paint.layer_count() == 2, "Albedo now has 2 layers")
+	_expect(paint.active_layer_index() == 1, "layer 1 is active")
+	
+	paint.brush_color = Color(0.0, 1.0, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on layer 1")
+	paint.dab_uv(Vector2(0.75, 0.75))
+	paint.end_stroke()
+	
+	var albedo_layer_1 := paint.layer_info(1)
+	_expect(not albedo_layer_1.is_empty, "layer 1 has strokes after painting")
+	
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.layer_count() == 1, "Roughness starts with 1 layer")
+	paint._ensure_channel_texture(SlabPaint.Channel.ROUGHNESS)
+	
+	paint.brush_color = Color(0.8, 0.8, 0.8)
+	_expect(paint.begin_stroke(), "stroke starts on Roughness channel")
+	paint.dab_uv(Vector2(0.5, 0.5))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Roughness has strokes")
+	
+	# R1: Emission stroke coverage
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.layer_count() == 1, "Emission starts with 1 layer")
+	paint._ensure_channel_texture(SlabPaint.Channel.EMISSION)
+	
+	paint.brush_color = Color(1.0, 0.8, 0.0)
+	_expect(paint.begin_stroke(), "stroke starts on Emission channel")
+	paint.dab_uv(Vector2(0.6, 0.4))
+	paint.end_stroke()
+	_expect(paint.has_channel_overlay_strokes(), "Emission has strokes after painting")
+	_expect(paint.current_channel_name() == "Emission", "channel name is Emission during stroke")
+	
+	paint.channel = SlabPaint.Channel.ALBEDO
+	_expect(paint.layer_count() == 2, "Albedo still has 2 layers after switching back")
+	_expect(paint.has_channel_overlay_strokes(), "Albedo overlay strokes preserved")
+	
+	var albedo_layers_before_flatten: int = paint.layer_count()
+	var undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Albedo")
+	_expect(undo.actions.size() == undo_before + 1, "flatten records one undo action")
+	_expect(paint.layer_count() == 1, "flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "flatten clears overlay strokes")
+	
+	# R3: Exact layer count assert instead of vacuous >= 1
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "flatten undo restores overlay strokes")
+	_expect(paint.layer_count() == albedo_layers_before_flatten, "flatten undo restores exact layer count (%d)" % albedo_layers_before_flatten)
+	
+	# R2: Flatten+Undo on Roughness channel
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	_expect(paint.has_channel_overlay_strokes(), "Roughness strokes preserved after Albedo flatten undo")
+	paint.add_layer()
+	var roughness_layers_before_flatten: int = paint.layer_count()
+	_expect(roughness_layers_before_flatten == 2, "Roughness now has 2 layers")
+	
+	paint.brush_color = Color(0.3, 0.3, 0.3)
+	_expect(paint.begin_stroke(), "stroke starts on Roughness layer 1")
+	paint.dab_uv(Vector2(0.2, 0.2))
+	paint.end_stroke()
+	
+	var roughness_undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Roughness")
+	_expect(undo.actions.size() == roughness_undo_before + 1, "Roughness flatten records one undo action")
+	_expect(paint.layer_count() == 1, "Roughness flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "Roughness flatten clears overlay strokes")
+	
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "Roughness flatten undo restores overlay strokes")
+	_expect(paint.layer_count() == roughness_layers_before_flatten, "Roughness flatten undo restores exact layer count (%d)" % roughness_layers_before_flatten)
+	
+	# R2: Flatten+Undo on Emission channel
+	paint.channel = SlabPaint.Channel.EMISSION
+	_expect(paint.has_channel_overlay_strokes(), "Emission strokes preserved")
+	paint.add_layer()
+	var emission_layers_before_flatten: int = paint.layer_count()
+	_expect(emission_layers_before_flatten == 2, "Emission now has 2 layers")
+	
+	paint.brush_color = Color(0.0, 1.0, 1.0)
+	_expect(paint.begin_stroke(), "stroke starts on Emission layer 1")
+	paint.dab_uv(Vector2(0.8, 0.8))
+	paint.end_stroke()
+	
+	var emission_undo_before := undo.actions.size()
+	_expect(paint.flatten(), "flatten succeeds on Emission")
+	_expect(undo.actions.size() == emission_undo_before + 1, "Emission flatten records one undo action")
+	_expect(paint.layer_count() == 1, "Emission flatten resets to one layer")
+	_expect(not paint.has_channel_overlay_strokes(), "Emission flatten clears overlay strokes")
+	
+	undo.undo()
+	_expect(paint.has_channel_overlay_strokes(), "Emission flatten undo restores overlay strokes")
+	_expect(paint.layer_count() == emission_layers_before_flatten, "Emission flatten undo restores exact layer count (%d)" % emission_layers_before_flatten)
+	
+	paint.exit()
+	solid.free()
+
+
+func _check_channel_viewport_strokes() -> void:
+	# R4: Per-channel 3D/viewport stroke path
+	var world := Node3D.new()
+	root.add_child(world)
+	var host: RefCounted = SlabTestHost.over(world)
+	var session := SlabViewport.new(host)
+	var selection: RefCounted = session.state()
+	var actions := SlabActions.new(selection)
+	session.bind_actions(actions)
+	var paint := SlabPaint.new()
+	var undo := _new_test_undo()
+	paint.bind(selection, actions, undo)
+	session.bind_paint(paint)
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	world.add_child(solid)
+	solid.call("make_box", Vector3(2, 3, 2))
+	var cam := Camera3D.new()
+	world.add_child(cam)
+	cam.look_at_from_position(Vector3(6, 8, 10), Vector3(1, 1.5, 1), Vector3.UP)
+	cam.current = true
+	var top: int = _top_face(solid)
+	var existing := StandardMaterial3D.new()
+	existing.resource_name = "ViewportChannelTest"
+	solid.set("materials", [existing])
+	selection.set_objects([solid])
+	selection.mode = SlabSelection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	actions.material_slot = 0
+	paint.enter()
+	paint.tool = SlabPaint.Tool.PIXEL
+	paint.make_unique()
+	
+	var screen: Vector2 = cam.unproject_position(solid.to_global(solid.call("face_centroid", top)))
+	var down := InputEventMouseButton.new()
+	down.button_index = MOUSE_BUTTON_LEFT
+	down.pressed = true
+	down.position = screen
+	var up := InputEventMouseButton.new()
+	up.button_index = MOUSE_BUTTON_LEFT
+	up.pressed = false
+	up.position = screen
+	
+	# Viewport stroke on Albedo (existing contract already covers canvas; this adds 3D)
+	paint.channel = SlabPaint.Channel.ALBEDO
+	paint.brush_color = Color(1.0, 0.2, 0.2)
+	var albedo_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes(), "Albedo 3D viewport stroke creates overlay")
+	_expect(paint.has_channel_overlay_strokes() or not albedo_before_strokes, "Albedo viewport stroke landed on active layer")
+	
+	# Viewport stroke on Roughness
+	paint.channel = SlabPaint.Channel.ROUGHNESS
+	paint._ensure_channel_texture(SlabPaint.Channel.ROUGHNESS)
+	paint.brush_color = Color(0.5, 0.5, 0.5)
+	var roughness_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes() and not roughness_before_strokes, "Roughness 3D viewport stroke creates overlay on fresh channel")
+	_expect(paint.current_channel_name() == "Roughness", "Roughness channel active during viewport stroke")
+	
+	# Viewport stroke on Emission
+	paint.channel = SlabPaint.Channel.EMISSION
+	paint._ensure_channel_texture(SlabPaint.Channel.EMISSION)
+	paint.brush_color = Color(1.0, 0.9, 0.0)
+	var emission_before_strokes: bool = paint.has_channel_overlay_strokes()
+	session.handle(cam, down)
+	session.handle(cam, up)
+	_expect(paint.has_channel_overlay_strokes() and not emission_before_strokes, "Emission 3D viewport stroke creates overlay on fresh channel")
+	_expect(paint.current_channel_name() == "Emission", "Emission channel active during viewport stroke")
+	
+	paint.exit()
+	world.free()
+
+
 func _expect(ok: bool, what: String) -> bool:
 	if not ok:
 		push_error("FAIL " + what)
@@ -1376,7 +1849,29 @@ func _expect(ok: bool, what: String) -> bool:
 	return ok
 
 
+func _released_viewport_fixture() -> WeakRef:
+	var session := SlabViewport.new(SlabTestHost.over(root))
+	var actions := SlabActions.new(session.state())
+	var paint := SlabPaint.new()
+	paint.bind(session.state(), actions, null)
+	session.bind_actions(actions)
+	session.bind_paint(paint)
+	return weakref(session)
+
+
+func _new_test_undo() -> SlabTestUndo:
+	var recorder := SlabTestUndo.new()
+	_test_recorders.append(recorder)
+	return recorder
+
+
 func _finish() -> void:
+	# Recorded Callables retain their paint controller, which owns the recorder.
+	# Release completed fixture history before testing process shutdown.
+	for recorder in _test_recorders:
+		recorder.actions.clear()
+		recorder.set("_open", {})
+	_test_recorders.clear()
 	if _fails != 0:
 		push_error(str(_fails) + " paint_smoke failures")
 		quit(1)

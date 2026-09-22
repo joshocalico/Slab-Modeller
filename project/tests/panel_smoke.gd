@@ -29,7 +29,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
 		"Object": [
 			"boolean_union", "boolean_subtract", "boolean_intersect", "plane_cut", "array", "mirror_x", "mirror_y", "mirror_z",
-			"center_pivot", "snap_to_grid",
+			"center_pivot", "snap_to_grid", "export_solids", "import_mesh",
 		],
 	},
 	SlabSelection.Mode.VERTEX: {
@@ -41,6 +41,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
+		"Edge": ["bevel_edges"],
 		"Face": [
 			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "align_face",
 		],
@@ -96,6 +97,7 @@ func _init() -> void:
 	_check_phrasing(actions)
 	_check_plans(SlabShapes.new())
 	_check_mode_sections(actions, rows)
+	_check_promote_gated(actions, selection)
 	_check_count_disable_wording(actions, selection)
 	_check_shortcuts_without_a_panel(actions, selection)
 
@@ -123,10 +125,38 @@ func _check_mode_sections(actions: RefCounted, rows: Array[Dictionary]) -> void:
 			else:
 				_expect(section["fields"].is_empty(), "the %s section carries no fields" % heading)
 	for row in rows:
-		_expect(placed.has(row["id"]) or SlabActions.section_of(row) == SlabActions.SECTION_UV,
-			"%s is shown in modelling or reserved for Surface Paint" % row["id"])
+		_expect(
+			placed.has(row["id"]) or SlabActions.section_of(row) == SlabActions.SECTION_UV or row["id"] == "promote_to_solid",
+			"%s is shown in modelling or reserved for UV workspace" % row["id"]
+		)
 	_expect(SlabActions.section_of(actions.find("select_loop")) == "Edge", "Select Loop is an Edge row")
 	_expect(SlabActions.section_of(actions.find("select_ring")) == "Edge", "Select Ring is an Edge row")
+
+
+func _object_section_ids(actions: RefCounted) -> Array:
+	for section in actions.command_sections_for(SlabSelection.Mode.OBJECT):
+		if section["heading"] == "Object":
+			return section["rows"].map(func(row: Dictionary) -> String: return row["id"])
+	return []
+
+
+func _check_promote_gated(actions: RefCounted, selection: RefCounted) -> void:
+	_expect(not _object_section_ids(actions).has("promote_to_solid"), "Promote is absent with no selection")
+	_expect(actions.find("import_mesh").get("label", "") == "Import Mesh...", "Import Mesh keeps its ellipsis")
+	_expect(actions.find("export_solids").get("label", "") == "Export...", "Export keeps its ellipsis")
+	_expect(actions.find("promote_to_solid").get("label", "") == SlabActions.PROMOTE_LABEL, "Promote label is locked")
+	_expect(SlabActions.PROMOTE_LABEL == "Promote to Slab Solid", "Promote label has no ellipsis")
+	_expect(not actions.promote_visible(), "Promote is not visible with no selection")
+
+	if not ClassDB.class_exists("SlabSolid"):
+		return
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	selection.set_objects([solid])
+	_expect(not actions.promote_visible(), "Promote is not visible on a SlabSolid")
+	_expect(not _object_section_ids(actions).has("promote_to_solid"), "Promote is absent from Object on a SlabSolid")
+	selection.set_objects([])
+	solid.free()
 
 
 func _check_count_disable_wording(actions: RefCounted, selection: RefCounted) -> void:

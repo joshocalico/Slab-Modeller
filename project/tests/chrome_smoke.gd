@@ -9,6 +9,7 @@ const SlabPick := preload("res://addons/slab/slab_pick.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabPlugin := preload("res://addons/slab/plugin.gd")
 const SlabTestUndo := preload("res://tests/slab_test_undo.gd")
+const SlabTestGui := preload("res://tests/slab_test_gui.gd")
 
 const ADDON_DIR := "res://addons/slab"
 
@@ -86,6 +87,101 @@ func case_bevel_modal_exposes_exact_controls() -> void:
 	panel.free()
 
 
+func case_isolate_button_exists_and_toggles() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	var isolate_row: Control = panel.find_child("IsolateSelection", true, false)
+	var isolate_solids: Button = panel.find_child("IsolateSolids", true, false)
+	var isolate_faces: Button = panel.find_child("IsolateFaces", true, false)
+	var isolate_label: Label = panel.find_child("IsolateLabel", true, false)
+	expect(isolate_row != null, "Isolate control exists in SelectionControls")
+	expect(isolate_label != null and isolate_label.text == "Isolate", "Isolate label reads Isolate")
+	expect(isolate_solids != null and isolate_solids.text == "Solids", "Solids segment exists")
+	expect(isolate_faces != null and isolate_faces.text == "Faces", "Faces segment exists")
+	expect(isolate_solids.toggle_mode and isolate_faces.toggle_mode, "Isolate segments are toggles")
+	expect(isolate_solids.disabled and isolate_faces.disabled, "Isolate segments disabled without selection")
+	if ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		var scene := Node3D.new()
+		root.add_child(scene)
+		var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+		solid.name = "IsolateTest"
+		solid.call("make_box", Vector3.ONE)
+		scene.add_child(solid)
+		selection.set_objects([solid])
+		selection.settings_changed.emit()
+		await process_frame
+		expect(not isolate_solids.disabled, "Solids segment is enabled with selection")
+		expect(not isolate_solids.button_pressed, "Solids segment starts unpressed")
+		selection.enter_isolation(scene)
+		selection.settings_changed.emit()
+		await process_frame
+		expect(isolate_solids.button_pressed, "Solids segment shows pressed during isolation")
+		expect(not isolate_faces.button_pressed, "Faces segment stays independent of solid Isolate")
+		selection.exit_isolation()
+		selection.settings_changed.emit()
+		await process_frame
+		expect(not isolate_solids.button_pressed, "Solids segment unpressed after exit")
+		var top: int = 0
+		for face in solid.call("get_faces"):
+			if solid.call("face_normal", face).y > 0.9:
+				top = face
+				break
+		selection.mode = SlabSelection.Mode.FACE
+		selection.set_ids(PackedInt64Array([top]))
+		selection.enter_face_isolation()
+		await process_frame
+		expect(isolate_faces.button_pressed, "Faces segment shows pressed during face isolation")
+		expect(not isolate_solids.button_pressed, "Solids segment stays off while Faces is on")
+		selection.exit_face_isolation()
+		await process_frame
+		expect(not isolate_faces.button_pressed, "Faces segment unpressed after exit")
+		scene.free()
+	panel.free()
+
+
+func case_soft_select_button_exists_and_toggles() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	root.add_child(panel)
+	var soft_btn: Button = panel.find_child("SoftSelect", true, false)
+	var soft_opts: HBoxContainer = panel.find_child("SoftSelectOptions", true, false)
+	expect(soft_btn != null, "Soft Select button exists in SelectionControls")
+	expect(soft_btn.text == "Soft Select", "Soft Select button text is 'Soft Select'")
+	expect(soft_btn.toggle_mode, "Soft Select button is a toggle")
+	expect(soft_btn.disabled, "Soft Select button disabled in Object mode")
+	expect(soft_opts != null and not soft_opts.visible, "Soft Select options hidden initially")
+	selection.mode = SlabSelection.Mode.FACE
+	selection.settings_changed.emit()
+	await process_frame
+	expect(not soft_btn.disabled, "Soft Select button enabled in Face mode")
+	expect(not soft_btn.button_pressed, "Soft Select button starts unpressed")
+	selection.set_soft_select(true)
+	selection.settings_changed.emit()
+	await process_frame
+	expect(soft_btn.button_pressed, "Soft Select button pressed when enabled")
+	expect(soft_opts.visible, "Soft Select options visible when enabled")
+	var radius: SpinBox = soft_opts.find_child("SoftRadius", true, false)
+	var falloff: OptionButton = soft_opts.find_child("SoftFalloff", true, false)
+	expect(radius != null, "Soft Select has Radius spin")
+	expect(falloff != null, "Soft Select has Falloff option")
+	selection.set_soft_select(false)
+	selection.settings_changed.emit()
+	await process_frame
+	expect(not soft_btn.button_pressed, "Soft Select button unpressed when disabled")
+	expect(not soft_opts.visible, "Soft Select options hidden when disabled")
+	selection.mode = SlabSelection.Mode.OBJECT
+	selection.settings_changed.emit()
+	await process_frame
+	expect(soft_btn.disabled, "Soft Select disabled when returning to Object mode")
+	expect(soft_btn.tooltip_text.contains("Vertex"), "Object mode tooltip mentions element modes")
+	panel.free()
+
+
 func case_loop_cut_controls_preserve_edge_settings() -> void:
 	var panel := _build_panel(1.0, SlabSelection.Mode.EDGE)
 	root.add_child(panel)
@@ -129,7 +225,7 @@ func case_every_declared_field_renders_one_spin() -> void:
 	var actions := SlabActions.new(selection)
 	var panel := SlabPanel.new()
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
-	var spins: Array[SpinBox] = _spins(panel.find_child("Settings", true, false))
+	var spins: Array[SpinBox] = _spins(panel.find_child("CreateFields", true, false))
 	var box_fields: Array[Dictionary] = actions.shapes.fields_for(&"make_box")
 	expect(spins.size() == box_fields.size(), "Object mode starts with the Box fields only, got %d" % spins.size())
 	for field in box_fields:
@@ -313,6 +409,49 @@ func case_command_icons_are_unique_inside_each_mode() -> void:
 					seen[name] = row["id"]
 
 
+func case_compact_toolbar_preserves_commands_and_profile_selection() -> void:
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	for mode in [SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]:
+		selection.mode = mode
+		var primary: HFlowContainer = panel.find_child("PrimaryCommands", true, false)
+		expect(primary != null, "component mode exposes one wrapping command toolbar")
+		for section in actions.command_sections_for(mode):
+			if section["heading"] == SlabActions.SECTION_SELECTION:
+				continue
+			for row in section["rows"]:
+				var button: Button = primary.get_node_or_null(str(row["id"]))
+				expect(button != null, "%s remains discoverable in the primary toolbar" % row["id"])
+				if button != null:
+					expect(button.disabled == not actions.disabled_reason(row).is_empty(),
+						"toolbar preserves %s availability" % row["id"])
+		var disclosure: Button = panel.find_child("SectionSelection", true, false)
+		expect(not disclosure.button_pressed, "Selection remains collapsed on first use")
+	var bevel: Button = panel.find_child("bevel_edges", true, false)
+	var extrude: Button = panel.find_child("extrude_faces", true, false)
+	expect(bevel.get_parent() == extrude.get_parent(), "Face Bevel sits beside the other Face actions")
+	expect(not panel.find_child("SettingsColumn", true, false).visible,
+		"Face mode releases the empty settings column")
+	var status: Label = panel.get_node("Status")
+	expect(status.visible and status.text.contains("Select a solid") and not status.text.contains("No solid selected"),
+		"empty state gives one instruction rather than repeating header identity")
+	var menu: MenuButton = panel.find_child("ShortcutsMenu", true, false)
+	expect(menu != null and menu.text == "Shortcuts" and menu.focus_mode == Control.FOCUS_ALL
+		and not menu.accessibility_name.is_empty(), "shortcut profiles have a compact keyboard-accessible menu")
+	var popup := menu.get_popup()
+	popup.id_pressed.emit(2)
+	expect(actions.keybind_profiles.profile() == 2, "menu selection updates the active keyboard profile")
+	for index in popup.item_count:
+		expect(popup.is_item_checked(index) == (index == 2), "only the chosen keyboard profile is checked")
+	actions.keybind_profiles.set_profile(0)
+	expect(popup.is_item_checked(0) and not popup.is_item_checked(2), "external profile changes refresh menu checks")
+	selection.mode = SlabSelection.Mode.OBJECT
+	expect(panel.find_child("SettingsColumn", true, false).visible, "Object mode restores creation settings")
+	panel.free()
+
+
 func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	var selection := SlabSelection.new()
 	var actions := SlabActions.new(selection)
@@ -325,13 +464,14 @@ func case_face_mode_shows_only_face_and_selection_commands() -> void:
 	for field in actions.shapes.fields():
 		var key: String = String(field["key"])
 		expect(panel.find_child(key, true, false) == null, "Face mode does not render the %s Create field" % key)
-	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to Surface Paint")
+	expect(_spins(panel.find_child("Settings", true, false)).is_empty(), "Face mode leaves UV fields to UV workspace")
 	expect(is_equal_approx(panel.custom_minimum_size.y, SlabPanel.PANEL_HEIGHT),
 		"the dock stays compact, got %s" % panel.custom_minimum_size.y)
-	expect(_label_for(panel, "Face") != null and panel.find_child("SectionSelection", true, false) != null,
-		"Face mode renders the Face and Selection headings")
+	expect(_label_for(panel, "Face") == null and _label_for(panel, "Edge") == null
+		and panel.find_child("SectionSelection", true, false) != null,
+		"Face actions share one toolbar and retain the Selection disclosure")
 	expect(panel.find_child("SectionUV", true, false) == null and panel.find_child("MaterialChips", true, false) == null,
-		"Face mode does not duplicate Surface Paint material and UV controls")
+		"Face mode does not duplicate UV workspace material and UV controls")
 	expect(_button_for(panel, "Select Loop") == null, "Face mode does not render the Edge-only Select Loop")
 	var extrude: Button = _button_for(panel, "Extrude")
 	expect(extrude != null and extrude.text == "Extrude", "Extrude shows its name")
@@ -360,19 +500,21 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
 	panel.bind_paint(paint)
 	root.add_child(panel)
-	var toggle: Button = panel.find_child("SurfacePaint", true, false)
-	expect(toggle != null and toggle.text == "Surface Paint", "the dock names Surface Paint")
+	var uv_toggle: Button = panel.find_child("UVWorkspace", true, false)
+	expect(uv_toggle != null and uv_toggle.text == "UV", "the dock has UV workspace button")
+	var paint_toggle: Button = panel.find_child("PaintWorkspace", true, false)
+	expect(paint_toggle != null and paint_toggle.text == "Paint", "the dock has Paint workspace button")
 	expect(panel.find_child("PaintCanvas", true, false) != null, "the dock has a texture canvas")
 	expect(panel.find_child("PaintBody", true, false) != null, "the dock has a paint workspace")
 	expect(not panel.find_child("PaintBody", true, false).visible, "paint starts closed")
 	paint.enter()
 	await process_frame
 	await process_frame
-	expect(panel.find_child("PaintBody", true, false).visible, "Surface Paint shows the workspace")
+	expect(panel.find_child("PaintBody", true, false).visible, "UV workspace shows the workspace")
 	expect(not panel.find_child("ModelBody", true, false).visible, "modeling commands hide while painting")
 	expect(panel.custom_minimum_size.y > SlabPanel.PANEL_HEIGHT, "the paint dock is taller than the model strip")
-	expect(_button_for(panel, "Pixel") != null and _button_for(panel, "Material / UV") != null,
-		"paint has distinct Material/UV and Pixel tools")
+	expect(uv_toggle != null and paint_toggle != null,
+		"header has distinct UV and Paint workspace buttons")
 	expect(_button_for(panel, "Make Unique") != null, "Make Unique is labeled")
 	var uv_controls: Control = panel.find_child("PaintUvControls", true, false)
 	expect(uv_controls != null and uv_controls.visible, "Material/UV shows precise placement controls")
@@ -408,25 +550,26 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and panel.find_child("PaintActions", true, false).get_combined_minimum_size().y > SlabPanel.PAINT_PICKER_HEIGHT,
 		"paint actions naturally reserve the buttons and native resource picker")
 	expect(_source_of("slab_solid_gizmo.gd").contains("_paint_hides_albedo"),
-		"Surface Paint drops the opaque face fill")
+		"UV workspace drops the opaque face fill")
 	expect(_source_of("slab_solid_gizmo.gd").contains("PAINT_EDGE"),
-		"Surface Paint keeps an on-top face outline")
+		"UV workspace keeps an on-top face outline")
 	var unique_off: Button = _button_for(panel, "Make Unique")
 	expect(unique_off != null and unique_off.disabled, "Make Unique stays off until a face is selected")
+	expect(panel.current_workspace() == panel.Workspace.UV, "workspace is UV after paint.enter")
 	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	panel.call("_on_paint_changed")
 	await process_frame
 	await process_frame
-	var pixel: Button = _button_for(panel, "Pixel")
-	var uv: Button = _button_for(panel, "Material / UV")
-	expect(pixel != null and pixel.button_pressed and uv != null and not uv.button_pressed,
-		"Pixel vs Material/UV shows which tool is selected")
-	expect(not uv_controls.visible, "Pixel painting hides UV placement fields and keeps the canvas workspace")
+	expect(panel.current_workspace() == panel.Workspace.PAINT or paint.tool == preload("res://addons/slab/slab_paint.gd").Tool.PIXEL,
+		"Paint workspace uses pixel tool")
+	expect(not uv_controls.visible, "Paint workspace hides UV placement fields and keeps the canvas workspace")
 	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
-		"Material/UV and Pixel keep one paint workspace minimum, got %s after %s" % [panel.get_combined_minimum_size().y, material_minimum])
+		"UV and Paint workspaces keep one paint workspace minimum, got %s after %s" % [panel.get_combined_minimum_size().y, material_minimum])
 	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	panel.call("_on_paint_changed")
 	await process_frame
 	expect(is_equal_approx(panel.get_combined_minimum_size().y, material_minimum),
-		"returning to Material/UV keeps the paint workspace minimum")
+		"returning to UV workspace keeps the paint workspace minimum")
 	paint.exit()
 	await process_frame
 	expect(panel.find_child("ModelBody", true, false).visible, "closing paint restores modeling")
@@ -451,11 +594,72 @@ func case_surface_paint_opens_a_canvas_not_just_uv_fields() -> void:
 		and scaled_panel.get_combined_minimum_size().y >= scaled_canvas.custom_minimum_size.y,
 		"paint canvas and derived dock minimum follow 1.5x editor scale")
 	scaled_paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	scaled_panel.call("_on_paint_changed")
 	await process_frame
 	await process_frame
 	expect(is_equal_approx(scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum),
-		"Pixel-first entry reserves the Material/UV workspace minimum at 1.5x scale, got %s after %s" % [scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum])
+		"Paint-first entry reserves the UV workspace minimum at 1.5x scale, got %s after %s" % [scaled_panel.get_combined_minimum_size().y, scaled_pixel_minimum])
 	scaled_panel.free()
+
+
+func case_paint_left_dock_stays_beside_the_canvas() -> void:
+	root.size = Vector2i(1280, 800)
+	var selection := SlabSelection.new()
+	var actions := SlabActions.new(selection)
+	var paint: RefCounted = preload("res://addons/slab/slab_paint.gd").new()
+	paint.bind(selection, actions, SlabTestUndo.new())
+	var panel := SlabPanel.new()
+	panel.setup(selection, actions, SlabMetrics.at_scale(1.0))
+	panel.bind_paint(paint)
+	root.add_child(panel)
+	panel.theme = ThemeDB.get_default_theme()
+	panel.size = Vector2(1226, preload("res://addons/slab/slab_paint.gd").PAINT_HEIGHT)
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	paint.enter()
+	await process_frame
+	await process_frame
+	_expect_paint_dock_clear_of_canvas(panel, "Paint")
+	var flatten: Button = panel.find_child("PaintFlatten", true, false)
+	var color: ColorPickerButton = panel.find_child("BrushColor", true, false)
+	expect(flatten != null and flatten.is_visible_in_tree(), "Paint exposes Flatten")
+	expect(color != null and color.is_visible_in_tree(), "Paint exposes brush Color")
+	if flatten != null:
+		flatten.custom_minimum_size.x = 240.0
+	if color != null:
+		color.custom_minimum_size.x = 240.0
+	panel.call("_refresh_paint_chrome")
+	await process_frame
+	await process_frame
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	expect(inspector.size.x + 0.5 >= 240.0,
+		"the paint dock grows with Flatten and Color instead of clipping them, got %s" % inspector.size.x)
+	_expect_paint_dock_clear_of_canvas(panel, "wide Paint fields")
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.MATERIAL_UV
+	panel.call("_on_paint_changed")
+	await process_frame
+	await process_frame
+	expect(is_equal_approx(inspector.custom_minimum_size.x, SlabPanel.UV_DOCK_MIN_WIDTH),
+		"UV keeps the Mapping dock width, got %s" % inspector.custom_minimum_size.x)
+	expect(panel.find_child("PaintMapping", true, false).visible
+		and panel.find_child("PaintUnwrap", true, false).visible
+		and panel.find_child("PaintPack", true, false).visible
+		and panel.find_child("PaintFitUv", true, false).visible,
+		"UV still exposes Mapping, Unwrap, Pack, and Fit UV")
+	expect(not _rects_overlap(inspector.get_global_rect(), panel.find_child("PaintCanvas", true, false).get_global_rect()),
+		"UV dock stays beside the canvas")
+	paint.tool = preload("res://addons/slab/slab_paint.gd").Tool.PIXEL
+	panel.call("_on_paint_changed")
+	await process_frame
+	await process_frame
+	_expect_paint_dock_clear_of_canvas(panel, "Paint after UV")
+	paint.exit()
+	await process_frame
+	expect(panel.find_child("ModelBody", true, false).visible, "leaving Paint restores the modelling dock")
+	expect(is_equal_approx(panel.get_combined_minimum_size().y, SlabPanel.PANEL_HEIGHT),
+		"leaving Paint restores the modelling height")
+	expect(panel.find_child("SoftSelect", true, false) != null, "Soft Select is still on the modelling dock")
+	expect(panel.find_child("OperationHandles", true, false) != null, "Op Card host stays on the modelling dock")
+	panel.free()
 
 
 func case_a_half_typed_create_field_commits_on_mode_change() -> void:
@@ -482,14 +686,14 @@ func case_a_half_typed_create_field_commits_on_mode_change() -> void:
 
 func case_stair_sits_on_the_create_row() -> void:
 	var panel := _build_panel(1.0)
-	var flow: HFlowContainer = _first_command_row(panel)
-	expect(flow != null, "Object mode has a Create flow")
+	var chips: HFlowContainer = panel.find_child("CreateChips", true, false) as HFlowContainer
+	expect(chips != null, "Object mode has CreateChips flow")
 	var labels: PackedStringArray = PackedStringArray()
-	for child in flow.get_children():
+	for child in chips.get_children():
 		if child is Button:
 			labels.append(String(child.get_meta("slab_label", "")))
-	expect(labels.has("Stair"), "Create lists Stair, got %s" % [labels])
-	expect(labels.find("Stair") == 2, "Stair stays the third Create icon after Box and Plane, got %s" % [labels])
+	expect(labels.has("Stair"), "CreateChips lists Stair, got %s" % [labels])
+	expect(labels.find("Stair") == 2, "Stair stays the third shape chip after Box and Plane, got %s" % [labels])
 	var stair: Button = _button_for(panel, "Stair")
 	expect(stair.icon != null, "Stair has a glyph")
 	panel.focus_create(&"make_stair")
@@ -500,23 +704,33 @@ func case_stair_sits_on_the_create_row() -> void:
 
 func case_create_icons_sit_above_the_settings() -> void:
 	var panel := _build_panel(1.0)
-	var commands: Node = panel.find_child("Commands", true, false)
+	var create_strip: Node = panel.find_child("CreateStrip", true, false)
 	var settings: Node = panel.find_child("Settings", true, false)
-	expect(commands != null and settings != null, "the dock has Commands and Settings")
-	expect(commands.get_parent().get_parent() == settings.get_parent(),
-		"command icons and settings share the model body")
-	expect(commands.get_parent().get_index() < settings.get_index(),
-		"command icons sit above the settings strip")
-	expect(_button_for(panel, "Stair").get_parent().get_parent() == commands,
-		"Stair lives in the command column, not the settings strip")
+	expect(create_strip != null and settings != null, "the dock has CreateStrip and Settings")
+	expect(create_strip.get_parent() == settings.get_parent(),
+		"CreateStrip and Settings share the SettingsColumn")
+	expect(create_strip.get_index() < settings.get_index(),
+		"CreateStrip sits above the Settings block")
+	var stair: Button = _button_for(panel, "Stair")
+	var create_chips: Node = panel.find_child("CreateChips", true, false)
+	expect(stair.get_parent() == create_chips,
+		"Stair lives in CreateChips inside CreateStrip")
 	panel.free()
 
 
 func case_command_labels_fit_and_wrap() -> void:
 	var panel := _build_panel(1.0)
+	var chips: HFlowContainer = panel.find_child("CreateChips", true, false) as HFlowContainer
+	expect(chips != null, "Object mode lays shape chips in CreateChips flow")
 	var flow: HFlowContainer = _first_command_row(panel)
 	expect(flow != null, "Object mode lays commands in a wrapping flow")
-	for label in ["Box", "Cylinder", "Mirror X", "Mirror Y", "Mirror Z", "Center Pivot", "Snap To Grid"]:
+	for label in ["Box", "Cylinder"]:
+		var button: Button = _button_for(panel, label)
+		expect(button != null, "%s is on the Object dock" % label)
+		expect(button.get_parent() == chips, "%s is in CreateChips" % label)
+		expect(not button.clip_text, "%s does not clip its caption" % label)
+		_expect_label_fits(button, label)
+	for label in ["Mirror X", "Mirror Y", "Mirror Z", "Center Pivot", "Snap To Grid"]:
 		var button: Button = _button_for(panel, label)
 		expect(button != null, "%s is on the Object dock" % label)
 		expect(not button.clip_text, "%s does not clip its caption" % label)
@@ -535,7 +749,7 @@ func case_command_labels_fit_and_wrap() -> void:
 			"%s keeps a hit target, size=%s min=%s" % [label, button.size, button.custom_minimum_size])
 	panel.free()
 	var face := _build_panel(1.0, SlabSelection.Mode.FACE)
-	for label in ["Extrude", "Inset", "Select Coplanar"]:
+	for label in ["Extrude", "Inset", "Select Coplanar", "Select Boundary"]:
 		var button: Button = _button_for(face, label)
 		expect(button != null, "%s is on the Face dock" % label)
 		expect(not button.clip_text, "%s does not clip its caption" % label)
@@ -606,22 +820,22 @@ func case_primary_panel_buttons_are_keyboard_reachable_and_named() -> void:
 
 	var expected: Array[Button] = []
 	for button in _buttons(panel):
-		if button.has_meta("slab_mode") or button.has_meta("slab_label") or button.name == "SurfacePaint":
+		if button.has_meta("slab_mode") or button.has_meta("slab_label") or button.name == "UVWorkspace" or button.name == "PaintWorkspace":
 			expected.append(button)
 	for button in expected:
 		expect(button.focus_mode == Control.FOCUS_ALL, "%s is reachable by keyboard focus" % button.name)
 		expect(button.accessibility_name != "", "%s has an accessible name" % button.name)
 
 	var box: Button = panel.find_child("make_box", true, false)
-	var surface: Button = panel.find_child("SurfacePaint", true, false)
+	var uv_button: Button = panel.find_child("UVWorkspace", true, false)
 	expect(box != null and box.accessibility_name == "Box", "Create Box has its visible accessible name")
-	expect(surface != null and surface.accessibility_name == "Surface Paint", "Surface Paint has its visible accessible name")
+	expect(uv_button != null and uv_button.accessibility_name == "UV workspace", "UV workspace has its visible accessible name")
 	if box != null:
 		box.grab_focus()
 		expect(root.get_viewport().gui_get_focus_owner() == box, "Create Box accepts keyboard focus")
-	if surface != null:
-		surface.grab_focus()
-		expect(root.get_viewport().gui_get_focus_owner() == surface, "Surface Paint accepts keyboard focus")
+	if uv_button != null:
+		uv_button.grab_focus()
+		expect(root.get_viewport().gui_get_focus_owner() == uv_button, "UV workspace accepts keyboard focus")
 	panel.free()
 
 
@@ -716,7 +930,7 @@ func case_preview_controls_follow_the_modelling_context() -> void:
 	selection.set_objects([solid])
 	selection.set_ids(PackedInt64Array([solid.call("get_faces")[0]]))
 	expect(not previews.visible and not settings.visible, "face selection keeps secondary settings collapsed")
-	expect(not previews.visible and not settings.visible, "face selection keeps UV settings in Surface Paint")
+	expect(not previews.visible and not settings.visible, "face selection keeps UV settings in UV workspace")
 	selection.operation_preview = {"kind": 1}
 	actions.operation_active = true
 	actions.operation_state_changed.emit()
@@ -737,25 +951,28 @@ func case_settings_follow_available_dock_width() -> void:
 	for i in 3: await process_frame
 	var body: BoxContainer = panel.find_child("ModelBody", true, false)
 	var commands: Control = panel.find_child("Commands", true, false).get_parent()
-	var settings: Control = panel.find_child("Settings", true, false)
-	expect(not body.vertical and settings.position.x >= commands.size.x,
-		"wide docks place settings beside commands")
+	var settings_column: Control = panel.find_child("SettingsColumn", true, false)
+	expect(not body.vertical and settings_column.position.x >= commands.size.x,
+		"wide docks place settings column beside commands")
 	panel.size.x = 760
 	for i in 3: await process_frame
-	expect(body.vertical and settings.position.y >= commands.position.y + commands.size.y,
-		"narrow docks stack settings below commands")
+	expect(body.vertical and settings_column.position.y >= commands.position.y + commands.size.y,
+		"narrow docks stack settings column below commands")
 	panel.free()
 
 
 func case_object_settings_are_for_the_next_shape() -> void:
 	var panel := _build_panel(1.0)
-	var title: Label = panel.find_child("SettingsTitle", true, false)
-	expect(title != null and title.text == "New Box", "Object mode labels Box fields as New Box, got %s" % (title.text if title else "missing"))
+	var create_strip: Control = panel.find_child("CreateStrip", true, false)
+	expect(create_strip != null and create_strip.visible, "Object mode shows CreateStrip above SettingsScroll")
+	var create_fields: Control = panel.find_child("CreateFields", true, false)
+	expect(create_fields != null and create_fields.get_child_count() > 0, "CreateStrip has dimension fields for default shape")
 	var cylinder: Button = panel.find_child("make_cylinder", true, false)
 	cylinder.mouse_entered.emit()
-	expect(title.text == "New Box", "hovering a shape does not replace creation fields")
+	var field_count_before: int = create_fields.get_child_count()
+	expect(create_fields.get_child_count() == field_count_before, "hovering a shape does not replace creation fields")
 	cylinder.pressed.emit()
-	expect(title.text == "New Cylinder", "Cylinder focus relabels the strip, got %s" % title.text)
+	expect(panel.find_child("cylinder_sides", true, false) != null, "Cylinder focus shows Cylinder-specific fields")
 	expect(panel.find_child("CreateShape", true, false) != null, "shape settings have an explicit Create action")
 	panel.free()
 
@@ -769,16 +986,15 @@ func case_mouse_shape_choice_updates_before_notifying_consumers() -> void:
 	await process_frame
 	await process_frame
 	var stair: Button = panel.find_child("make_stair", true, false)
-	var observed := {"title": "", "pressed": false}
+	var observed := {"has_stair_fields": false, "pressed": false}
 	panel.get("_actions").create_settings_changed.connect(func() -> void:
-		observed.title = (panel.find_child("SettingsTitle", true, false) as Label).text
+		observed.has_stair_fields = panel.find_child("stair_steps", true, false) != null
 		observed.pressed = stair.button_pressed
 	)
 	_mouse_click(stair)
-	expect(observed.title == "New Stair" and observed.pressed,
+	expect(observed.has_stair_fields and observed.pressed,
 		"mouse Stair choice updates pressed state and settings before notifying consumers")
-	expect((panel.find_child("SettingsTitle", true, false) as Label).text == "New Stair"
-		and panel.find_child("stair_steps", true, false) != null,
+	expect(panel.find_child("stair_steps", true, false) != null,
 		"mouse Stair choice displays Stair fields")
 	panel.free()
 
@@ -826,13 +1042,13 @@ func case_boolean_operands_are_named_and_swappable() -> void:
 		and context.get_combined_minimum_size().x <= 1.0,
 		"long selection names stay complete in the tooltip without adding a text-width minimum")
 	target.name = "RenamedRoom"
-	expect(panel.get_node("Status").text.contains("RenamedRoom"), "renaming the selected solid updates status immediately")
+	expect(not panel.get_node("Status").visible, "renaming a selected solid does not repeat its identity in status")
 	expect(context.text == "RenamedRoom" and context.tooltip_text == "RenamedRoom",
 		"renaming the selected solid updates permanent header context")
 	actions.reported.emit("Current report")
 	selection.mode = SlabSelection.Mode.FACE
 	selection.set_ids(PackedInt64Array([1, 2]))
-	expect(context.text == "2 faces · RenamedRoom" and panel.get_node("Status").text == selection.describe(),
+	expect(context.text == "2 faces · RenamedRoom" and not panel.get_node("Status").visible,
 		"element selection updates header context and clears superseded feedback")
 	actions.reported.emit("Current report")
 	cutter.name = "UnselectedCutter"
@@ -1069,34 +1285,11 @@ func _chip_count(panel: Node) -> int:
 
 
 func _mouse_click(control: Control) -> void:
-	var rect: Rect2 = control.get_global_rect()
-	var pos: Vector2 = rect.get_center()
-	var vp: Viewport = control.get_viewport()
-	if vp == null:
-		return
-	vp.push_input(_mouse_button(true, pos, pos))
-	vp.push_input(_mouse_button(false, pos, pos))
+	SlabTestGui.mouse_click(control)
 
 
 func _hover(control: Control) -> void:
-	var pos: Vector2 = control.get_global_rect().get_center()
-	var vp: Viewport = control.get_viewport()
-	if vp == null:
-		return
-	var motion := InputEventMouseMotion.new()
-	motion.position = pos
-	motion.global_position = pos
-	vp.push_input(motion)
-
-
-func _mouse_button(pressed: bool, position: Vector2, global_position: Vector2) -> InputEventMouseButton:
-	var event := InputEventMouseButton.new()
-	event.button_index = MOUSE_BUTTON_LEFT
-	event.button_mask = MOUSE_BUTTON_MASK_LEFT if pressed else 0
-	event.pressed = pressed
-	event.position = position
-	event.global_position = global_position
-	return event
+	SlabTestGui.hover(control)
 
 
 func _label_for(node: Node, text: String) -> Label:
@@ -1215,3 +1408,32 @@ func expect(ok: bool, what: String) -> void:
 	push_error("FAIL " + what)
 	print("FAIL ", what)
 	_fails += 1
+
+
+func _rects_overlap(a: Rect2, b: Rect2) -> bool:
+	return a.grow(-1.0).intersects(b.grow(-1.0))
+
+
+func _expect_paint_dock_clear_of_canvas(panel: Control, label: String) -> void:
+	var inspector: Control = panel.find_child("PaintInspector", true, false)
+	var canvas: Control = panel.find_child("PaintCanvas", true, false)
+	expect(inspector != null and canvas != null, "%s has a paint dock and canvas" % label)
+	if inspector == null or canvas == null:
+		return
+	expect(canvas.get_global_rect().position.x + 0.5 >= inspector.get_global_rect().end.x,
+		"%s canvas starts after the dock, dock=%s canvas=%s" % [label, inspector.get_global_rect(), canvas.get_global_rect()])
+	expect(not _rects_overlap(inspector.get_global_rect(), canvas.get_global_rect()),
+		"%s dock does not sit under the canvas, dock=%s canvas=%s" % [label, inspector.get_global_rect(), canvas.get_global_rect()])
+	for child_name in ["PaintFlatten", "BrushColor", "brush_radius", "brush_opacity"]:
+		var control: Control = panel.find_child(child_name, true, false) as Control
+		expect(control != null and control.is_visible_in_tree(), "%s shows %s" % [label, child_name])
+		if control == null:
+			continue
+		var field := control.get_global_rect()
+		var dock := inspector.get_global_rect()
+		expect(control.size.x + 0.5 >= control.get_combined_minimum_size().x,
+			"%s %s is not clipped, size=%s min=%s" % [label, child_name, control.size, control.get_combined_minimum_size()])
+		expect(field.position.x + 0.5 >= dock.position.x and field.end.x <= dock.end.x + 1.0,
+			"%s %s stays in the dock column, control=%s dock=%s" % [label, child_name, field, dock])
+		expect(not _rects_overlap(field, canvas.get_global_rect()),
+			"%s %s is not under the canvas, control=%s canvas=%s" % [label, child_name, field, canvas.get_global_rect()])

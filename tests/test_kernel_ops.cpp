@@ -1,5 +1,6 @@
 #include "harness.hpp"
 
+#include "kernel/mesh.hpp"
 #include "kernel/mesh_edit.hpp"
 #include "kernel/ops/bevel.hpp"
 #include "kernel/ops/bridge.hpp"
@@ -87,6 +88,38 @@ static EdgeId edge_between(const Mesh &p_mesh, VertexId p_a, VertexId p_b) {
 		}
 	}
 	return EdgeId{};
+}
+
+static IVec3 step_toward(const IVec3 &p_from, const IVec3 &p_to, int32_t p_steps) {
+	IVec3 out = p_from;
+	if (p_to.x != p_from.x) {
+		out.x += p_to.x > p_from.x ? p_steps : -p_steps;
+	}
+	if (p_to.y != p_from.y) {
+		out.y += p_to.y > p_from.y ? p_steps : -p_steps;
+	}
+	if (p_to.z != p_from.z) {
+		out.z += p_to.z > p_from.z ? p_steps : -p_steps;
+	}
+	return out;
+}
+
+static Mesh concave_c_prism() {
+	const IVec3 loop[] = {
+		{ 0, 0, 4096 },
+		{ 1024, 0, 4096 },
+		{ 1024, 0, 1024 },
+		{ 3072, 0, 1024 },
+		{ 3072, 0, 4096 },
+		{ 4096, 0, 4096 },
+		{ 4096, 0, 0 },
+		{ 0, 0, 0 },
+	};
+	MeshEdit edit = MeshEdit::empty();
+	ops::prism(edit, loop, 8, 2048);
+	Mesh mesh;
+	std::move(edit).commit(mesh);
+	return mesh;
 }
 
 SLAB_TEST(inset_keeps_the_cap_id_and_its_attrs) {
@@ -758,6 +791,78 @@ SLAB_TEST(vertex_ops_reject_stale_and_empty_selections) {
 	expect(std::move(edit).commit(out).ok(), "empty vertex op commit");
 	expect_eq(out.vertex_count(), 8, "empty vertex op verts");
 	expect_near(out.signed_volume(), 12.0, 0.0001, "empty vertex op volume");
+}
+
+SLAB_TEST(collapse_of_two_adjacent_corners_matches_the_panel_min_count) {
+	const Mesh box = unit_box();
+	std::vector<VertexId> corners;
+	box.face_corners(top_face(box), corners);
+
+	MeshEdit edit(box);
+	expect(ops::collapse(edit, { corners[0], corners[1] }).ok(), "collapse two adjacent corners");
+	Mesh out;
+	expect(std::move(edit).commit(out).ok(), "two-vertex collapse commit");
+	expect(out.vertex_count() < 8, "two-vertex collapse retires at least one corner");
+	expect_eq(euler(out), 2, "two-vertex collapse euler");
+	expect(out.signed_volume() > 0.0, "two-vertex collapse keeps the volume positive");
+	expect(validate(out).ok(), "two-vertex collapse stays closed");
+}
+
+SLAB_TEST(weld_at_panel_floor_radius_merges_only_close_neighbours) {
+	const Mesh box = unit_box();
+	std::vector<VertexId> corners;
+	box.face_corners(top_face(box), corners);
+	const VertexId keep = corners[0];
+	const VertexId kill = corners[1];
+	const IVec3 seated = step_toward(box.position_i(keep), box.position_i(kill), 41);
+
+	MeshEdit close(box);
+	close.move_vertex(kill, seated);
+	expect(close.last_fault().ok(), "seat a neighbour 4 cm away");
+	Mesh seated_box;
+	expect(std::move(close).commit(seated_box).ok(), "close-pair commit");
+
+	MeshEdit too_tight(seated_box);
+	expect(ops::weld(too_tight, { keep, kill }, 0.03f).ok(), "0.03 m misses a 4 cm pair");
+	Mesh untouched;
+	expect(std::move(too_tight).commit(untouched).ok(), "missed weld commit");
+	expect_eq(untouched.vertex_count(), 8, "missed weld leaves both corners");
+
+	MeshEdit joined(seated_box);
+	expect(ops::weld(joined, { keep, kill }, 0.05f).ok(), "panel floor radius welds the close pair");
+	Mesh out;
+	expect(std::move(joined).commit(out).ok(), "floor-radius weld commit");
+	expect_eq(out.vertex_count(), 7, "floor-radius weld retires one corner");
+	expect_eq(euler(out), 2, "floor-radius weld euler");
+	expect(out.signed_volume() > 0.0, "floor-radius weld keeps the volume positive");
+	expect(validate(out).ok(), "floor-radius weld stays closed");
+}
+
+SLAB_TEST(weld_and_collapse_keep_a_concave_prism_closed) {
+	const Mesh prism = concave_c_prism();
+	expect(validate(prism).ok(), "concave C prism starts closed");
+	std::vector<VertexId> corners;
+	prism.face_corners(top_face(prism), corners);
+	expect(int(corners.size()) >= 8, "concave cap keeps the C loop");
+
+	const float span = (prism.position(corners[0]) - prism.position(corners[1])).length();
+	MeshEdit welded(prism);
+	expect(ops::weld(welded, { corners[0], corners[1] }, span + 0.1f).ok(), "weld a concave cap edge");
+	Mesh after_weld;
+	expect(std::move(welded).commit(after_weld).ok(), "concave weld commit");
+	expect_eq(after_weld.vertex_count(), prism.vertex_count() - 1, "concave weld retires one vertex");
+	expect_eq(euler(after_weld), 2, "concave weld euler");
+	expect(after_weld.signed_volume() > 0.0, "concave weld keeps the volume positive");
+	expect(validate(after_weld).ok(), "concave weld stays closed");
+
+	MeshEdit collapsed(prism);
+	expect(ops::collapse(collapsed, { corners[2], corners[3] }).ok(), "collapse two concave-bay corners");
+	Mesh after_collapse;
+	expect(std::move(collapsed).commit(after_collapse).ok(), "concave collapse commit");
+	expect(after_collapse.vertex_count() < prism.vertex_count(), "concave collapse retires vertices");
+	expect_eq(euler(after_collapse), 2, "concave collapse euler");
+	expect(after_collapse.signed_volume() > 0.0, "concave collapse keeps the volume positive");
+	expect(validate(after_collapse).ok(), "concave collapse stays closed");
 }
 
 SLAB_TEST(delete_faces_leaves_a_hole_that_cannot_commit) {

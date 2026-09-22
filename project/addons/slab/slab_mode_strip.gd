@@ -3,6 +3,7 @@ extends HBoxContainer
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabIcons := preload("res://addons/slab/slab_icons.gd")
+const SlabActions := preload("res://addons/slab/slab_actions.gd")
 
 const MODE_ICONS: Dictionary = {
 	SlabSelection.Mode.OBJECT: "MeshInstance3D",
@@ -30,6 +31,7 @@ const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 var _selection: RefCounted
 var _metrics: RefCounted
 var _buttons: Dictionary = {}
+var _with_labels: bool = false
 
 
 static func keycode_for(mode: int) -> int:
@@ -46,6 +48,7 @@ static func mode_for_keycode(keycode: int) -> int:
 func setup(selection: RefCounted, with_labels: bool, metrics: RefCounted = null) -> void:
 	_selection = selection
 	_metrics = metrics if metrics != null else SlabMetrics.at_scale(1.0)
+	_with_labels = with_labels
 	add_theme_constant_override("separation", 2)
 	var group := ButtonGroup.new()
 	for mode in SlabSelection.MODE_LABELS:
@@ -55,14 +58,27 @@ func setup(selection: RefCounted, with_labels: bool, metrics: RefCounted = null)
 
 
 func refresh() -> void:
+	var external_only: bool = _selection.has_only_external_meshes()
 	for mode in _buttons:
 		var button: Button = _buttons[mode]
 		button.set_pressed_no_signal(mode == _selection.mode)
+		if mode != SlabSelection.Mode.OBJECT:
+			button.disabled = external_only
+			if external_only:
+				button.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
+			else:
+				var lines := PackedStringArray()
+				if not _with_labels:
+					lines.append(SlabSelection.MODE_LABELS[mode])
+				lines.append(MODE_HINTS[mode])
+				lines.append("Shortcut %s." % OS.get_keycode_string(MODE_KEYS[mode]))
+				button.tooltip_text = "\n".join(lines)
 
 
 func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	var button := Button.new()
 	button.icon = SlabIcons.texture(MODE_ICONS[mode], _metrics.scale())
+	button.add_theme_constant_override("icon_max_width", int(_metrics.px(16.0)))
 	button.text = SlabSelection.MODE_LABELS[mode] if with_label else ""
 	var lines := PackedStringArray()
 	if not with_label:
@@ -87,7 +103,7 @@ func _make_button(mode: int, group: ButtonGroup, with_label: bool) -> Button:
 	button.accessibility_name = SlabSelection.MODE_LABELS[mode] + " mode"
 	button.accessibility_description = MODE_HINTS[mode]
 	button.set_meta("slab_mode", mode)
-	button.custom_minimum_size = Vector2(_metrics.px(100.0 if with_label else 40.0), _metrics.px(36.0))
+	button.custom_minimum_size = Vector2(_metrics.px(80.0 if with_label else 28.0), _metrics.px(28.0))
 	button.add_theme_font_size_override("font_size", _metrics.font(15))
 	button.pressed.connect(func() -> void: _selection.request_mode(mode))
 	_buttons[mode] = button

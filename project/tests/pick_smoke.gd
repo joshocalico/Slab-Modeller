@@ -113,6 +113,20 @@ func _run() -> void:
 		and not SlabPick.all_solids(_solid.get_parent()).has(_other),
 		"a hidden solid is absent from viewport picking and occlusion")
 	_other.visible = true
+	var nested: Node3D = ClassDB.instantiate("SlabSolid")
+	_other.add_child(nested)
+	nested.call("make_box", Vector3.ONE)
+	var isolated_selection := SlabSelection.new()
+	isolated_selection.set_objects([nested])
+	isolated_selection.enter_isolation(_solid.get_parent())
+	_expect(not SlabPick.all_solids(_solid.get_parent()).has(_other)
+		and SlabPick.all_solids(_solid.get_parent()).has(nested),
+		"isolating a nested solid excludes its hidden ancestor mesh from picking")
+	_expect(SlabPick.candidates(_other, SlabSelection.Mode.FACE, _camera, other_screen).is_empty(),
+		"hidden ancestor mesh cannot supply component picks")
+	isolated_selection.exit_isolation()
+	_expect(SlabPick.all_solids(_solid.get_parent()).has(_other), "exiting isolation restores ancestor picks")
+	nested.free()
 	var hidden_parent := Node3D.new()
 	_solid.get_parent().add_child(hidden_parent)
 	var hidden_child: Node3D = ClassDB.instantiate("SlabSolid")

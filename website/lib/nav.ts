@@ -46,6 +46,7 @@ export const GUIDE_NAV: NavGroup[] = [
       { href: "/guide/how-to/round-beveled-edges", label: "Round beveled edges" },
       { href: "/guide/how-to/unwrap-uvs", label: "Mark seams and unwrap UVs" },
       { href: "/guide/how-to/understand-refused-edits", label: "Understand refused edits" },
+      { href: "/guide/how-to/promote-an-external-mesh", label: "Promote an External mesh" },
       {
         href: "/guide/how-to/create-a-solid",
         label: "Create a solid",

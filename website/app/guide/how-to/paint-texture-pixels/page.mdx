@@ -4,52 +4,62 @@ export const metadata = { title: "Paint texture pixels" };
 
 # Paint texture pixels
 
-Use this when you want to draw into a face material's albedo texture.
+Paint a face material's Albedo, Roughness, or Emission texture in the **Paint** workspace.
+
+<video controls preload="metadata" width="100%" src="/videos/v1/v1-05-surface-paint.mp4"></video>
 
 ## Prepare one face
 
 1. Select a `SlabSolid` and click **Face** in the Slab header.
 2. Select the face.
-3. Click **Surface Paint** in the Slab header.
+3. Click **UV** in the Slab header.
 4. To use another material, choose it with a material chip or the picker, then click **Assign**. For a blank image on a default-material face, leave Brush empty.
-5. Click **Pixel**. If the material has no image, set **New image px** to the desired image size.
+5. Click **Paint**. If the material has no image, set **New image px** to the desired image size.
 6. If the hint asks for **Make Unique**, click it to copy the shared material or create a blank image. An already editable Texture is ready to paint.
 
-You can also open Surface Paint with only the solid selected. In **Material / UV**, the first click on a face selects it and adopts its existing material and UV values without editing the solid. Once a Brush is chosen, further face clicks apply it. For a default-material face, switch to Pixel and use Make Unique to create its image.
+You can also open UV with only the solid selected. In **UV**, the first click on a face selects it and adopts its existing material and UV values without editing the solid. Once a Brush is chosen, further face clicks apply it. For a default-material face, click **Paint** and use Make Unique to create its image.
 
-In Pixel, Make Unique copies the selected faces' common material into a new slot and assigns that slot to the selection. Pixel painting is refused until the material is unique, so a stroke cannot rewrite every face that shares the source material.
+In Paint, Make Unique copies the selected faces' common material into a new slot and assigns that slot to the selection. Painting is refused until the material is editable. Faces assigned the same editable copy still share its artwork.
 
 For a material with no texture, **Make Unique** creates a square image at **New image px**. When a material already has artwork, Slab preserves its dimensions. **Texture px** then shows the image width and cannot resize it.
 
 ## Paint and save
 
-1. Click **Pixel**.
-2. Scroll the left control column to **Color**, **Radius**, and **Opacity**, then set the brush.
+1. Click **Paint** and choose **Albedo**, **Roughness**, or **Emission**.
+2. Set **Color**, **Radius**, and **Opacity** in the left dock (Flatten sits above the brush fields). The dock stays beside the canvas.
 3. Drag on the canvas, or drag over a front-facing face in the 3D view.
 4. Click **Save Paint**.
 5. Save the scene.
 
 <Figure
   src="/img/panel-pixel-paint.png"
-  alt="Surface Paint in Pixel mode, with the left column scrolled to Color, Radius, Opacity, and Show UV beside the saved roof texture."
-  caption="Pixel keeps the image visible while you scroll its controls. Save Paint and Resize are above the Brush settings. Click the image to view the controls at full size."
+  alt="Paint workspace with Layer 1, Flatten, a red brush color, Radius 8, and Opacity 1 beside a teal texture with a yellow H marking."
+  caption="Paint controls sit beside the canvas. Scroll the control column on a compact dock."
 />
 
-Turn on **Show UV** to see the selected faces' outlines over the image. If the hint reports a mixed-material selection, click **Face** to leave Paint, select faces sharing one material, then reopen Surface Paint. This also lets you change the selected faces without painting them.
+Turn on **Show UV** to see the selected faces' outlines over the image. If the hint reports a mixed-material selection, click **Face** to leave Paint, select faces sharing one material, then reopen **Paint**. This also lets you change the selected faces without painting them.
 
 **Texture** names the image you are painting. A mark appears at every repeat of that image on the model. A 3D stroke stays on the clicked face's material and skips other materials and backfaces. Faces sharing the same paintable material share its artwork, including faces on other solids.
 
-To clear the transform widget from the painting view, open the view-name menu at the upper left of Godot's 3D viewport, then turn off **View Transform Gizmo**. The menu may be named **Perspective** or **Front Orthogonal**, depending on the camera. This keeps the selected solid and Inspector available. Turn the option on again when you want the transform handles.
+UV and Paint temporarily lock the target's transform gizmo while keeping it selected. Leaving the workspace restores its previous lock state. Saving while the workspace is open preserves that original state.
 
-**Save Paint** writes `res://slab_paint/<solid>_m<slot>.png` and reports the image path. Save the scene afterward to keep the material and mapping changes too.
+**Save Paint** writes the current channel's composite image, then flattens its visible layers and reports the image path. If writing the image fails, the editable layers stay intact. Albedo uses `res://slab_paint/<solid>_m<slot>.png`. Roughness and Emission add `_roughness` and `_emission` before `.png`. Save each channel you paint, then save the scene to keep the material, editable layers, and mapping changes.
 
-Undo and redo replace complete stroke images. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes Surface Paint.
+Use **Fill Layer** to replace the active layer with the Brush Color and Opacity in one undoable action. For an opaque black fill, use black with full color alpha, Brush Opacity 1, and layer Opacity 1.
+
+Use **Layers +** to add a layer. Click a layer row to select it, use the eye control to hide or show it, and set its layer Opacity. **Flatten** combines visible layers into the current channel's base image. Hidden layers stay editable after Flatten and after a scene save and reload.
+
+Undo and redo restore the edited material and channel even when you have switched to another target. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes the active workspace.
 
 ## Adjust texture placement
 
-Switch to **Material / UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to enlarge the complete selection within the canvas, including small islands. Scroll zooms around the pointer from that fitted view. Drag on the canvas to move the selected faces' UVs. Shift-drag scales them. Ctrl-drag rotates them; use Cmd-drag on macOS. Middle-drag pans the view.
+Switch to **UV**. The canvas shows the selected faces' complete UV outlines over repeated texture tiles. Click **Fit UV** to enlarge the complete selection within the canvas, including small islands. Fit UV only frames the view. Click **Pack** in Mapping to re-atlas existing islands without unfolding them again. Scroll zooms around the pointer from that fitted view. Middle-drag pans the view.
 
-Scale and rotation respond to the distance you drag on screen, so zooming in does not make those gestures slower. Horizontal Shift-drag changes Repeat U; vertical Shift-drag changes Repeat V. Drag diagonally to change both. Rotation uses horizontal motion. Ordinary dragging moves the UVs with the pointer at the current zoom.
+Choose **Place** above the canvas to edit the mapping of the selected 3D faces. Drag to move, Shift-drag to scale, or Cmd-drag on macOS to rotate. Use Ctrl-drag to rotate on other systems. Escape or right-click cancels the drag. Releasing the mouse commits one undoable change.
+
+Horizontal Shift-drag changes Repeat U; vertical Shift-drag changes Repeat V. Drag diagonally to change both. Rotation uses horizontal motion. Scale and rotation respond to screen distance independently of canvas zoom.
+
+To inspect UV elements, choose **UV Vert**, **UV Edge**, or **UV Face**, then click an element on the canvas. Shift-click toggles elements in that UV selection. Choose **Place** again to edit the face mapping. The numeric Placement fields also edit the faces selected in the 3D view.
 
 The canvas background previews the Brush. The outlines and UV edits belong to the selected faces. If the canvas caption says **Assign to apply to selection**, click **Assign** to put that material on the faces before adjusting its placement.
 
@@ -57,15 +67,13 @@ For exact placement, set **Repeat U**, **Repeat V**, **Offset U**, **Offset V**,
 
 To use the selected faces' current material, click **Sample**. Alt-click a front-facing face in the 3D view to sample its material and UV values without assigning the previous Brush.
 
-The Brush stays active when you change the selection inside Surface Paint. A plain viewport click applies it to the hit face. The same Brush material is applied when you click a face on another solid.
-
-Press Escape or right-click during a canvas drag to restore the previous UV placement. Changing selection or switching tools also cancels the drag. Releasing the mouse commits one undoable change.
+The Brush stays active when you change the selection inside UV. A plain viewport click applies it to the hit face. The same Brush material is applied when you click a face on another solid.
 
 For seam selection and new UV islands, follow [Unwrap UVs](/guide/how-to/unwrap-uvs). Placement adjusts the mapping already on the faces.
 
 ## Resize the image
 
-1. In **Pixel**, click **Resize…**. Shared materials need **Make Unique** first.
+1. In **Paint**, click **Resize…**. Shared materials need **Make Unique** first.
 2. Set **Width** or **Height** in pixels. **Keep aspect** adjusts the other dimension. Turn it off to change both dimensions independently.
 3. Choose **Smooth** for blended resampling or **Nearest** to preserve hard pixel edges.
 4. Click **Apply Resize**, or **Cancel** to keep the current image.

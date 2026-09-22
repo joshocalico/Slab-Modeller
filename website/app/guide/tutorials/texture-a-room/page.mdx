@@ -14,11 +14,11 @@ If you do not have a room yet, do [Block out a room](/guide/tutorials/block-out-
 2. Press <kbd>4</kbd> for Face mode.
 3. Click one wall face.
 4. Shift-click the other wall faces that need plaster.
-5. Click **Surface Paint** in the Slab header.
+5. Click **UV** in the Slab header.
 
-The Slab header names the room, reports the selected face count, and shows the selection's material. Faces with no assigned material start with no brush material. Stay on **Material / UV**.
+The Slab header names the room, reports the selected face count, and shows the selection's material. Faces with no assigned material start with no brush material. Stay on **UV**.
 
-The Material / UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a material chip or using the material picker changes this preview, but the header continues to report the material on the faces. To apply that palette choice, click **Assign** or paint the Brush onto a face in the 3D view.
+The UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a material chip or using the material picker changes this preview, but the header continues to report the material on the faces. To apply that palette choice, click **Assign** or paint the Brush onto a face in the 3D view.
 
 ## Create the plaster material
 
@@ -26,7 +26,7 @@ The Material / UV canvas previews the current Brush texture beneath the selected
 2. Choose **New StandardMaterial3D**.
 3. Click the material preview to inspect the new resource.
 4. In the Inspector, set **Albedo > Color** to a warm plaster colour.
-5. Click **Assign** in Surface Paint.
+5. Click **Assign** in UV.
 
 Choosing the material previews it as the Brush. Assign adds it to the room and applies it to the selected walls in one undoable edit.
 
@@ -34,9 +34,9 @@ If you opened the full Slab source checkout, you can use the bundled plaster ins
 
 ## Create the floor material
 
-1. Click the highlighted Face mode button to leave Surface Paint.
+1. Click the highlighted Face mode button to leave UV.
 2. Click the floor face.
-3. Click **Surface Paint** again.
+3. Click **UV** again.
 4. Open the material picker and choose **New StandardMaterial3D**.
 5. Click the material preview, then set **Albedo > Color** to a floor brown.
 6. In the Inspector, set **Albedo > Texture** to a repeating floor image from your project.
@@ -54,7 +54,7 @@ Assign applies the new material to the selected floor. The walls keep their plas
 
 ## Repeat the floor texture
 
-1. Keep the floor selected and stay on **Material / UV**.
+1. Keep the floor selected and stay on **UV**.
 2. Set **Repeat U** to `2`.
 3. Set **Repeat V** to `2`.
 4. Click **Apply UV**.
@@ -69,13 +69,13 @@ Compared with the default repeat of `1`, the floor pattern now repeats twice as 
 
 ## Inspect an existing textured face
 
-When you select one or more faces with a common material before opening Surface Paint, Slab adopts that material as the **Brush** without changing the faces. A mixed or default-material selection opens with no assignable brush.
+When you select one or more faces with a common material before opening UV, Slab adopts that material as the **Brush** without changing the faces. A mixed or default-material selection opens with no assignable brush.
 
-Select the textured face before opening Surface Paint when you want to inspect or adjust its existing material and UV placement. You can also enter with only the solid selected. With Brush empty, click a textured face in **Material / UV** to select it and adopt its material and UV values without editing the scene. Further face clicks apply the chosen Brush.
+Select the textured face before opening UV when you want to inspect or adjust its existing material and UV placement. You can also enter with only the solid selected. With Brush empty, click a textured face in **UV** to select it and adopt its material and UV values without editing the scene. Further face clicks apply the chosen Brush.
 
-While Surface Paint stays open, changing the selection keeps the current Brush. Click **Sample** to adopt the selected faces' common material without assigning anything. Select faces that use one material before sampling. You can also Alt-click a front-facing face in the 3D view to sample that face and its UV values directly.
+While UV stays open, changing the selection keeps the current Brush. Click **Sample** to adopt the selected faces' common material without assigning anything. Select faces that use one material before sampling. You can also Alt-click a front-facing face in the 3D view to sample that face and its UV values directly.
 
-Material assignment and UV placement stay in **Material / UV**. **Save Paint** appears only in **Pixel**, where it saves changes drawn into an image.
+Material assignment and UV placement stay in **UV**. **Save Paint** appears only in **Paint**, where it saves changes drawn into an image.
 
 ## Check the room
 

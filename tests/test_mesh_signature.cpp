@@ -48,4 +48,11 @@ SLAB_TEST(mesh_signature_tracks_faces_and_attributes_without_handle_order) {
 	Mesh changed_uv;
 	slabtest::expect(std::move(painted).commit(changed_uv).ok(), "commit changed unfolded mapping");
 	slabtest::expect(baseline != slabtest::mesh_signature(changed_uv), "signature includes unfolded UV covectors and origin");
+	MeshEdit resized_atlas(changed_uv);
+	attrs.uv_texture_resolution = 2048;
+	resized_atlas.set_attrs(faces.front(), attrs);
+	Mesh changed_density;
+	slabtest::expect(std::move(resized_atlas).commit(changed_density).ok(), "commit source atlas resolution");
+	slabtest::expect(slabtest::mesh_signature(changed_uv) != slabtest::mesh_signature(changed_density),
+			"signature includes authored texture resolution");
 }

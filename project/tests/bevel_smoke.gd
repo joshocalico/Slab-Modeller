@@ -100,5 +100,107 @@ func _run() -> void:
 	var external: PackedByteArray = solid.get("data")
 	actions.operation_apply_requested.emit()
 	check(not actions.operation_active and solid.get("data") == external, "stale preview cannot overwrite external geometry")
+
+	_check_face_bevel_perimeter()
+	_check_edge_bevel_regression()
 	print("bevel_smoke: %d failures" % failures)
 	quit(1 if failures else 0)
+
+
+func _check_face_bevel_perimeter() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(4, 3, 4))
+	var undo := Undo.new()
+	var host = Host.over(root).stub_undo(undo)
+	var session := SlabViewport.new(host)
+	var selection: RefCounted = session.state()
+	selection.solid = solid
+	selection.mode = Selection.Mode.FACE
+	var actions := Actions.new(selection, undo)
+	var reports: Array[String] = []
+	actions.reported.connect(func(message: String) -> void: reports.append(message))
+	session.bind_actions(actions)
+
+	var top := 0
+	for face_id in solid.call("get_faces"):
+		if solid.call("face_normal", face_id).y > 0.9:
+			top = int(face_id)
+			break
+	selection.set_ids(PackedInt64Array([top]))
+	var before: PackedByteArray = solid.get("data")
+	var before_faces: int = solid.call("face_count")
+
+	actions.bevel_amount = 0.1
+	actions.bevel_segments = 2
+	actions.run("bevel_edges")
+	check(actions.operation_active, "Face mode Bevel starts an operation")
+	check(not (selection.operation_preview.get("preview_lines", PackedVector3Array()) as PackedVector3Array).is_empty(),
+		"Face→Bevel shows perimeter preview lines")
+	check(solid.get("data") == before, "Face→Bevel preview does not mutate geometry")
+
+	session.handle(null, key(KEY_ESCAPE))
+	check(not actions.operation_active and solid.get("data") == before, "Face→Bevel Escape cancels without changes")
+
+	selection.mode = Selection.Mode.FACE
+	selection.set_ids(PackedInt64Array([top]))
+	actions.run("bevel_edges")
+	session.handle(null, key(KEY_ENTER))
+	check(not actions.operation_active, "Face→Bevel Enter completes the operation")
+	check(solid.get("data") != before, "Face→Bevel Apply changes geometry")
+	check(int(solid.call("face_count")) > before_faces, "Face→Bevel adds faces for the rounded perimeter")
+	check(selection.mode == Selection.Mode.FACE, "Face→Bevel Apply stays in Face mode")
+	check(selection.ids.size() == 1 and selection.ids[0] == top, "Face→Bevel Apply preserves face selection")
+
+	var beveled: PackedByteArray = solid.get("data")
+	undo.undo()
+	check(solid.get("data") == before, "Face→Bevel undo restores original geometry")
+	check(selection.mode == Selection.Mode.FACE, "Face→Bevel undo stays in Face mode")
+	check(selection.ids.size() == 1 and selection.ids[0] == top, "Face→Bevel undo restores face selection")
+
+	undo.redo()
+	check(solid.get("data") == beveled, "Face→Bevel redo restores beveled geometry")
+	check(selection.mode == Selection.Mode.FACE, "Face→Bevel redo stays in Face mode")
+	solid.free()
+
+	var solid2: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid2)
+	solid2.call("make_box", Vector3(2, 2, 2))
+	selection.solid = solid2
+	selection.mode = Selection.Mode.FACE
+	selection.set_ids(PackedInt64Array(solid2.call("get_faces")))
+	reports.clear()
+	actions.run("bevel_edges")
+	check(not actions.operation_active, "Face→Bevel on all faces (no boundary) refuses to start")
+	check(not reports.is_empty() and reports[-1].contains("no boundary edges"),
+		"Face→Bevel with empty boundary reports clear refusal, got: %s" % (reports[-1] if not reports.is_empty() else "none"))
+	solid2.free()
+
+
+func _check_edge_bevel_regression() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	root.add_child(solid)
+	solid.call("make_box", Vector3(2, 2, 2))
+	var undo := Undo.new()
+	var host = Host.over(root).stub_undo(undo)
+	var session := SlabViewport.new(host)
+	var selection: RefCounted = session.state()
+	selection.solid = solid
+	selection.mode = Selection.Mode.EDGE
+	var actions := Actions.new(selection, undo)
+	session.bind_actions(actions)
+
+	var edge: int = solid.call("get_edges")[0]
+	selection.set_ids(PackedInt64Array([edge]))
+	var before: PackedByteArray = solid.get("data")
+
+	actions.bevel_amount = 0.15
+	actions.bevel_segments = 1
+	actions.run("bevel_edges")
+	check(actions.operation_active, "Edge mode Bevel still starts an operation (regression check)")
+	check(not (selection.operation_preview.get("preview_lines", PackedVector3Array()) as PackedVector3Array).is_empty(),
+		"Edge→Bevel still shows preview lines (regression check)")
+
+	session.handle(null, key(KEY_ENTER))
+	check(not actions.operation_active and solid.get("data") != before, "Edge→Bevel still applies geometry (regression check)")
+	solid.free()

@@ -2,8 +2,10 @@
 extends EditorNode3DGizmoPlugin
 
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SlabXform := preload("res://addons/slab/slab_element_xform.gd")
 const SlabSelectionFrame := preload("res://addons/slab/slab_selection_frame.gd")
+const SlabSoftSelect := preload("res://addons/slab/slab_soft_select.gd")
 
 const PREVIEW := "loop_preview"
 const ARRAY_PREVIEW := "array_preview"
@@ -19,6 +21,7 @@ const HOVER := "hover"
 const FILL := "fill"
 const FILL_HOVER := "fill_hover"
 const PAINT_EDGE := "paint_edge"
+const UV_ELEMENT := "uv_element"
 const WIRE := "wire"
 const WIRE_XRAY := "wire_xray"
 const HOT_XRAY := "hot_xray"
@@ -31,6 +34,7 @@ var _undo: Object
 var _paint: RefCounted
 var _rest_data := PackedByteArray()
 var _rest_frame := Transform3D.IDENTITY
+var _soft_weights: Dictionary = {}
 
 
 func _init() -> void:
@@ -39,6 +43,7 @@ func _init() -> void:
 	create_material(ALIGN_PREVIEW, Color(0.25, 0.9, 1.0, 0.25), false, true)
 	create_material(SNAP_ANCHOR, Color(0.25, 0.95, 1.0), false, true)
 	create_material(UV_SEAM, Color(0.95, 0.2, 0.85), false, true)
+	add_material(UV_ELEMENT, overlay_material(Color(0.2, 0.85, 0.95, 0.35), true, false))
 	add_material(OP_EXTRUDE, overlay_material(Color(0.2, 0.95, 0.85), false, true))
 	add_material(OP_INSET, overlay_material(Color(0.95, 0.72, 0.18), false, true))
 	add_material(OP_BEVEL, overlay_material(Color(0.8, 0.45, 1.0), false, true))
@@ -65,7 +70,7 @@ func _get_gizmo_name() -> String:
 
 
 func _has_gizmo(for_node_3d: Node3D) -> bool:
-	return SlabSelection.is_solid(for_node_3d)
+	return SlabSelection.is_slab_object(for_node_3d)
 
 
 func _subgizmos_intersect_ray(_gizmo: EditorNode3DGizmo, _camera: Camera3D, _screen_pos: Vector2) -> int:
@@ -74,9 +79,15 @@ func _subgizmos_intersect_ray(_gizmo: EditorNode3DGizmo, _camera: Camera3D, _scr
 
 func _get_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int) -> Transform3D:
 	var solid: Node3D = gizmo.get_node_3d()
-	if solid == null or _selection == null or _selection.solid != solid:
+	if solid == null or _selection == null:
 		return Transform3D.IDENTITY
-	var frame := SlabSelectionFrame.from_selection(_selection)
+	var sel_solid: Node3D = _selection.solid
+	if sel_solid != null and sel_solid != solid:
+		return Transform3D.IDENTITY
+	if sel_solid == null:
+		sel_solid = solid
+	var frame := SlabSelectionFrame.make(sel_solid, _selection.mode, _selection.ids,
+		_selection.pivot_mode, _selection.orientation, _selection.active_id, _selection.custom_pivot_world)
 	var result: Transform3D = frame.get("local", Transform3D.IDENTITY) if frame.get("valid", false) else Transform3D.IDENTITY
 	return result
 
@@ -92,8 +103,20 @@ func _set_subgizmo_transform(gizmo: EditorNode3DGizmo, _subgizmo_id: int, xform:
 			_rest_data = PackedByteArray()
 			return
 		_rest_frame = frame["local"]
+		_soft_weights = _compute_soft_weights(solid)
 	solid.set("data", _rest_data)
-	SlabXform.transform(solid, _selection.mode, _selection.ids, xform * _rest_frame.affine_inverse())
+	var delta_xform: Transform3D = xform * _rest_frame.affine_inverse()
+	if _soft_weights.is_empty():
+		SlabXform.transform(solid, _selection.mode, _selection.ids, delta_xform)
+	else:
+		SlabXform.transform_weighted(solid, delta_xform, _soft_weights)
+
+
+func _compute_soft_weights(solid: Node3D) -> Dictionary:
+	if _selection == null or not _selection.soft_select or not _selection.soft_select_allowed():
+		return {}
+	return SlabSoftSelect.compute_weights(solid, _selection.mode, _selection.ids,
+		_selection.soft_radius, _selection.soft_falloff)
 
 
 func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restores: Array, cancel: bool) -> void:
@@ -101,6 +124,7 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 	if solid == null:
 		_rest_data = PackedByteArray()
 		_rest_frame = Transform3D.IDENTITY
+		_soft_weights = {}
 		return
 	if cancel and not _rest_data.is_empty():
 		solid.set("data", _rest_data)
@@ -113,23 +137,33 @@ func _commit_subgizmos(gizmo: EditorNode3DGizmo, _ids: PackedInt32Array, _restor
 			_undo.commit_action(false)
 	_rest_data = PackedByteArray()
 	_rest_frame = Transform3D.IDENTITY
+	_soft_weights = {}
 
 
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	gizmo.clear()
 	var solid := gizmo.get_node_3d()
-	if solid == null or not is_instance_valid(solid) or not solid.has_method("get_edges"):
+	if solid == null or not is_instance_valid(solid):
+		return
+	if SlabExternalMesh.is_external_mesh(solid):
+		_redraw_external_mesh(gizmo, solid)
+		return
+	if not solid.has_method("get_edges"):
 		return
 	if _selection != null and _selection.operation_preview.get("solid") == solid and solid.call("has_display_preview"):
 		_draw_operation_preview(gizmo, solid)
 		return
 	var wire := PackedVector3Array()
 	for edge in solid.get_edges():
+		if not _edge_is_display_visible(solid, edge):
+			continue
 		wire.append_array(solid.edge_endpoints(edge))
 	if not wire.is_empty():
 		gizmo.add_lines(wire, get_material(_line_material(WIRE), gizmo), false)
 	var seams := PackedVector3Array()
 	for edge in PackedInt64Array(solid.call("get_uv_seams")):
+		if not _edge_is_display_visible(solid, edge):
+			continue
 		seams.append_array(solid.call("edge_endpoints", edge))
 	if not seams.is_empty():
 		gizmo.add_lines(seams, get_material(UV_SEAM, gizmo), false)
@@ -166,8 +200,25 @@ func _redraw(gizmo: EditorNode3DGizmo) -> void:
 			_draw_element(gizmo, solid, mode, id, false)
 	if hovered:
 		_draw_element(gizmo, solid, mode, _selection.hover_id, true)
+	_draw_uv_element_highlight(gizmo, solid)
 	# Keep operation handles above face fills, hover outlines, and selection wire.
 	_draw_operation_preview(gizmo, solid)
+
+
+func _draw_uv_element_highlight(gizmo: EditorNode3DGizmo, solid: Node3D) -> void:
+	if _selection == null or _paint == null or not _paint.active:
+		return
+	if not _selection.objects.has(solid):
+		return
+	var uv_faces: PackedInt64Array = _selection.uv_related_3d_faces()
+	if uv_faces.is_empty():
+		return
+	for face in uv_faces:
+		if not _selection.ids.has(face):
+			var corners: PackedVector3Array = solid.face_corners(face)
+			var normal: Vector3 = solid.face_normal(face)
+			_draw_face_fill(gizmo, corners, normal, UV_ELEMENT)
+			gizmo.add_lines(_outline(corners), get_material(_line_material(HOT), gizmo), false)
 
 
 func _draw_snap_align_preview(gizmo: EditorNode3DGizmo, solid: Node3D) -> void:
@@ -270,6 +321,17 @@ static func configure_overlay_material(material: StandardMaterial3D, transparent
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.no_depth_test = on_top
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if transparent else BaseMaterial3D.TRANSPARENCY_DISABLED
+
+
+func _edge_is_display_visible(solid: Node3D, edge: int) -> bool:
+	if solid == null or not solid.has_method("is_display_face_visible") or not solid.has_method("edge_faces"):
+		return true
+	if not bool(solid.call("has_display_face_mask")):
+		return true
+	for face in PackedInt64Array(solid.call("edge_faces", edge)):
+		if bool(solid.call("is_display_face_visible", face)):
+			return true
+	return false
 
 
 func _draw_idle_elements(gizmo: EditorNode3DGizmo, solid: Node3D, mode: int) -> void:
@@ -385,3 +447,44 @@ func _selection_origin(solid: Node3D) -> Vector3:
 	if solid == null or _selection == null or _selection.ids.is_empty():
 		return Vector3.ZERO
 	return SlabXform.centroid(solid, _selection.mode, _selection.ids)
+
+
+func _redraw_external_mesh(gizmo: EditorNode3DGizmo, external: Node3D) -> void:
+	if external == null or not SlabExternalMesh.is_external_mesh(external):
+		return
+	var mesh_node: MeshInstance3D = external as MeshInstance3D
+	if mesh_node == null or mesh_node.mesh == null:
+		return
+	var wire := PackedVector3Array()
+	for surface_idx in mesh_node.mesh.get_surface_count():
+		var arrays: Array = mesh_node.mesh.surface_get_arrays(surface_idx)
+		if arrays.is_empty():
+			continue
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX] if arrays.size() > Mesh.ARRAY_VERTEX else PackedVector3Array()
+		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays.size() > Mesh.ARRAY_INDEX else PackedInt32Array()
+		if indices.is_empty():
+			for i in range(0, verts.size(), 3):
+				if i + 2 < verts.size():
+					wire.append(verts[i])
+					wire.append(verts[i + 1])
+					wire.append(verts[i + 1])
+					wire.append(verts[i + 2])
+					wire.append(verts[i + 2])
+					wire.append(verts[i])
+		else:
+			for i in range(0, indices.size(), 3):
+				if i + 2 < indices.size():
+					var i0: int = indices[i]
+					var i1: int = indices[i + 1]
+					var i2: int = indices[i + 2]
+					if i0 < verts.size() and i1 < verts.size() and i2 < verts.size():
+						wire.append(verts[i0])
+						wire.append(verts[i1])
+						wire.append(verts[i1])
+						wire.append(verts[i2])
+						wire.append(verts[i2])
+						wire.append(verts[i0])
+	if not wire.is_empty():
+		gizmo.add_lines(wire, get_material(_line_material(WIRE), gizmo), false)
+	if _selection != null and _selection.objects.has(external):
+		gizmo.add_lines(wire, get_material(_line_material(HOT), gizmo), false)

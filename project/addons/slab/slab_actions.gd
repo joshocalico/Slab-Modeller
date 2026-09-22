@@ -5,6 +5,12 @@ const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 const SlabShapes := preload("res://addons/slab/slab_shapes.gd")
 const SlabTopology := preload("res://addons/slab/slab_topology.gd")
 const SlabOperationHandles := preload("res://addons/slab/slab_operation_handles.gd")
+const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
+
+const PROMOTE_FIRST_TOOLTIP := "Convert to a Slab solid first…"
+const PROMOTE_LABEL := "Promote to Slab Solid"
+const PROMOTE_SUCCESS := "Promoted to Slab solid. Topology tools are available."
 
 signal reported(text: String)
 signal status_reset_requested
@@ -14,8 +20,13 @@ signal operation_segments_changed(value: int)
 signal operation_apply_requested
 signal operation_cancel_requested
 signal operation_state_changed
+signal op_session_started(op_id: String, title: String, fields: Array)
+signal op_session_updated(op_id: String, values: Dictionary, apply_enabled: bool)
+signal op_session_ended(op_id: String, reason: String)
 var operation_active := false
 var operation_amount := 0.5
+var _op_session_id := ""
+var _op_session_apply_enabled := true
 signal loop_requested
 signal loop_settings_changed
 signal loop_values_updated
@@ -40,6 +51,8 @@ signal snap_align_cancel_requested
 signal object_order_changed(nodes: Array)
 signal create_placement_requested(row: Dictionary, plan: Dictionary)
 signal create_settings_changed
+signal export_requested(solids: Array)
+signal import_requested
 
 const SECTION_CREATE := "Create"
 const SECTION_SELECTION := "Selection"
@@ -111,6 +124,7 @@ var uv_texture_resolution: int = 1024
 var material_slot: int = 0
 
 var shapes: RefCounted
+var keybind_profiles: RefCounted
 
 var _selection: RefCounted
 var _undo: Object
@@ -132,6 +146,123 @@ func remember_operation_amount(kind: int, value: float) -> void:
 		SlabOperationHandles.Kind.BEVEL: bevel_amount = value
 
 
+const OP_SESSION_IDS: Array[String] = ["extrude", "inset", "bevel"]
+const OP_SESSION_TITLES: Array[String] = ["Extrude", "Inset", "Bevel"]
+
+
+func _op_session_kind_to_id(kind: int) -> String:
+	if kind >= 0 and kind < OP_SESSION_IDS.size():
+		return OP_SESSION_IDS[kind]
+	return ""
+
+
+func _op_session_id_to_kind(op_id: String) -> int:
+	return OP_SESSION_IDS.find(op_id)
+
+
+func op_session_fields_for(op_id: String) -> Array:
+	match op_id:
+		"extrude":
+			return [{"id": "distance", "label": "Distance", "type": "float", "suffix": "m", "min": EXTRUDE_FLOOR, "max": AMOUNT_CEILING, "step": 0.001}]
+		"inset":
+			return [{"id": "distance", "label": "Distance", "type": "float", "suffix": "m", "min": AMOUNT_FLOOR, "max": AMOUNT_CEILING, "step": 0.001}]
+		"bevel":
+			return [
+				{"id": "distance", "label": "Width", "type": "float", "suffix": "m", "min": AMOUNT_FLOOR, "max": AMOUNT_CEILING, "step": 0.001},
+				{"id": "segments", "label": "Segments", "type": "int", "min": 1, "max": 16, "step": 1}
+			]
+	return []
+
+
+func op_session_active() -> bool:
+	return operation_active and _op_session_id != ""
+
+
+func op_session_id() -> String:
+	return _op_session_id if operation_active else ""
+
+
+func op_session_title() -> String:
+	var kind := _op_session_id_to_kind(_op_session_id)
+	if kind >= 0 and kind < OP_SESSION_TITLES.size():
+		return OP_SESSION_TITLES[kind]
+	return ""
+
+
+func op_session_fields() -> Array:
+	return op_session_fields_for(_op_session_id)
+
+
+func op_session_values() -> Dictionary:
+	if not operation_active:
+		return {}
+	match _op_session_id:
+		"extrude": return {"distance": operation_amount}
+		"inset": return {"distance": operation_amount}
+		"bevel": return {"distance": operation_amount, "segments": bevel_segments}
+	return {}
+
+
+func op_session_apply_enabled() -> bool:
+	return _op_session_apply_enabled
+
+
+func op_session_remembered(op_id: String) -> Dictionary:
+	match op_id:
+		"extrude": return {"distance": extrude_amount}
+		"inset": return {"distance": inset_amount}
+		"bevel": return {"distance": bevel_amount, "segments": bevel_segments}
+	return {}
+
+
+func op_session_set_value(field_id: String, value: Variant) -> void:
+	if not operation_active:
+		return
+	match field_id:
+		"distance":
+			operation_amount_changed.emit(float(value))
+		"segments":
+			operation_segments_changed.emit(int(value))
+
+
+func op_session_apply() -> void:
+	if not operation_active or not _op_session_apply_enabled:
+		return
+	operation_apply_requested.emit()
+
+
+func op_session_cancel() -> void:
+	if not operation_active:
+		return
+	operation_cancel_requested.emit()
+
+
+func notify_op_session_start(kind: int) -> void:
+	_op_session_id = _op_session_kind_to_id(kind)
+	_op_session_apply_enabled = true
+	if _op_session_id != "":
+		var title := op_session_title()
+		var fields: Array = op_session_fields()
+		op_session_started.emit(_op_session_id, title, fields)
+
+
+func notify_op_session_update(apply_enabled: bool) -> void:
+	if _op_session_id == "":
+		return
+	_op_session_apply_enabled = apply_enabled
+	var values: Dictionary = op_session_values()
+	op_session_updated.emit(_op_session_id, values, apply_enabled)
+
+
+func notify_op_session_end(reason: String) -> void:
+	if _op_session_id == "":
+		return
+	var ended_id := _op_session_id
+	_op_session_id = ""
+	_op_session_apply_enabled = true
+	op_session_ended.emit(ended_id, reason)
+
+
 func swap_boolean_operands() -> void:
 	if _selection.mode != SlabSelection.Mode.OBJECT or _selection.objects.size() != 2:
 		_report("Swap operands needs exactly two solids in Object mode.")
@@ -146,6 +277,7 @@ func _init(selection: RefCounted = null, undo: Object = null) -> void:
 	_selection = selection if selection != null else SlabSelection.new()
 	_undo = undo
 	shapes = SlabShapes.new()
+	keybind_profiles = SlabKeybindProfiles.new()
 	_rows = _build()
 
 
@@ -170,7 +302,7 @@ func command_sections_for(mode: int) -> Array[Dictionary]:
 	for heading in SECTION_ORDER:
 		var rows: Array[Dictionary] = []
 		for row in _rows:
-			if row["modes"].has(mode) and section_of(row) == heading:
+			if section_of(row) == heading and _row_visible_in_mode(row, mode):
 				rows.append(row)
 		if rows.is_empty():
 			continue
@@ -185,12 +317,35 @@ static func section_of(row: Dictionary) -> String:
 	var id: String = str(row.get("id", ""))
 	if id.begins_with("uv_") or id == "set_face_material":
 		return SECTION_UV
+	if id == "import_mesh":
+		return "Object"
 	var modes: Array = row["modes"]
+	if id == "bevel_edges":
+		return "Edge"
 	if modes.size() > 1:
 		return SECTION_SELECTION
 	if modes[0] == SlabSelection.Mode.OBJECT and row["min_count"] == 0:
 		return SECTION_CREATE
 	return SlabSelection.MODE_LABELS[modes[0]]
+
+
+const EXTERNAL_MESH_ALLOWED_ACTIONS: Array[String] = [
+	"export_solids", "import_mesh", "promote_to_solid",
+]
+
+
+func promote_visible() -> bool:
+	if _selection.mode != SlabSelection.Mode.OBJECT:
+		return false
+	return _selection.has_only_external_meshes() and _selection.count() == 1
+
+
+func _row_visible_in_mode(row: Dictionary, mode: int) -> bool:
+	if not row["modes"].has(mode):
+		return false
+	if str(row.get("id", "")) == "promote_to_solid":
+		return promote_visible()
+	return true
 
 
 func disabled_reason(row: Dictionary) -> String:
@@ -199,13 +354,31 @@ func disabled_reason(row: Dictionary) -> String:
 	var modes: Array = row["modes"]
 	if not modes.has(_selection.mode):
 		return "%s needs %s mode." % [row["label"], _mode_list(modes)]
+	if str(row.get("id", "")) == "promote_to_solid":
+		if not promote_visible():
+			return "Select an External mesh to promote."
+		return ""
+	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):
+		return PROMOTE_FIRST_TOOLTIP
 	var exact: int = row.get("exact_count", 0)
 	if exact > 0 and _selection.count() != exact:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
 	var need: int = row["min_count"]
 	if _selection.count() < need:
+		if row["id"] == "export_solids":
+			return "Select a solid to export."
 		return "%s needs %s." % [row["label"], _element_count(_selection.mode, need)]
 	return ""
+
+
+func _is_external_mesh_allowed(row: Dictionary) -> bool:
+	var action_id: String = row.get("id", "")
+	if action_id in EXTERNAL_MESH_ALLOWED_ACTIONS:
+		return true
+	var section: String = section_of(row)
+	if section == SECTION_CREATE:
+		return true
+	return false
 
 
 func tooltip_of(row: Dictionary) -> String:
@@ -237,11 +410,22 @@ func request_create_placement(id: StringName) -> void:
 
 func run_shortcut(keycode: int) -> bool:
 	for row in _rows:
-		if row["shortcut"] != keycode or disabled_reason(row) != "":
+		var active_shortcut: int = shortcut_of(row)
+		if active_shortcut == 0 or active_shortcut != keycode or disabled_reason(row) != "":
 			continue
 		_apply(row, row["handler"].call())
 		return true
 	return false
+
+
+func shortcut_of(row: Dictionary) -> int:
+	var id: String = str(row.get("id", ""))
+	if id == "":
+		return int(row.get("shortcut", 0))
+	var profile_shortcut: int = keybind_profiles.shortcut_for(id)
+	if profile_shortcut != 0:
+		return profile_shortcut
+	return int(row.get("shortcut", 0))
 
 
 func _apply(row: Dictionary, plan: Dictionary) -> void:
@@ -409,6 +593,10 @@ func _unwrap_op() -> Dictionary:
 	return { "run": _unwrap_target }
 
 
+func _pack_op() -> Dictionary:
+	return { "run": _pack_target }
+
+
 func _operation_op(kind: int) -> Dictionary:
 	return { "preview": kind }
 
@@ -545,6 +733,211 @@ func _align_face_op() -> Dictionary:
 	return { "status": "Align Face: point at a face on another solid, preview the rigid placement, then click to apply. Escape cancels." }
 
 
+func _export_op() -> Dictionary:
+	var solids: Array[Node3D] = []
+	for obj in _selection.objects:
+		if obj != null and is_instance_valid(obj):
+			solids.append(obj)
+	if solids.is_empty():
+		return { "status": "Select a solid to export." }
+	export_requested.emit(solids)
+	return { "status": "" }
+
+
+func _import_op() -> Dictionary:
+	import_requested.emit()
+	return { "status": "" }
+
+
+func _promote_op() -> Dictionary:
+	return _run_promote()
+
+
+func _flatten_mesh(mesh: Mesh) -> Dictionary:
+	var vertices := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var uvs := PackedVector2Array()
+	var slots := PackedInt32Array()
+	var has_uvs := false
+	if mesh == null:
+		return {"vertices": vertices, "indices": indices, "uvs": uvs, "slots": slots}
+	if mesh is ArrayMesh and mesh.get_blend_shape_count() > 0:
+		return {"error": "blend shapes are not supported"}
+	for surface_idx in mesh.get_surface_count():
+		if mesh is ArrayMesh and mesh.surface_get_primitive_type(surface_idx) != Mesh.PRIMITIVE_TRIANGLES:
+			return {"error": "only triangle surfaces are supported"}
+		var arrays: Array = mesh.surface_get_arrays(surface_idx)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var tex: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		if not tex.is_empty() and tex.size() != verts.size():
+			return {"error": "UV data is malformed"}
+		for unsupported in [Mesh.ARRAY_BONES, Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_COLOR]:
+			if arrays[unsupported] != null and not arrays[unsupported].is_empty():
+				return {"error": "skin, secondary UV, or vertex color data is not supported"}
+		if (idx.size() if not idx.is_empty() else verts.size()) % 3 != 0:
+			return {"error": "triangle indices are malformed"}
+		var base: int = vertices.size()
+		vertices.append_array(verts)
+		has_uvs = has_uvs or not tex.is_empty()
+		for i in verts.size():
+			uvs.append(tex[i] if not tex.is_empty() else Vector2.ZERO)
+		if idx.is_empty():
+			for i in verts.size():
+				indices.append(base + i)
+		else:
+			for i in idx:
+				if i < 0 or i >= verts.size():
+					return {"error": "triangle indices are malformed"}
+				indices.append(base + i)
+		for i in (idx.size() if not idx.is_empty() else verts.size()) / 3:
+			slots.append(surface_idx)
+	return {"vertices": vertices, "indices": indices, "uvs": uvs if has_uvs else PackedVector2Array(), "slots": slots}
+
+
+func _editor_scene_root() -> Node:
+	if not Engine.is_editor_hint():
+		return null
+	return EditorInterface.get_edited_scene_root()
+
+
+func _select_editor_node(node: Node) -> void:
+	if not Engine.is_editor_hint() or node == null or not is_instance_valid(node):
+		return
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(node)
+
+
+func _promote_do(payload: Dictionary) -> void:
+	var parent: Node = payload.get("parent")
+	var solid: Node = payload.get("solid")
+	var external: Node = payload.get("external")
+	var index: int = int(payload.get("index", -1))
+	var root: Node = payload.get("root")
+	if parent == null or solid == null or not is_instance_valid(parent) or not is_instance_valid(solid):
+		return
+	if external != null and is_instance_valid(external) and external.get_parent() == parent:
+		parent.remove_child(external)
+	if solid.get_parent() != parent:
+		parent.add_child(solid)
+		if index >= 0 and index < parent.get_child_count():
+			parent.move_child(solid, index)
+	if root != null and is_instance_valid(root):
+		solid.owner = root
+	_promote_move_children(payload, solid)
+	_selection.set_objects([solid])
+	_select_editor_node(solid)
+
+
+func _promote_undo(payload: Dictionary) -> void:
+	var parent: Node = payload.get("parent")
+	var solid: Node = payload.get("solid")
+	var external: Node = payload.get("external")
+	var index: int = int(payload.get("index", -1))
+	var root: Node = payload.get("root")
+	if parent == null or external == null or not is_instance_valid(parent) or not is_instance_valid(external):
+		return
+	if solid != null and is_instance_valid(solid) and solid.get_parent() == parent:
+		parent.remove_child(solid)
+	if external.get_parent() != parent:
+		parent.add_child(external)
+		if index >= 0 and index < parent.get_child_count():
+			parent.move_child(external, index)
+	if root != null and is_instance_valid(root):
+		external.owner = root
+	_promote_move_children(payload, external)
+	_selection.set_objects([external])
+	_select_editor_node(external)
+
+
+func _promote_move_children(payload: Dictionary, target: Node) -> void:
+	for child in payload["children"]:
+		if is_instance_valid(child) and child.get_parent() != target:
+			child.reparent(target, false)
+	for descendant in payload["child_owners"]:
+		if not is_instance_valid(descendant):
+			continue
+		var previous_owner: Node = payload["child_owners"][descendant]
+		descendant.owner = target if previous_owner == payload["external"] else previous_owner
+
+
+func _run_promote() -> Dictionary:
+	var external: Node3D = _selection.first_external_mesh()
+	if external == null or not SlabExternalMesh.is_external_mesh(external):
+		return { "status": "Select an External mesh to promote." }
+
+	for child in external.get_children():
+		if child.name in [&"Mesh", &"__body"]:
+			return {"status": "Could not promote: child name %s is reserved by Slab. External mesh unchanged." % child.name}
+	if external.material_overlay != null:
+		return {"status": "Could not promote: material overlays are not supported. External mesh unchanged."}
+	var mesh: Mesh = external.mesh if external is MeshInstance3D else null
+	var arrays: Dictionary = _flatten_mesh(mesh)
+	if arrays.has("error"):
+		return {"status": "Could not promote: %s. External mesh unchanged." % arrays.error}
+	var vertices: PackedVector3Array = arrays["vertices"]
+	var indices: PackedInt32Array = arrays["indices"]
+	if vertices.is_empty():
+		return { "status": "Could not promote: mesh is empty. External mesh unchanged." }
+
+	if not ClassDB.class_exists(SlabSelection.SOLID_CLASS):
+		return { "status": "SlabSolid is not built yet." }
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS) as Node3D
+	if solid == null:
+		return { "status": "SlabSolid is not built yet." }
+
+	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"])
+	var err: int = int(imported.get("error", ERR_INVALID_DATA))
+	if err != OK:
+		var reason: String = str(imported.get("refuse_reason", "non-manifold"))
+		if reason.is_empty():
+			reason = "non-manifold"
+		solid.free()
+		return { "status": "Could not promote: mesh is %s. External mesh unchanged." % reason }
+
+	solid.name = external.name
+	solid.top_level = external.top_level
+	solid.transform = external.transform
+	solid.visible = external.visible
+	solid.visibility_parent = external.visibility_parent
+	if external.has_method("get_materials"):
+		solid.set("materials", external.call("get_materials"))
+
+	var parent: Node = external.get_parent()
+	if parent == null or not is_instance_valid(parent):
+		solid.free()
+		return { "status": "Could not promote: External mesh is not in the scene." }
+
+	var root: Node = external.owner
+	if root == null:
+		root = _editor_scene_root()
+	var child_owners: Dictionary = {}
+	for descendant in external.find_children("*", "", true, false):
+		child_owners[descendant] = descendant.owner
+	var payload := {
+		"children": external.get_children(),
+		"child_owners": child_owners,
+		"parent": parent,
+		"solid": solid,
+		"external": external,
+		"index": external.get_index(),
+		"root": root,
+	}
+	if _undo != null:
+		var context: Object = root if root != null else parent
+		_undo.create_action("Slab Promote to Slab Solid", UndoRedo.MERGE_DISABLE, context)
+		_undo.add_do_method(self, "_promote_do", payload)
+		_undo.add_undo_method(self, "_promote_undo", payload)
+		if _undo.has_method("add_do_reference"):
+			_undo.add_do_reference(solid)
+		if _undo.has_method("add_undo_reference"):
+			_undo.add_undo_reference(external)
+		_undo.commit_action()
+	else:
+		_promote_do(payload)
+	return { "status": PROMOTE_SUCCESS }
+
+
 func _mirror_op(axis: Vector3) -> Dictionary:
 	return { "method": "mirror", "args": [axis] }
 
@@ -625,6 +1018,31 @@ func _unwrap_target(target: Node3D) -> String:
 	return "Unwrapped %d island(s); added %d automatic cut(s)." % [int(result.get("islands", 0)), automatic.size()]
 
 
+func _pack_target(target: Node3D) -> String:
+	for face in _selection.ids:
+		var attrs: Dictionary = target.call("face_uv", face)
+		if not bool(attrs.get("unwrapped", false)):
+			return "Pack needs unwrapped islands. Unwrap first. The solid was unchanged."
+	var before: PackedByteArray = target.get("data")
+	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, 0)
+	if bool(result.get("atlas_overflow", false)):
+		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
+		return "Pack refused: islands exceed atlas. Increase Texture px to at least %d, or scale down Placement. The solid was unchanged." % suggested
+	var err: int = int(result.get("error", ERR_INVALID_SELECTION))
+	if err != OK:
+		return "Pack failed. %s" % describe_error(err, "uv_pack")
+	var after: PackedByteArray = target.get("data")
+	uv_scale = Vector2.ONE
+	uv_offset = Vector2.ZERO
+	uv_rotation_degrees = 0.0
+	if _undo != null and after != before:
+		_undo.create_action("Slab Pack UV", UndoRedo.MERGE_DISABLE, target)
+		_undo.add_do_property(target, "data", after)
+		_undo.add_undo_property(target, "data", before)
+		_undo.commit_action(false)
+	return "Packed %d island(s)." % int(result.get("islands", 0))
+
+
 func _row(id: String, label: String, icon: String, modes: Array, min_count: int, tooltip: String, shortcut: int, handler: Callable, exact_count: int = 0) -> Dictionary:
 	return {
 		"id": id,
@@ -644,6 +1062,7 @@ func _build() -> Array[Dictionary]:
 	var vertex: Array = [SlabSelection.Mode.VERTEX]
 	var edge: Array = [SlabSelection.Mode.EDGE]
 	var face: Array = [SlabSelection.Mode.FACE]
+	var edge_or_face: Array = [SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]
 	var elements: Array = [SlabSelection.Mode.VERTEX, SlabSelection.Mode.EDGE, SlabSelection.Mode.FACE]
 
 	var table: Array = []
@@ -660,12 +1079,15 @@ func _build() -> Array[Dictionary]:
 		_row("mirror_z", "Mirror Z", "Object", object, 1, "Mirrors the solid across its local Z axis.", 0, _mirror_op.bind(Vector3(1.0, 1.0, -1.0))),
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
+		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
+		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh file (OBJ/STL). Non-manifold and open meshes are allowed.", 0, _import_op),
+		_row("promote_to_solid", PROMOTE_LABEL, "QuadMesh", object, 1, "Convert a closed External mesh into an editable Slab solid. Open, empty, or non-manifold meshes are refused.", 0, _promote_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
 		_row("collapse_vertices", "Collapse", "Group", vertex, 2, "Collapses the selection to one vertex.", KEY_Y, _ids_op.bind("collapse_vertices")),
 		_row("connect_vertices", "Connect", "CurveLinear", vertex, 2, "Splits a shared face between two non-adjacent vertices.", KEY_K, _ids_op.bind("connect_vertices"), 2),
 
-		_row("bevel_edges", "Bevel", "ToolRotate", edge, 1, "Previews a rounded bevel with an exact amount and segment count.", KEY_B, _operation_op.bind(2)),
+		_row("bevel_edges", "Bevel", "ToolRotate", edge_or_face, 1, "Previews a rounded bevel on selected edges, or on the perimeter of selected faces.", KEY_B, _operation_op.bind(2)),
 		_row("connect_edges", "Connect", "CurveOut", edge, 2, "Splits the shared face between the nearest pair of non-adjacent edge endpoints.", KEY_K, _ids_op.bind("connect_edges"), 2),
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
 		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes coplanar internal edges and merges their adjacent faces.", KEY_X, _ids_op.bind("dissolve_edges")),
@@ -677,7 +1099,7 @@ func _build() -> Array[Dictionary]:
 		_row("subdivide_faces", "Subdivide", "GridLayout", face, 1, "Splits each selected face into one quad per corner. Selected faces cannot share an edge.", KEY_U, _ids_op.bind("subdivide_faces")),
 		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins one connected coplanar face region into a single face.", KEY_M, _ids_op.bind("merge_faces")),
 		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
-		_row("select_boundary", "Select Boundary", "Path3D", face, 1, "Switches to Edge mode and selects the outside boundary of the selected faces.", 0, _select_op.bind(_select_face_boundary)),
+		_row("select_boundary", "Select Boundary", "Path3D", face, 1, "Switches to Edge mode and selects the perimeter edges of the selected faces.", 0, _select_op.bind(_select_face_boundary)),
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),
@@ -686,6 +1108,7 @@ func _build() -> Array[Dictionary]:
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
 		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),
+		_row("uv_pack", "Pack", "GridLayout", face, 1, "Repack islands without re-unwrapping.", 0, _pack_op),
 
 		_row("select_all", "Select All", "ListSelect", elements, 0, "Selects every element in the current mode.", KEY_A, _select_op.bind(_pick_all)),
 		_row("select_none", "Select None", "Clear", elements, 1, "Clears the element selection.", KEY_D, _select_op.bind(_pick_none)),

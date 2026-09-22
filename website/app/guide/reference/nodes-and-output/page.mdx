@@ -17,6 +17,12 @@ export const metadata = { title: "Nodes and output" };
 
 Editing methods return `0` on success and a mesh error code when refused. The current API includes region-aware `extrude_faces()` and `inset_faces()`, segmented `bevel_edges()`, `insert_loops()`, `plane_cut()`, seam marking and UV unwrapping. `preview_bevel()`, `preview_loop_cuts()`, and `preview_plane_cut()` return validated scratch results without mutating `data`.
 
+`import_from_mesh(vertices, indices)` tries to replace the solid with a closed triangle soup. It returns `{ "error": 0, "refuse_reason": "" }` on success. On refuse it leaves the current solid unchanged and sets `refuse_reason` to `empty`, `open`, `non-manifold`, or `non-manifold / open`. The panel **Promote to Slab Solid…** command is the author-facing path. Import never calls this for you.
+
+## External mesh
+
+`SlabExternalMesh` is an imported triangle mesh. It is selectable in Object mode and can transform or export. It is not a `SlabSolid`. Vertex, Edge, Face, UV, and Paint stay disabled until **Promote to Slab Solid…** succeeds. See [Promote an External mesh](/guide/how-to/promote-an-external-mesh).
+
 After a refusal, `get_edit_diagnostic()` returns the typed rejected location and local-space highlight segments. See [Understand refused edits](/guide/how-to/understand-refused-edits).
 
 ## SlabModule

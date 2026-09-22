@@ -43,8 +43,13 @@ if env["platform"] == "macos":
         source=sources,
     )
 else:
+    shlibsuffix = env.get("SHLIBSUFFIX", "")
+    # SCons can treat ".x86_64" as the shared-lib suffix when the target
+    # already has dotted tokens. Godot's .gdextension path needs a real .so.
+    if env["platform"] == "linux" and ".so" not in str(shlibsuffix):
+        shlibsuffix = ".so"
     library = env.SharedLibrary(
-        "project/addons/slab/bin/lib{}{}".format(libname, env["suffix"]),
+        "project/addons/slab/bin/lib{}{}{}".format(libname, env["suffix"], shlibsuffix),
         source=sources,
     )
 

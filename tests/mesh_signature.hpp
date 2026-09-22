@@ -12,14 +12,14 @@ namespace slabtest {
 // Exact face geometry and attributes, independent of handles and loop start.
 // Winding is significant. A different subdivision is a different signature.
 using FacePositions = std::vector<std::array<int32_t, 3>>;
-using AttributeSignature = std::array<double, 17>;
+using AttributeSignature = std::array<double, 18>;
 using MeshSignature = std::vector<std::pair<FacePositions, AttributeSignature>>;
 
 inline AttributeSignature attribute_signature(const slab::FaceAttrs &a) {
 	return { a.uv_scale.x, a.uv_scale.y, a.uv_offset.x, a.uv_offset.y,
 		a.uv_rotation, double(a.uv_axis), double(a.material_slot), double(a.smooth),
 		double(a.uv_unwrapped), a.uv_u.x, a.uv_u.y, a.uv_u.z,
-		a.uv_v.x, a.uv_v.y, a.uv_v.z, a.uv_origin.x, a.uv_origin.y };
+		a.uv_v.x, a.uv_v.y, a.uv_v.z, a.uv_origin.x, a.uv_origin.y, double(a.uv_texture_resolution) };
 }
 
 inline MeshSignature mesh_signature(const slab::Mesh &mesh) {

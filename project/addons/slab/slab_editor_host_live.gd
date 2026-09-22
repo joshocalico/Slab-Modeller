@@ -83,3 +83,16 @@ func disconnect_host_selection(target: Callable) -> void:
 	var editor_selection := EditorInterface.get_selection()
 	if editor_selection and editor_selection.selection_changed.is_connected(target):
 		editor_selection.selection_changed.disconnect(target)
+
+
+func refresh_native_selection(solid: Node3D) -> void:
+	if solid == null or not is_instance_valid(solid):
+		return
+	var editor_selection := EditorInterface.get_selection()
+	if editor_selection == null:
+		return
+	var was_selected: bool = editor_selection.get_selected_nodes().has(solid)
+	if not was_selected:
+		return
+	editor_selection.remove_node(solid)
+	editor_selection.add_node(solid)

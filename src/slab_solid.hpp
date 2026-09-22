@@ -14,10 +14,12 @@
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_int64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <unordered_set>
 #include <vector>
 
 namespace godot {
@@ -71,12 +73,20 @@ public:
 	double volume() const;
 	AABB get_local_aabb() const;
 	Ref<ArrayMesh> build_mesh() const;
+	TypedArray<Material> get_mesh_materials() const;
 	bool set_display_preview(const PackedByteArray &p_data);
 	void clear_display_preview();
 	bool has_display_preview() const;
+	bool set_display_face_mask(const PackedInt64Array &p_faces);
+	void clear_display_face_mask();
+	bool has_display_face_mask() const;
+	PackedInt64Array get_display_face_mask() const;
+	bool is_display_face_visible(int64_t p_face) const;
 
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
+	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
+			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array());
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
 	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);
@@ -92,6 +102,7 @@ public:
 	int set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation);
 	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
 	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
+	Dictionary pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution, int p_source_texture_resolution = 0);
 	int set_face_material(const PackedInt64Array &p_faces, int p_slot);
 
 	int bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1);
@@ -132,13 +143,17 @@ private:
 	StaticBody3D *body = nullptr;
 	CollisionShape3D *collider = nullptr;
 	bool display_preview_active = false;
+	bool display_face_mask_active = false;
+	std::unordered_set<int64_t> display_face_mask;
 
 	void _ensure_children();
 	void _rebuild();
 	void _rebuild_from(const slab::Mesh &p_mesh, bool p_update_collision);
 	void _assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots);
+	void _assign_committed_display();
 	Ref<ArrayMesh> _build_mesh_from(const slab::Mesh &p_mesh, std::vector<uint32_t> &r_surface_slots,
-			PackedVector3Array *r_verts = nullptr, PackedInt32Array *r_indices = nullptr) const;
+			PackedVector3Array *r_verts = nullptr, PackedInt32Array *r_indices = nullptr,
+			const std::unordered_set<int64_t> *p_face_mask = nullptr) const;
 	int _reject(const slab::Mesh &p_mesh, slab::MeshFault p_fault,
 			slab::FaultElement p_fallback_element = slab::FaultElement::NONE,
 			uint32_t p_fallback_slot = slab::INVALID_IDX);

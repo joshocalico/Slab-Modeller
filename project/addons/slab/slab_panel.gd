@@ -7,12 +7,17 @@ const SlabModeStrip := preload("res://addons/slab/slab_mode_strip.gd")
 const SlabActions := preload("res://addons/slab/slab_actions.gd")
 const SlabPaintCanvas := preload("res://addons/slab/slab_paint_canvas.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
+const SlabKeybindProfiles := preload("res://addons/slab/slab_keybind_profiles.gd")
+const SlabUVModeStrip := preload("res://addons/slab/slab_uv_mode_strip.gd")
+
+enum Workspace { MODELLING, UV, PAINT }
 
 const BUTTON_HEIGHT := 36.0
 const SPIN_WIDTH := 104.0
 const PANEL_HEIGHT := 240.0
 const GRID_SEPARATION := 4.0
 const ACCENT := Color(0.86, 0.72, 0.34)
+const APPLY_PRIMARY := Color(1.0, 0.773, 0.0)  # Brand yellow #FFC500
 const CHIP_SIZE := Vector2(28.0, 28.0)
 const PAINT_PALETTE_HEIGHT := 40.0
 const PAINT_ROW_HEIGHT := 28.0
@@ -20,27 +25,42 @@ const PAINT_PICKER_HEIGHT := 64.0
 const PAINT_PICKER_WIDTH := 220.0
 const PAINT_UV_ROW_HEIGHT := 44.0
 const PAINT_CANVAS_MIN_HEIGHT := 190.0
+const PAINT_CANVAS_MIN_WIDTH := 200.0
+const PAINT_DOCK_MIN_WIDTH := 220.0
+const UV_DOCK_MIN_WIDTH := 350.0
+const PAINT_DOCK_GUTTER := 8.0
 
 var _selection: RefCounted
 var _actions: RefCounted
 var _metrics: RefCounted
+var _scene_root_getter: Callable
 var _status: Label
 var _selection_context: Label
 var _last_report := ""
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
+var _settings_column: VBoxContainer
 var _settings_fields: HFlowContainer
 var _buttons: Dictionary = {}
 var _create_group: ButtonGroup
 var _create_focus: StringName = &"make_box"
+var _create_strip: VBoxContainer
+var _create_chips: HFlowContainer
+var _create_fields: HFlowContainer
+var _create_button: Button
 # Mode.OBJECT is 0, so -1 means the command column has never been built.
 var _built_mode: int = -1
 var _expanded_sections: Dictionary = {}
 var _settings_title: Label
 var _undo_hook: Object = null
 var _paint: RefCounted
+var _workspace: int = Workspace.MODELLING
+var _uv_placement := true
+var _uv_place_button: Button
+var _uv_element_buttons: SlabUVModeStrip
 var _model_body: BoxContainer
 var _paint_body: Control
+var _uv_toggle: Button
 var _paint_toggle: Button
 var _paint_canvas: Control
 var _paint_brush: Control
@@ -74,17 +94,28 @@ var _paint_picker: Node
 var _paint_uv_hint: Label
 var _paint_fit_uv: Button
 var _paint_uv_controls: Control
+var _uv_mode_strip: Control
 var _paint_mapping_controls: Control
 var _paint_mapping_grid: GridContainer
 var _paint_mapping_title: Label
 var _paint_mapping_state: Label
 var _paint_density_row: Control
 var _paint_unwrap: Button
+var _paint_pack: Button
 var _paint_texture_px_label: Label
 var _paint_texture_px_spin: SpinBox
 var _brush_radius: SpinBox
 var _brush_opacity: SpinBox
 var _brush_color: ColorPickerButton
+var _overlay_opacity: SpinBox
+var _flatten_button: Button
+var _fill_layer_button: Button
+var _channel_label: Label
+var _channel_picker: HBoxContainer
+var _layer_list: VBoxContainer
+var _add_layer_button: Button
+var _delete_layer_button: Button
+var _shortcuts_menu: MenuButton
 var _selection_controls: Control
 var _operation_row: Control
 var _loop_action_group: HBoxContainer
@@ -93,9 +124,10 @@ var _loop_cancel: Button
 var _named_solids: Array[Node] = []
 
 
-func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null) -> void:
+func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = null, scene_root_getter: Callable = Callable()) -> void:
 	_selection = selection
 	_actions = actions
+	_scene_root_getter = scene_root_getter
 	_actions.loop_values_updated.connect(_sync_loop_values)
 	_actions.loop_state_changed.connect(_sync_loop_controls)
 	_actions.plane_state_changed.connect(_refresh_settings)
@@ -111,7 +143,10 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_status = _status_label()
 	add_child(_header())
 	_selection_controls = preload("res://addons/slab/slab_selection_controls.gd").new()
-	_selection_controls.setup(_selection, _metrics)
+	_selection_controls.setup(_selection, _metrics, _scene_root_getter)
+	if _selection != null and _selection.has_signal("isolation_reported") \
+			and not _selection.isolation_reported.is_connected(_on_reported):
+		_selection.isolation_reported.connect(_on_reported)
 	add_child(_selection_controls)
 	_operation_row = _operation_controls()
 	add_child(_operation_row)
@@ -121,7 +156,7 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 	_model_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_model_body.add_theme_constant_override("separation", 8)
 	_model_body.add_child(_command_scroll())
-	_model_body.add_child(_settings_block())
+	_model_body.add_child(_build_settings_column())
 	_model_body.resized.connect(_layout_model)
 	add_child(_model_body)
 	_paint_body = _paint_block()
@@ -137,18 +172,33 @@ func setup(selection: RefCounted, actions: RefCounted, metrics: RefCounted = nul
 
 
 func _layout_model() -> void:
-	var stacked := _model_body.size.x < _scaled(850.0)
+	var stacked: bool = _model_body.size.x < _scaled(850.0)
 	_model_body.vertical = stacked
-	_settings.custom_minimum_size.x = 0.0 if stacked else _scaled(300.0)
-	_settings.size_flags_horizontal = Control.SIZE_FILL
+	if _settings_column != null:
+		_settings_column.custom_minimum_size.x = 0.0 if stacked else _scaled(300.0)
+		_settings_column.size_flags_horizontal = Control.SIZE_FILL
 
 
 func _operation_controls() -> Control:
-	var row := HFlowContainer.new()
-	row.name = "OperationHandles"
-	var caption := Label.new()
-	caption.add_theme_font_size_override("font_size", _font(15))
-	row.add_child(caption)
+	var card := VBoxContainer.new()
+	card.name = "OperationHandles"
+	card.add_theme_constant_override("separation", int(_scaled(6)))
+
+	var title := Label.new()
+	title.name = "OpCardTitle"
+	title.add_theme_font_size_override("font_size", _font(16))
+	title.add_theme_color_override("font_color", ACCENT)
+	card.add_child(title)
+
+	var settings_row := HFlowContainer.new()
+	settings_row.name = "OpCardSettings"
+	settings_row.add_theme_constant_override("h_separation", int(_scaled(8)))
+
+	var amount_label := Label.new()
+	amount_label.add_theme_font_size_override("font_size", _font(14))
+	amount_label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	settings_row.add_child(amount_label)
+
 	var amount := SpinBox.new()
 	amount.name = "HandleAmount"
 	amount.min_value = -64.0
@@ -156,101 +206,180 @@ func _operation_controls() -> Control:
 	amount.step = 0.001
 	amount.suffix = "m"
 	amount.custom_minimum_size.x = _scaled(110)
-	amount.add_theme_font_size_override("font_size", _font(15))
-	amount.get_line_edit().add_theme_font_size_override("font_size", _font(15))
-	var pending_text := {"amount": false, "segments": false}
-	var synced := {"amount": NAN, "segments": -1, "kind": -1, "active": false}
-	amount.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventKey and event.pressed and amount.get_line_edit().has_focus():
-			pending_text["amount"] = true)
-	amount.value_changed.connect(func(value: float) -> void: _actions.operation_amount_changed.emit(value))
-	row.add_child(amount)
+	amount.add_theme_font_size_override("font_size", _font(14))
+	amount.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	settings_row.add_child(amount)
+
 	var segment_label := Label.new()
 	segment_label.text = "Segments"
-	segment_label.add_theme_font_size_override("font_size", _font(15))
-	row.add_child(segment_label)
+	segment_label.add_theme_font_size_override("font_size", _font(14))
+	segment_label.add_theme_color_override("font_color", Color(0.78, 0.78, 0.74))
+	settings_row.add_child(segment_label)
+
 	var segments := SpinBox.new()
 	segments.name = "bevel_segments"
 	segments.min_value = 1
 	segments.max_value = 16
 	segments.step = 1
 	segments.custom_minimum_size.x = _scaled(80)
-	segments.add_theme_font_size_override("font_size", _font(15))
-	segments.get_line_edit().add_theme_font_size_override("font_size", _font(15))
+	segments.add_theme_font_size_override("font_size", _font(14))
+	segments.get_line_edit().add_theme_font_size_override("font_size", _font(14))
+	settings_row.add_child(segments)
+
+	card.add_child(settings_row)
+
+	var commit_strip := HBoxContainer.new()
+	commit_strip.name = "OpCardCommit"
+	commit_strip.add_theme_constant_override("separation", int(_scaled(8)))
+
+	var pending_text := {"distance": false, "segments": false}
+	var synced := {"distance": NAN, "segments": -1, "op_id": "", "active": false}
+
+	amount.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventKey and event.pressed and amount.get_line_edit().has_focus():
+			pending_text["distance"] = true)
+	amount.value_changed.connect(func(value: float) -> void:
+		if _actions.op_session_active():
+			_actions.op_session_set_value("distance", value)
+		else:
+			_actions.operation_amount_changed.emit(value))
+
 	segments.get_line_edit().gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventKey and event.pressed and segments.get_line_edit().has_focus():
 			pending_text["segments"] = true)
-	segments.value_changed.connect(func(value: float) -> void: _actions.operation_segments_changed.emit(int(value)))
-	row.add_child(segments)
-	var apply_button: Button
-	for apply in [true, false]:
-		var button := Button.new()
-		button.text = "Apply" if apply else "Cancel"
-		button.accessibility_name = button.text
-		button.set_meta("slab_label", button.text)
-		button.add_theme_font_size_override("font_size", _font(15))
-		button.tooltip_text = "Commit this preview as one undoable edit. Enter also applies." if apply else "Discard this preview. Escape also cancels."
-		button.accessibility_description = button.tooltip_text
-		button.pressed.connect(func() -> void:
-			button.release_focus()
-			if apply:
-				# SpinBox does not publish a focused LineEdit until it loses focus.
-				# Parse only text the user changed; a programmatic value remains
-				# authoritative even if the editor is still displaying stale text.
-				var amount_pending: bool = pending_text["amount"]
-				var segments_pending: bool = pending_text["segments"]
-				amount.set_block_signals(true)
-				segments.set_block_signals(true)
-				if amount_pending: amount.apply()
-				if segments_pending: segments.apply()
-				var wanted_amount: float = amount.value if amount_pending else _actions.operation_amount
-				var wanted_segments: int = int(segments.value) if segments_pending else _actions.bevel_segments
-				var bevel: bool = _selection.operation_preview.get("kind", 0) == 2
-				amount.set_block_signals(false)
-				segments.set_block_signals(false)
-				if amount_pending: _actions.operation_amount_changed.emit(wanted_amount)
-				if bevel and segments_pending: _actions.operation_segments_changed.emit(wanted_segments)
-				_actions.operation_apply_requested.emit()
-			else: _actions.operation_cancel_requested.emit())
-		row.add_child(button)
-		if apply: apply_button = button
+	segments.value_changed.connect(func(value: float) -> void:
+		if _actions.op_session_active():
+			_actions.op_session_set_value("segments", int(value))
+		else:
+			_actions.operation_segments_changed.emit(int(value)))
+
+	var cancel_button := Button.new()
+	cancel_button.name = "OpCardCancel"
+	cancel_button.text = "Cancel"
+	cancel_button.accessibility_name = "Cancel"
+	cancel_button.set_meta("slab_label", "Cancel")
+	cancel_button.add_theme_font_size_override("font_size", _font(14))
+	cancel_button.tooltip_text = "Discard this preview. Escape also cancels."
+	cancel_button.accessibility_description = cancel_button.tooltip_text
+	cancel_button.pressed.connect(func() -> void:
+		cancel_button.release_focus()
+		_actions.op_session_cancel())
+	commit_strip.add_child(cancel_button)
+
+	var apply_button := Button.new()
+	apply_button.name = "OpCardApply"
+	apply_button.text = "Apply"
+	apply_button.accessibility_name = "Apply"
+	apply_button.set_meta("slab_label", "Apply")
+	apply_button.add_theme_font_size_override("font_size", _font(14))
+	apply_button.tooltip_text = "Commit this preview as one undoable edit. Enter also applies."
+	apply_button.accessibility_description = apply_button.tooltip_text
+	apply_button.pressed.connect(func() -> void:
+		apply_button.release_focus()
+		var distance_pending: bool = pending_text["distance"]
+		var segments_pending: bool = pending_text["segments"]
+		amount.set_block_signals(true)
+		segments.set_block_signals(true)
+		if distance_pending: amount.apply()
+		if segments_pending: segments.apply()
+		var wanted_distance: float = amount.value if distance_pending else _actions.operation_amount
+		var wanted_segments: int = int(segments.value) if segments_pending else _actions.bevel_segments
+		var bevel: bool = _actions.op_session_id() == "bevel"
+		amount.set_block_signals(false)
+		segments.set_block_signals(false)
+		if distance_pending: _actions.op_session_set_value("distance", wanted_distance)
+		if bevel and segments_pending: _actions.op_session_set_value("segments", wanted_segments)
+		_actions.op_session_apply())
+	commit_strip.add_child(apply_button)
+
+	card.add_child(commit_strip)
+
+	var style_apply := func(enabled: bool) -> void:
+		if enabled:
+			var box := StyleBoxFlat.new()
+			box.bg_color = APPLY_PRIMARY
+			box.set_corner_radius_all(3)
+			box.content_margin_left = 10
+			box.content_margin_right = 10
+			box.content_margin_top = 4
+			box.content_margin_bottom = 4
+			apply_button.add_theme_stylebox_override("normal", box)
+			var hover := box.duplicate() as StyleBoxFlat
+			hover.bg_color = APPLY_PRIMARY.lightened(0.1)
+			apply_button.add_theme_stylebox_override("hover", hover)
+			var pressed := box.duplicate() as StyleBoxFlat
+			pressed.bg_color = APPLY_PRIMARY.darkened(0.1)
+			apply_button.add_theme_stylebox_override("pressed", pressed)
+			apply_button.add_theme_color_override("font_color", Color(0.1, 0.1, 0.1))
+			apply_button.add_theme_color_override("font_hover_color", Color(0.1, 0.1, 0.1))
+			apply_button.add_theme_color_override("font_pressed_color", Color(0.1, 0.1, 0.1))
+		else:
+			apply_button.remove_theme_stylebox_override("normal")
+			apply_button.remove_theme_stylebox_override("hover")
+			apply_button.remove_theme_stylebox_override("pressed")
+			apply_button.remove_theme_color_override("font_color")
+			apply_button.remove_theme_color_override("font_hover_color")
+			apply_button.remove_theme_color_override("font_pressed_color")
+
 	var sync := func() -> void:
-		var active: bool = _actions.operation_active
-		row.visible = (_paint == null or not _paint.active) and active
-		var kind: int = _selection.operation_preview.get("kind", 0)
-		var lifecycle_changed: bool = active != synced["active"] or kind != synced["kind"]
-		if lifecycle_changed or not is_equal_approx(float(synced["amount"]), _actions.operation_amount):
-			pending_text["amount"] = false
+		var active: bool = _actions.op_session_active()
+		var was_visible: bool = card.visible
+		card.visible = (_paint == null or not _paint.active) and active
+		var op_id: String = _actions.op_session_id()
+		var lifecycle_changed: bool = active != synced["active"] or op_id != synced["op_id"]
+
+		if lifecycle_changed or not is_equal_approx(float(synced["distance"]), _actions.operation_amount):
+			pending_text["distance"] = false
 		if lifecycle_changed or int(synced["segments"]) != _actions.bevel_segments:
 			pending_text["segments"] = false
-		caption.text = ["Extrude distance", "Inset distance", "Bevel width"][kind]
-		segment_label.visible = active and kind == 2
-		segments.visible = active and kind == 2
+
+		title.text = _actions.op_session_title()
+		var fields: Array = _actions.op_session_fields()
+		var distance_field: Dictionary = {}
+		for field in fields:
+			if field["id"] == "distance":
+				distance_field = field
+				break
+		amount_label.text = distance_field.get("label", "Distance")
+		segment_label.visible = active and op_id == "bevel"
+		segments.visible = active and op_id == "bevel"
+
 		if not pending_text["segments"]:
 			segments.set_value_no_signal(_actions.bevel_segments)
 		amount.set_block_signals(true)
-		amount.min_value = -64.0 if kind == 0 else 0.001
-		if not pending_text["amount"]:
+		amount.min_value = float(distance_field.get("min", -64.0))
+		amount.max_value = float(distance_field.get("max", 64.0))
+		if not pending_text["distance"]:
 			amount.set_value_no_signal(_actions.operation_amount)
 		amount.set_block_signals(false)
-		synced["amount"] = _actions.operation_amount
+
+		synced["distance"] = _actions.operation_amount
 		synced["segments"] = _actions.bevel_segments
-		synced["kind"] = kind
+		synced["op_id"] = op_id
 		synced["active"] = active
-		apply_button.disabled = int(_selection.operation_preview.get("error", OK)) != OK
+
+		var valid: bool = _actions.op_session_apply_enabled()
+		apply_button.disabled = not valid
+		style_apply.call(valid)
+
 		if _settings != null:
 			_settings.visible = _show_settings()
 		_sync_model_chrome()
 		_refresh_buttons()
+
 	_selection.changed.connect(sync)
 	_actions.operation_state_changed.connect(sync)
 	sync.call()
-	return row
+	return card
 
 
 func _show_settings() -> bool:
 	if _selection.mode == SlabSelection.Mode.FACE:
 		return not _selection.ids.is_empty() and _actions.snap_align_active and not _actions.operation_active
+	if _selection.mode == SlabSelection.Mode.OBJECT:
+		var has_tool: bool = _actions.snap_align_active or _actions.array_active or _actions.plane_active
+		var has_boolean: bool = _selection.objects.size() == 2
+		return not _actions.operation_active and (has_tool or has_boolean)
 	return not _actions.operation_active and (_selection.mode != SlabSelection.Mode.VERTEX or _selection.ids.size() >= 2 or _actions.snap_align_active)
 
 
@@ -269,6 +398,43 @@ func _paint_workspace_minimum_height() -> float:
 			height += _paint_body_maximum_tool_minimum_height() if child == _paint_body else (child as Control).get_combined_minimum_size().y
 			count += 1
 	return height + maxf(0, count - 1) * get_theme_constant("separation")
+
+
+func _paint_workspace_minimum_width() -> float:
+	var dock := _paint_left_dock_width(_workspace == Workspace.PAINT)
+	var split_gap := 8.0
+	if _paint_body != null:
+		var split: Control = _paint_body.find_child("PaintWorkspaceSplit", false, false) as Control
+		if split != null:
+			split_gap = float(split.get_theme_constant("separation"))
+	return dock + _scaled(PAINT_CANVAS_MIN_WIDTH) + split_gap
+
+
+func _paint_left_dock_width(is_paint_workspace: bool) -> float:
+	if not is_paint_workspace:
+		return _scaled(UV_DOCK_MIN_WIDTH)
+	var width := _scaled(PAINT_DOCK_MIN_WIDTH)
+	if _paint_brush != null:
+		width = maxf(width, _paint_brush.get_combined_minimum_size().x)
+	if _flatten_button != null:
+		width = maxf(width, _flatten_button.get_combined_minimum_size().x)
+	if _brush_color != null:
+		width = maxf(width, _brush_color.get_combined_minimum_size().x)
+	for key in ["brush_radius", "brush_opacity"]:
+		var row: Node = find_child(key, true, false)
+		if row is Control:
+			width = maxf(width, (row as Control).get_combined_minimum_size().x)
+	return width + _scaled(PAINT_DOCK_GUTTER)
+
+
+func _apply_paint_left_dock_width(is_paint_workspace: bool) -> void:
+	var dock := _paint_left_dock_width(is_paint_workspace)
+	if _paint_inspector != null:
+		_paint_inspector.custom_minimum_size.x = dock
+		_paint_inspector.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		_paint_inspector.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	if _paint_inspector_fields != null:
+		_paint_inspector_fields.custom_minimum_size.x = maxf(dock - _scaled(PAINT_DOCK_GUTTER), 0.0)
 
 
 func _paint_body_maximum_tool_minimum_height() -> float:
@@ -290,10 +456,99 @@ func bind_paint(paint: RefCounted) -> void:
 	if _paint != null and _paint.has_signal("reported"):
 		if not _paint.reported.is_connected(_on_reported):
 			_paint.reported.connect(_on_reported)
+	if _paint != null and _paint.has_signal("channel_changed"):
+		if not _paint.channel_changed.is_connected(_on_channel_changed):
+			_paint.channel_changed.connect(_on_channel_changed)
+	if _paint != null and _paint.has_signal("layers_changed"):
+		if not _paint.layers_changed.is_connected(_refresh_layer_list):
+			_paint.layers_changed.connect(_refresh_layer_list)
 	if _paint_canvas != null:
-		_paint_canvas.setup(_paint, _metrics)
+		_paint_canvas.setup(_paint, _metrics, _selection)
 		_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_on_paint_changed()
+
+
+func _on_channel_changed() -> void:
+	_sync_channel_picker()
+	_refresh_layer_list()
+	_refresh_paint_chrome()
+
+
+func _sync_channel_picker() -> void:
+	if _channel_picker == null or _paint == null:
+		return
+	var current_ch: int = _paint.channel
+	for i in _channel_picker.get_child_count():
+		var btn: Button = _channel_picker.get_child(i) as Button
+		if btn == null:
+			continue
+		var expected_pressed: bool = false
+		match i:
+			0: expected_pressed = current_ch == SlabPaint.Channel.ALBEDO
+			1: expected_pressed = current_ch == SlabPaint.Channel.ROUGHNESS
+			2: expected_pressed = current_ch == SlabPaint.Channel.EMISSION
+		if btn.button_pressed != expected_pressed:
+			btn.set_pressed_no_signal(expected_pressed)
+	if _channel_label != null:
+		_channel_label.text = _paint.current_channel_name()
+
+
+func _refresh_layer_list() -> void:
+	if _layer_list == null:
+		return
+	for child in _layer_list.get_children():
+		_layer_list.remove_child(child)
+		child.queue_free()
+	if _paint == null:
+		return
+	var layers: Array[Dictionary] = _paint.all_layers_info()
+	for layer_info: Dictionary in layers:
+		var row := _create_layer_row(layer_info)
+		_layer_list.add_child(row)
+	if _delete_layer_button != null:
+		_delete_layer_button.disabled = layers.size() <= 1
+
+
+func _create_layer_row(info: Dictionary) -> Control:
+	var row := HBoxContainer.new()
+	row.name = "Layer%d" % info.index
+	row.add_theme_constant_override("separation", 2)
+	row.custom_minimum_size.y = _scaled(22.0)
+	
+	var vis_btn := Button.new()
+	vis_btn.name = "LayerVis%d" % info.index
+	vis_btn.text = "👁" if info.visible else "○"
+	vis_btn.toggle_mode = true
+	vis_btn.button_pressed = info.visible
+	vis_btn.tooltip_text = "Toggle layer visibility"
+	vis_btn.add_theme_font_size_override("font_size", _font(10))
+	vis_btn.custom_minimum_size = Vector2(_scaled(20.0), _scaled(20.0))
+	var layer_idx: int = info.index
+	vis_btn.toggled.connect(func(pressed: bool) -> void:
+		if _paint:
+			_paint.set_layer_visible(layer_idx, pressed)
+	)
+	row.add_child(vis_btn)
+	
+	var name_btn := Button.new()
+	name_btn.name = "LayerName%d" % info.index
+	name_btn.text = info.name
+	name_btn.flat = true
+	name_btn.toggle_mode = true
+	name_btn.button_pressed = info.active
+	name_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_btn.add_theme_font_size_override("font_size", _font(11))
+	name_btn.tooltip_text = "Click to select this layer"
+	if info.active:
+		name_btn.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	name_btn.pressed.connect(func() -> void:
+		if _paint:
+			_paint.set_active_layer(layer_idx)
+	)
+	row.add_child(name_btn)
+	
+	return row
 
 
 func bind_undo(undo: Object) -> void:
@@ -323,14 +578,18 @@ func _font(px: int) -> int:
 func refresh() -> void:
 	_sync_model_chrome()
 	var mode: int = _selection.mode
-	if _built_mode != mode:
-		_rebuild_commands(_actions.command_sections_for(mode))
+	var sections: Array[Dictionary] = _actions.command_sections_for(mode)
+	var mode_changed: bool = _built_mode != mode
+	if mode_changed or not _same_command_ids(sections):
+		_rebuild_commands(sections)
 		_built_mode = mode
-		_refresh_settings()
+		if mode_changed:
+			_refresh_settings()
 	_refresh_buttons()
 	_settings.visible = _show_settings()
+	_refresh_create_strip_visibility()
 	_refresh_selection_context()
-	set_status(_last_report if _last_report != "" else _selection.describe())
+	set_status(_last_report if _last_report != "" else _selection_instruction())
 	if _paint != null and _paint.active:
 		_refresh_paint_chrome()
 
@@ -349,6 +608,19 @@ func focus_create(id: StringName) -> void:
 	_actions.create_settings_changed.emit()
 
 
+func _same_command_ids(sections: Array[Dictionary]) -> bool:
+	var expected: Dictionary = {}
+	for section in sections:
+		for row in section["rows"]:
+			expected[str(row.get("id", ""))] = true
+	if expected.size() != _buttons.size():
+		return false
+	for id in expected:
+		if not _buttons.has(id):
+			return false
+	return true
+
+
 func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for spin in _spins_under(_settings):
 		spin.apply()
@@ -360,8 +632,25 @@ func _rebuild_commands(sections: Array[Dictionary]) -> void:
 	for child in _command_column.get_children():
 		_command_column.remove_child(child)
 		child.free()
+	for child in _create_chips.get_children():
+		_create_chips.remove_child(child)
+		child.free()
+	var primary_rows: Array[Dictionary] = []
+	if _selection.mode != SlabSelection.Mode.OBJECT:
+		for section in sections:
+			if section["heading"] != SlabActions.SECTION_SELECTION:
+				primary_rows.append_array(section["rows"])
+		var primary := _section_flow(primary_rows)
+		primary.name = "PrimaryCommands"
+		_command_column.add_child(primary)
 	for section in sections:
 		var heading: String = section["heading"]
+		if _selection.mode != SlabSelection.Mode.OBJECT and heading != SlabActions.SECTION_SELECTION:
+			continue
+		if heading == SlabActions.SECTION_CREATE:
+			for row in section["rows"]:
+				_create_chips.add_child(_action_button(row))
+			continue
 		var flow := _section_flow(section["rows"])
 		if heading == SlabActions.SECTION_SELECTION:
 			_command_column.add_child(_section_toggle(heading, flow))
@@ -392,10 +681,19 @@ func _refresh_settings() -> void:
 	for child in _settings_fields.get_children():
 		_settings_fields.remove_child(child)
 		child.queue_free()
+	_refresh_create_strip()
 	var mode: int = _selection.mode
 	if mode == SlabSelection.Mode.OBJECT:
-		_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else ("Plane Cut" if _actions.plane_active else ("Boolean operands" if _selection.objects.size() == 2 else "New %s" % _create_label())))
-		_settings_title.visible = true
+		var has_tool_active: bool = _actions.snap_align_active or _actions.array_active or _actions.plane_active
+		var has_boolean: bool = _selection.objects.size() == 2 and not has_tool_active
+		if has_tool_active:
+			_settings_title.text = "Snap to Vertex" if _actions.snap_align_active else ("Array" if _actions.array_active else "Plane Cut")
+			_settings_title.visible = true
+		elif has_boolean:
+			_settings_title.text = "Boolean operands"
+			_settings_title.visible = true
+		else:
+			_settings_title.visible = false
 		if _actions.snap_align_active:
 			_add_snap_align_settings()
 		elif _actions.array_active:
@@ -438,21 +736,8 @@ func _refresh_settings() -> void:
 			_settings_fields.add_child(_named_action("Cancel", "Clear", "Discard the preview and keep the original solid.", func() -> void:
 				_actions.plane_cancel_requested.emit()
 			))
-		else:
-			if _selection.objects.size() == 2:
-				_add_boolean_operands()
-				var create_heading := Label.new()
-				create_heading.text = "New %s" % _create_label()
-				create_heading.custom_minimum_size.x = _scaled(240.0)
-				create_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				create_heading.add_theme_font_size_override("font_size", _font(15))
-				create_heading.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
-				_settings_fields.add_child(create_heading)
-			for field in _actions.shapes.fields_for(_create_focus):
-				_settings_fields.add_child(_shape_spin(field))
-			var create := _named_action("Create", "Add", "Preview the selected shape in the viewport, then click or press Enter to place it.", _create_shape)
-			create.name = "CreateShape"
-			_settings_fields.add_child(create)
+		elif has_boolean:
+			_add_boolean_operands()
 	elif mode == SlabSelection.Mode.FACE:
 		if _actions.snap_align_active:
 			_settings_title.text = "Align Face"
@@ -511,6 +796,42 @@ func _add_boolean_operands() -> void:
 	swap.name = "SwapBooleanOperands"
 	operands.add_child(swap)
 	_settings_fields.add_child(operands)
+
+
+func _refresh_create_strip_visibility() -> void:
+	if _create_strip == null:
+		return
+	var mode: int = _selection.mode
+	var is_object_mode: bool = mode == SlabSelection.Mode.OBJECT
+	var painting: bool = _paint != null and _paint.active
+	_create_strip.visible = is_object_mode and not painting
+	if _create_button != null:
+		var tool_blocks_create: bool = _actions.array_active or _actions.plane_active or _actions.snap_align_active
+		_create_button.disabled = tool_blocks_create
+		if tool_blocks_create:
+			_create_button.tooltip_text = "Finish or cancel the active tool first."
+		else:
+			_create_button.tooltip_text = "Preview the selected shape in the viewport, then click or press Enter to place it."
+
+
+func _refresh_create_strip() -> void:
+	if _create_strip == null or _create_fields == null or _create_button == null:
+		return
+	for spin in _spins_under(_create_fields):
+		spin.apply()
+		if not spin.is_inside_tree():
+			spin.value_changed.emit(spin.value)
+	for child in _create_fields.get_children():
+		_create_fields.remove_child(child)
+		child.queue_free()
+	_refresh_create_strip_visibility()
+	var mode: int = _selection.mode
+	var is_object_mode: bool = mode == SlabSelection.Mode.OBJECT
+	var painting: bool = _paint != null and _paint.active
+	if not is_object_mode or painting:
+		return
+	for field in _actions.shapes.fields_for(_create_focus):
+		_create_fields.add_child(_shape_spin(field))
 
 
 func _add_array_settings() -> void:
@@ -650,6 +971,8 @@ func _section_toggle(heading: String, flow: Control) -> Button:
 func _shape_spin(field: Dictionary) -> Control:
 	var key: StringName = field["key"]
 	return _spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
+		if is_equal_approx(_actions.shapes.value_of(key), v):
+			return
 		_actions.shapes.set_value(key, v)
 		_actions.create_settings_changed.emit()
 		_refresh_buttons()
@@ -660,6 +983,18 @@ func set_status(text: String) -> void:
 	if _status:
 		_status.text = text
 		_status.tooltip_text = text
+		_status.visible = (_paint != null and _paint.active) or not text.is_empty()
+
+
+func _selection_instruction() -> String:
+	if _selection.objects.is_empty():
+		return "Select a solid in the viewport, or switch to Object to create one." if _selection.mode != SlabSelection.Mode.OBJECT else "Choose a shape to create, or select a solid in the viewport."
+	if _selection.mode != SlabSelection.Mode.OBJECT and _selection.ids.is_empty():
+		match _selection.mode:
+			SlabSelection.Mode.VERTEX: return "Click a vertex in the viewport to select it."
+			SlabSelection.Mode.EDGE: return "Click an edge in the viewport to select it."
+			SlabSelection.Mode.FACE: return "Click a face in the viewport to select it."
+	return ""
 
 
 func _on_reported(text: String) -> void:
@@ -705,7 +1040,7 @@ func _exit_tree() -> void:
 
 func _reset_status() -> void:
 	_last_report = ""
-	set_status(_selection.describe())
+	set_status(_selection_instruction())
 
 
 func _sync_edit_fields() -> void:
@@ -735,21 +1070,33 @@ func _header() -> Control:
 	row.add_child(strip)
 	strip.setup(_selection, true, _metrics)
 	row.add_child(VSeparator.new())
+	_uv_toggle = Button.new()
+	_uv_toggle.name = "UVWorkspace"
+	_uv_toggle.text = "UV"
+	_uv_toggle.toggle_mode = true
+	_uv_toggle.focus_mode = Control.FOCUS_ALL
+	_uv_toggle.tooltip_text = "Open the UV workspace for unwrapping and material placement. Escape closes it."
+	_uv_toggle.accessibility_name = "UV workspace"
+	_uv_toggle.accessibility_description = _uv_toggle.tooltip_text
+	_uv_toggle.add_theme_font_size_override("font_size", _font(15))
+	_uv_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	_uv_toggle.pressed.connect(_toggle_uv_workspace)
+	row.add_child(_uv_toggle)
 	_paint_toggle = Button.new()
-	_paint_toggle.name = "SurfacePaint"
-	_paint_toggle.text = "Surface Paint"
+	_paint_toggle.name = "PaintWorkspace"
+	_paint_toggle.text = "Paint"
 	_paint_toggle.toggle_mode = true
 	_paint_toggle.focus_mode = Control.FOCUS_ALL
-	_paint_toggle.tooltip_text = "Open the Surface Paint workspace. Escape closes it."
-	_paint_toggle.accessibility_name = "Surface Paint"
+	_paint_toggle.tooltip_text = "Open the pixel Paint workspace. Escape closes it."
+	_paint_toggle.accessibility_name = "Paint workspace"
 	_paint_toggle.accessibility_description = _paint_toggle.tooltip_text
 	_paint_toggle.add_theme_font_size_override("font_size", _font(15))
 	_paint_toggle.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
-	_paint_toggle.pressed.connect(func() -> void:
-		if _paint != null:
-			_paint.toggle()
-	)
+	_paint_toggle.pressed.connect(_toggle_paint_workspace)
 	row.add_child(_paint_toggle)
+	row.add_child(VSeparator.new())
+	_shortcuts_menu = _build_shortcuts_menu()
+	row.add_child(_shortcuts_menu)
 	_selection_context = Label.new()
 	_selection_context.name = "SelectionContext"
 	_selection_context.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -769,6 +1116,66 @@ func _refresh_selection_context() -> void:
 		return
 	_selection_context.text = _selection.compact_description()
 	_selection_context.tooltip_text = _selection_context.text
+
+
+func _build_shortcuts_menu() -> MenuButton:
+	var menu := MenuButton.new()
+	menu.name = "ShortcutsMenu"
+	menu.text = "Shortcuts"
+	menu.focus_mode = Control.FOCUS_ALL
+	menu.add_theme_font_size_override("font_size", _font(13))
+	menu.tooltip_text = "Choose a keyboard shortcut profile."
+	menu.accessibility_name = "Keyboard shortcuts"
+	menu.accessibility_description = "Choose a profile from the menu. The active profile is checked."
+	var popup := menu.get_popup()
+	if _actions != null and _actions.keybind_profiles != null:
+		var labels: Array[String] = _actions.keybind_profiles.all_profile_labels()
+		for index in labels.size():
+			popup.add_radio_check_item(labels[index], index)
+			popup.set_item_checked(index, index == _actions.keybind_profiles.profile())
+		popup.id_pressed.connect(_on_keybind_profile_changed)
+		_actions.keybind_profiles.profile_changed.connect(func(_p: int) -> void:
+			_on_profile_updated()
+		)
+	return menu
+
+
+func _on_keybind_profile_changed(index: int) -> void:
+	if _actions == null or _actions.keybind_profiles == null:
+		return
+	_actions.keybind_profiles.set_profile(index)
+
+
+func _on_profile_updated() -> void:
+	if _shortcuts_menu != null and _actions.keybind_profiles != null:
+		var popup := _shortcuts_menu.get_popup()
+		for index in popup.item_count:
+			popup.set_item_checked(index, popup.get_item_id(index) == _actions.keybind_profiles.profile())
+		_shortcuts_menu.tooltip_text = "Keyboard profile: %s" % SlabKeybindProfiles.label_of(_actions.keybind_profiles.profile())
+	var conflicts: Array[String] = []
+	if _actions != null and _actions.keybind_profiles != null:
+		conflicts = _actions.keybind_profiles.conflicts_with_godot()
+	if not conflicts.is_empty():
+		var conflict_msg := "Conflicts with Godot: " + ", ".join(conflicts)
+		_actions.reported.emit(conflict_msg)
+	_refresh_buttons()
+
+
+func _build_settings_column() -> Control:
+	_settings_column = VBoxContainer.new()
+	_settings_column.name = "SettingsColumn"
+	_settings_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_settings_column.add_theme_constant_override("separation", 6)
+	_create_strip = _build_create_strip()
+	_settings_column.add_child(_create_strip)
+	_settings_column.add_child(_settings_block())
+	_create_strip.visibility_changed.connect(_sync_settings_column_visibility)
+	_settings.visibility_changed.connect(_sync_settings_column_visibility)
+	return _settings_column
+
+
+func _sync_settings_column_visibility() -> void:
+	_settings_column.visible = _create_strip.visible or _settings.visible
 
 
 func _settings_block() -> Control:
@@ -798,6 +1205,27 @@ func _settings_block() -> Control:
 	scroll.add_child(content)
 	_settings.add_child(scroll)
 	return _settings
+
+
+func _build_create_strip() -> VBoxContainer:
+	var strip := VBoxContainer.new()
+	strip.name = "CreateStrip"
+	strip.add_theme_constant_override("separation", int(_scaled(4)))
+	_create_chips = HFlowContainer.new()
+	_create_chips.name = "CreateChips"
+	_create_chips.add_theme_constant_override("h_separation", int(_scaled(GRID_SEPARATION)))
+	_create_chips.add_theme_constant_override("v_separation", int(_scaled(GRID_SEPARATION)))
+	_create_chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip.add_child(_create_chips)
+	_create_fields = HFlowContainer.new()
+	_create_fields.name = "CreateFields"
+	_create_fields.add_theme_constant_override("h_separation", 10)
+	_create_fields.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	strip.add_child(_create_fields)
+	_create_button = _named_action("Create", "Add", "Preview the selected shape in the viewport, then click or press Enter to place it.", _create_shape)
+	_create_button.name = "CreateShape"
+	strip.add_child(_create_button)
+	return strip
 
 
 func _spin(label_text: String, min_v: float, max_v: float, step: float, value: float, on_change: Callable, tooltip: String = "", key: StringName = &"") -> Control:
@@ -906,7 +1334,7 @@ func _action_button(row: Dictionary) -> Button:
 
 
 func _create_shape() -> void:
-	for spin in _spins_under(_settings_fields):
+	for spin in _spins_under(_create_fields):
 		spin.apply()
 	_actions.request_create_placement(_create_focus)
 
@@ -914,25 +1342,29 @@ func _create_shape() -> void:
 func _paint_block() -> Control:
 	var body := VBoxContainer.new()
 	body.name = "PaintBody"
+	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.clip_contents = true
 	body.add_theme_constant_override("separation", 3)
 	body.add_child(_paint_target_row())
 	var split := HBoxContainer.new()
 	split.name = "PaintWorkspaceSplit"
+	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	split.add_theme_constant_override("separation", 8)
 	var inspector_scroll := ScrollContainer.new()
 	_paint_inspector = inspector_scroll
 	inspector_scroll.name = "PaintInspector"
-	inspector_scroll.custom_minimum_size.x = _scaled(350.0)
+	inspector_scroll.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH)
+	inspector_scroll.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	inspector_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	# Size the dock to its fields. SHOW_NEVER let Flatten / brush overflow under the canvas.
+	inspector_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	inspector_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var inspector := VBoxContainer.new()
 	_paint_inspector_fields = inspector
 	inspector.name = "PaintInspectorFields"
-	inspector.custom_minimum_size.x = _scaled(342.0)
+	inspector.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	inspector.add_theme_constant_override("separation", 4)
 	inspector_scroll.add_child(inspector)
 	inspector.add_child(_paint_action_row())
@@ -960,12 +1392,13 @@ func _paint_block() -> Control:
 	split.add_child(inspector_scroll)
 	var row := HBoxContainer.new()
 	row.name = "PaintCanvasRow"
+	row.custom_minimum_size.x = _scaled(PAINT_CANVAS_MIN_WIDTH)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.clip_contents = true
 	row.add_theme_constant_override("separation", 8)
 	_paint_canvas = SlabPaintCanvas.new()
-	_paint_canvas.setup(_paint, _metrics)
+	_paint_canvas.setup(_paint, _metrics, _selection)
 	_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_paint_canvas.stroke_started.connect(func() -> void:
 		if _paint:
@@ -987,6 +1420,7 @@ func _paint_block() -> Control:
 		if _paint:
 			_paint.drag_uv(delta, mode)
 	)
+	_paint_canvas.uv_element_picked.connect(_on_uv_element_picked)
 	_paint_uv_hint = Label.new()
 	_paint_uv_hint.name = "PaintUvHint"
 	_paint_uv_hint.text = SlabPaint.uv_canvas_hint()
@@ -1008,10 +1442,10 @@ func _paint_block() -> Control:
 	_paint_uv_hint.mouse_filter = Control.MOUSE_FILTER_PASS
 	_paint_canvas.add_child(_paint_uv_hint)
 	_paint_uv_hint.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_paint_uv_hint.offset_left = 6
-	_paint_uv_hint.offset_top = 4
-	_paint_uv_hint.offset_right = -104
-	_paint_uv_hint.offset_bottom = 28
+	_paint_uv_hint.offset_left = _scaled(6)
+	_paint_uv_hint.offset_top = _scaled(4)
+	_paint_uv_hint.offset_right = -_scaled(104)
+	_paint_uv_hint.offset_bottom = _scaled(28)
 	_paint_fit_uv = Button.new()
 	_paint_fit_uv.name = "PaintFitUv"
 	_paint_fit_uv.text = "Fit UV"
@@ -1020,15 +1454,66 @@ func _paint_block() -> Control:
 	_paint_fit_uv.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	_paint_canvas.add_child(_paint_fit_uv)
 	_paint_fit_uv.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_paint_fit_uv.offset_left = -96
-	_paint_fit_uv.offset_top = 3
-	_paint_fit_uv.offset_right = -8
-	_paint_fit_uv.offset_bottom = 29
+	_paint_fit_uv.offset_left = -_scaled(96)
+	_paint_fit_uv.offset_top = _scaled(3)
+	_paint_fit_uv.offset_right = -_scaled(8)
+	_paint_fit_uv.offset_bottom = _scaled(29)
 	_paint_fit_uv.pressed.connect(_paint_canvas.frame_uv)
+	_uv_mode_strip = _build_uv_mode_strip()
+	_paint_canvas.add_child(_uv_mode_strip)
+	_uv_mode_strip.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	_uv_mode_strip.offset_left = _scaled(6)
+	_uv_mode_strip.offset_top = _scaled(32)
 	row.add_child(_paint_canvas)
 	split.add_child(row)
 	body.add_child(split)
 	return body
+
+
+func _build_uv_mode_strip() -> Control:
+	var panel := PanelContainer.new()
+	panel.name = "UVModeStrip"
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.04, 0.04, 0.04, 0.82)
+	bg.corner_radius_top_left = 3
+	bg.corner_radius_top_right = 3
+	bg.corner_radius_bottom_left = 3
+	bg.corner_radius_bottom_right = 3
+	bg.content_margin_left = 4
+	bg.content_margin_right = 4
+	bg.content_margin_top = 2
+	bg.content_margin_bottom = 2
+	panel.add_theme_stylebox_override("panel", bg)
+	var strip := SlabUVModeStrip.new()
+	strip.name = "UVModeStripButtons"
+	strip.setup(_selection, _metrics)
+	_uv_element_buttons = strip
+	var tools := HBoxContainer.new()
+	tools.add_theme_constant_override("separation", 2)
+	_uv_place_button = Button.new()
+	_uv_place_button.name = "UVPlaceMapping"
+	_uv_place_button.text = "Place"
+	_uv_place_button.toggle_mode = true
+	_uv_place_button.accessibility_name = "Place UV mapping"
+	_uv_place_button.tooltip_text = "Move, scale or rotate texture placement on the selected 3D faces. UV element selection is a separate canvas tool."
+	_uv_place_button.custom_minimum_size.y = _scaled(28.0)
+	_uv_place_button.add_theme_font_size_override("font_size", _font(13))
+	_uv_place_button.pressed.connect(_set_uv_placement.bind(true))
+	tools.add_child(_uv_place_button)
+	tools.add_child(strip)
+	for button in strip.get_children():
+		if button is Button:
+			button.pressed.connect(_set_uv_placement.bind(false))
+	panel.add_child(tools)
+	panel.visible = false
+	return panel
+
+
+func _set_uv_placement(enabled: bool) -> void:
+	if _paint_canvas != null:
+		_paint_canvas.cancel()
+	_uv_placement = enabled
+	_refresh_paint_chrome()
 
 
 func _paint_target_row() -> Control:
@@ -1140,11 +1625,14 @@ func _paint_mapping_section() -> Control:
 	fields.add_child(_paint_density_row)
 	var texture_px := _compact_spin("Texture px", 16, 16384, 1, _actions.uv_texture_resolution, func(v: float) -> void:
 		_actions.uv_texture_resolution = int(v)
-	, "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique. Existing artwork is not resized.", &"paint_uv_texture_resolution")
+	, "Reference atlas resolution for Unwrap and Pack. Existing artwork is not resized.", &"paint_uv_texture_resolution")
 	_paint_texture_px_label = texture_px.get_child(0) as Label
 	_paint_texture_px_spin = texture_px.get_child(1) as SpinBox
 	fields.add_child(texture_px)
 	section.add_child(fields)
+	var mapping_actions := HFlowContainer.new()
+	mapping_actions.name = "PaintUvActions"
+	mapping_actions.add_theme_constant_override("h_separation", 4)
 	var unwrap := _named_action("Unwrap", "ArrayMesh", "Unfold the selected face region at this density and texture resolution.", func() -> void:
 		_commit_paint_mapping_inputs()
 		_actions.run("uv_unwrap")
@@ -1154,7 +1642,18 @@ func _paint_mapping_section() -> Control:
 	)
 	_paint_unwrap = unwrap
 	unwrap.name = "PaintUnwrap"
-	section.add_child(unwrap)
+	mapping_actions.add_child(unwrap)
+	var pack := _named_action("Pack", "GridLayout", "Repack islands without re-unwrapping.", func() -> void:
+		_commit_paint_mapping_inputs()
+		_actions.run("uv_pack")
+		if _paint != null and _last_report.begins_with("Packed "):
+			_paint.refresh_uv_mapping()
+			_paint_canvas.frame_uv.call_deferred()
+	)
+	_paint_pack = pack
+	pack.name = "PaintPack"
+	mapping_actions.add_child(pack)
+	section.add_child(mapping_actions)
 	return section
 
 
@@ -1277,9 +1776,121 @@ func _apply_picker_fonts(node: Node) -> void:
 
 func _brush_column() -> Control:
 	var col := VBoxContainer.new()
-	col.custom_minimum_size.x = _scaled(132.0)
+	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	col.add_theme_constant_override("separation", 2)
+	
+	var channel_section := Label.new()
+	channel_section.text = "Channel"
+	channel_section.add_theme_font_size_override("font_size", _font(13))
+	channel_section.add_theme_color_override("font_color", ACCENT)
+	col.add_child(channel_section)
+	
+	_channel_picker = HBoxContainer.new()
+	_channel_picker.name = "ChannelPicker"
+	_channel_picker.add_theme_constant_override("separation", 2)
+	var channel_group := ButtonGroup.new()
+	for ch_entry in [[SlabPaint.Channel.ALBEDO, "Albedo"], [SlabPaint.Channel.ROUGHNESS, "Roughness"], [SlabPaint.Channel.EMISSION, "Emission"]]:
+		var ch_btn := Button.new()
+		ch_btn.name = "Channel%s" % ch_entry[1]
+		ch_btn.text = ch_entry[1]
+		ch_btn.toggle_mode = true
+		ch_btn.button_group = channel_group
+		ch_btn.button_pressed = ch_entry[0] == SlabPaint.Channel.ALBEDO
+		ch_btn.add_theme_font_size_override("font_size", _font(11))
+		ch_btn.custom_minimum_size.y = _scaled(24.0)
+		ch_btn.tooltip_text = "Paint on the %s channel." % ch_entry[1]
+		var channel_id: int = ch_entry[0]
+		ch_btn.pressed.connect(func() -> void:
+			if _paint:
+				_paint.channel = channel_id
+		)
+		_channel_picker.add_child(ch_btn)
+	col.add_child(_channel_picker)
+	
+	_channel_label = Label.new()
+	_channel_label.name = "ChannelLabel"
+	_channel_label.text = "Albedo"
+	_channel_label.add_theme_font_size_override("font_size", _font(12))
+	_channel_label.add_theme_color_override("font_color", Color(0.92, 0.78, 0.28))
+	_channel_label.tooltip_text = "Currently painting on this channel."
+	_channel_label.visible = false
+	col.add_child(_channel_label)
+	
+	col.add_child(HSeparator.new())
+	
+	var layer_header := HBoxContainer.new()
+	layer_header.add_theme_constant_override("separation", 4)
+	var layer_label := Label.new()
+	layer_label.text = "Layers"
+	layer_label.add_theme_font_size_override("font_size", _font(13))
+	layer_label.add_theme_color_override("font_color", ACCENT)
+	layer_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	layer_header.add_child(layer_label)
+	
+	_add_layer_button = Button.new()
+	_add_layer_button.name = "AddLayer"
+	_add_layer_button.text = "+"
+	_add_layer_button.tooltip_text = "Add a new layer to the current channel."
+	_add_layer_button.add_theme_font_size_override("font_size", _font(12))
+	_add_layer_button.custom_minimum_size = Vector2(_scaled(24.0), _scaled(20.0))
+	_add_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.add_layer()
+	)
+	layer_header.add_child(_add_layer_button)
+	
+	_delete_layer_button = Button.new()
+	_delete_layer_button.name = "DeleteLayer"
+	_delete_layer_button.text = "-"
+	_delete_layer_button.tooltip_text = "Delete the active layer."
+	_delete_layer_button.add_theme_font_size_override("font_size", _font(12))
+	_delete_layer_button.custom_minimum_size = Vector2(_scaled(24.0), _scaled(20.0))
+	_delete_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.remove_layer()
+	)
+	layer_header.add_child(_delete_layer_button)
+	col.add_child(layer_header)
+	
+	_layer_list = VBoxContainer.new()
+	_layer_list.name = "LayerList"
+	_layer_list.add_theme_constant_override("separation", 2)
+	col.add_child(_layer_list)
+	
+	var overlay_opacity_row := _compact_spin("Opacity", 0.0, 1.0, 0.05, 1.0, func(v: float) -> void:
+		if _paint:
+			_paint.overlay_opacity = v
+	, "Active layer opacity. Strokes remain non-destructive until Flatten.", &"overlay_opacity")
+	_overlay_opacity = overlay_opacity_row.get_child(1) as SpinBox
+	col.add_child(overlay_opacity_row)
+	
+	var layer_actions := HFlowContainer.new()
+	layer_actions.name = "LayerActions"
+	layer_actions.add_theme_constant_override("h_separation", 4)
+	layer_actions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(layer_actions)
+	_fill_layer_button = Button.new()
+	_fill_layer_button.name = "PaintFillLayer"
+	_fill_layer_button.text = "Fill Layer"
+	_fill_layer_button.accessibility_name = "Fill active paint layer"
+	_fill_layer_button.tooltip_text = "Replace the active layer with Brush Color and Opacity. Other layers stay unchanged."
+	_fill_layer_button.add_theme_font_size_override("font_size", _font(15))
+	_fill_layer_button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
+	_fill_layer_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.fill_layer()
+	)
+	layer_actions.add_child(_fill_layer_button)
+	_flatten_button = _named_action("Flatten", "Apply", "Commit all visible layers to the base as one undoable action.", func() -> void:
+		if _paint:
+			_paint.flatten()
+	)
+	_flatten_button.name = "PaintFlatten"
+	layer_actions.add_child(_flatten_button)
+	
+	col.add_child(HSeparator.new())
+	
 	var brush := Label.new()
 	brush.text = "Brush"
 	brush.add_theme_font_size_override("font_size", _font(13))
@@ -1304,6 +1915,7 @@ func _brush_column() -> Control:
 		if _paint:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
+	
 	var overlay := CheckBox.new()
 	overlay.name = "PaintUvOverlay"
 	overlay.text = "Show UV"
@@ -1404,30 +2016,90 @@ func _paint_caption(heading: String, text: String) -> Label:
 
 
 func _sync_model_chrome() -> void:
-	var painting: bool = _paint != null and _paint.active
-	var modelling: bool = not painting and not _actions.operation_active
+	var in_workspace: bool = _workspace != Workspace.MODELLING
+	var modelling: bool = not in_workspace and not _actions.operation_active
 	if _selection_controls != null:
 		_selection_controls.visible = modelling
 	if _model_body != null:
 		_model_body.visible = modelling
 
 
+func _toggle_uv_workspace() -> void:
+	if _workspace == Workspace.UV:
+		_exit_workspace()
+	else:
+		_enter_workspace(Workspace.UV)
+
+
+func _toggle_paint_workspace() -> void:
+	if _workspace == Workspace.PAINT:
+		_exit_workspace()
+	else:
+		_enter_workspace(Workspace.PAINT)
+
+
+func _enter_workspace(ws: int) -> void:
+	if _paint == null:
+		return
+	_workspace = ws
+	if ws == Workspace.UV:
+		_paint.tool = SlabPaint.Tool.MATERIAL_UV
+	else:
+		_paint.tool = SlabPaint.Tool.PIXEL
+	if not _paint.active:
+		_paint.enter()
+	else:
+		_on_paint_changed()
+
+
+func _exit_workspace() -> void:
+	_workspace = Workspace.MODELLING
+	if _paint != null and _paint.active:
+		_paint.exit()
+	else:
+		_on_paint_changed()
+
+
+func current_workspace() -> int:
+	return _workspace
+
+
 func _on_paint_changed() -> void:
 	var on: bool = _paint != null and _paint.active
 	if not on:
+		_workspace = Workspace.MODELLING
 		_close_paint_resize_form()
+	else:
+		_workspace = Workspace.PAINT if _paint.tool == SlabPaint.Tool.PIXEL else Workspace.UV
 	add_theme_constant_override("separation", 3 if on else 6)
 	_sync_model_chrome()
 	if _operation_row != null:
 		_operation_row.visible = not on and _actions.operation_active
+	var external_only: bool = _selection != null and _selection.has_only_external_meshes()
+	if _uv_toggle != null:
+		_uv_toggle.set_pressed_no_signal(_workspace == Workspace.UV)
+		_style_tool(_uv_toggle, _workspace == Workspace.UV)
+		_uv_toggle.disabled = external_only
+		if external_only:
+			_uv_toggle.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
+		else:
+			_uv_toggle.tooltip_text = "Open the UV workspace for unwrapping and material placement. Escape closes it."
 	if _paint_toggle != null:
-		_paint_toggle.set_pressed_no_signal(on)
-		_style_tool(_paint_toggle, on)
+		_paint_toggle.set_pressed_no_signal(_workspace == Workspace.PAINT)
+		_style_tool(_paint_toggle, _workspace == Workspace.PAINT)
+		_paint_toggle.disabled = external_only
+		if external_only:
+			_paint_toggle.tooltip_text = SlabActions.PROMOTE_FIRST_TOOLTIP
+		else:
+			_paint_toggle.tooltip_text = "Open the pixel Paint workspace. Escape closes it."
 	if _paint_body != null:
 		_paint_body.visible = on
 	clip_contents = on
+	custom_minimum_size.x = _paint_workspace_minimum_width() if on else 0.0
 	custom_minimum_size.y = _scaled(SlabPaint.PAINT_HEIGHT if on else PANEL_HEIGHT)
 	if _status != null:
+		# Reserve the same feedback row in UV and Paint so reports do not resize the canvas.
+		_status.visible = on or not _status.text.is_empty()
 		_status.autowrap_mode = TextServer.AUTOWRAP_OFF if on else TextServer.AUTOWRAP_WORD_SMART
 		_status.clip_text = on
 		_status.max_lines_visible = 1 if on else -1
@@ -1450,14 +2122,16 @@ func _refresh_paint_chrome() -> void:
 		_selection_context.text = _paint_face.text
 		_selection_context.tooltip_text = _paint_face.text
 	var mat_text := "none"
+	var is_uv_workspace: bool = _workspace == Workspace.UV
+	var is_paint_workspace: bool = _workspace == Workspace.PAINT
 	if _paint != null:
-		var mat: Variant = _paint.material() if _paint.is_pixel() else _paint.brush_material()
+		var mat: Variant = _paint.material() if is_paint_workspace else _paint.brush_material()
 		mat_text = _paint.material_label(mat, _paint.slot())
 		if mat == null:
 			mat_text = "none"
 		if mat is StandardMaterial3D and _paint.is_owned(mat):
 			mat_text += " (unique)"
-	_paint_mat.text = "%s: %s" % ["Texture" if _paint != null and _paint.is_pixel() else "Brush", mat_text]
+	_paint_mat.text = "%s: %s" % ["Texture" if is_paint_workspace else "Brush", mat_text]
 	_paint_mat.clip_text = true
 	_paint_mat.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_paint_mat.tooltip_text = _paint_mat.text
@@ -1465,58 +2139,68 @@ func _refresh_paint_chrome() -> void:
 	_paint_dirty.visible = false
 	_paint_dirty.clip_text = true
 	_paint_dirty.tooltip_text = _paint_dirty.text
-	var pixel: bool = _paint != null and _paint.is_pixel()
-	_paint_assign.visible = not pixel
-	_paint_sample.visible = not pixel
-	_paint_picker_wrap.visible = not pixel
-	_paint_palette.visible = not pixel
-	_paint_save.visible = pixel
+	_paint_assign.visible = is_uv_workspace
+	_paint_sample.visible = is_uv_workspace
+	_paint_picker_wrap.visible = is_uv_workspace
+	_paint_palette.visible = is_uv_workspace
+	if _uv_mode_strip != null:
+		_uv_mode_strip.visible = is_uv_workspace
+	if _uv_place_button != null:
+		_uv_place_button.set_pressed_no_signal(_uv_placement)
+		_style_tool(_uv_place_button, _uv_placement)
+	if _uv_element_buttons != null:
+		_uv_element_buttons.active = not _uv_placement
+	if _paint_canvas != null:
+		_paint_canvas.set_uv_element_mode(is_uv_workspace and not _uv_placement)
+	_paint_save.visible = is_paint_workspace
 	_paint_save.disabled = _paint == null or not _paint.is_owned(_paint.material())
-	_paint_resize.visible = pixel
+	_paint_resize.visible = is_paint_workspace
 	_paint_resize.disabled = _paint == null or not _paint.can_resize_image()
 	_paint_resize.tooltip_text = "Choose Width, Height, and resampling for the owned paint image." if not _paint_resize.disabled else "Make Unique before resizing this image."
-	_paint_help.visible = pixel
+	_paint_help.visible = is_paint_workspace
 	_paint_help.text = _pixel_help_text()
 	_paint_help.tooltip_text = _paint_help.text
-	if _paint_tool_uv != null and _paint != null:
-		_paint_tool_uv.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.MATERIAL_UV)
-		_style_tool(_paint_tool_uv, _paint.tool == SlabPaint.Tool.MATERIAL_UV)
-	if _paint_tool_pixel != null and _paint != null:
-		_paint_tool_pixel.set_pressed_no_signal(_paint.tool == SlabPaint.Tool.PIXEL)
-		_style_tool(_paint_tool_pixel, _paint.tool == SlabPaint.Tool.PIXEL)
+	if _paint_tool_uv != null:
+		_paint_tool_uv.visible = false
+	if _paint_tool_pixel != null:
+		_paint_tool_pixel.visible = false
 	if _paint_uv_hint != null:
 		var preview_caption: String = _paint.brush_preview_caption() if _paint != null else ""
-		_paint_uv_hint.text = preview_caption if preview_caption != "" else SlabPaint.uv_canvas_hint()
-		_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, SlabPaint.uv_canvas_hint()] if preview_caption != "" else ""
-		_paint_uv_hint.visible = _paint != null and not _paint.is_pixel()
+		var uv_mode_hint := _uv_mode_hint()
+		if preview_caption != "":
+			_paint_uv_hint.text = preview_caption
+			_paint_uv_hint.tooltip_text = "%s\n%s" % [preview_caption, uv_mode_hint]
+		else:
+			_paint_uv_hint.text = uv_mode_hint
+			_paint_uv_hint.tooltip_text = uv_mode_hint
+		_paint_uv_hint.visible = is_uv_workspace
 	if _paint_fit_uv != null:
-		_paint_fit_uv.visible = _paint != null and not _paint.is_pixel()
+		_paint_fit_uv.visible = is_uv_workspace
 	if _paint_uv_controls != null:
-		_paint_uv_controls.visible = _paint != null and not _paint.is_pixel()
+		_paint_uv_controls.visible = is_uv_workspace
 	if _paint_brush != null:
-		_paint_brush.visible = _paint != null and _paint.is_pixel()
-	if _paint_inspector != null:
-		_paint_inspector.custom_minimum_size.x = _scaled(180.0 if pixel else 350.0)
-	if _paint_inspector_fields != null:
-		_paint_inspector_fields.custom_minimum_size.x = _scaled(172.0 if pixel else 342.0)
+		_paint_brush.visible = is_paint_workspace
+	_apply_paint_left_dock_width(is_paint_workspace)
 	if _paint_mapping_grid != null:
-		_paint_mapping_grid.columns = 1 if pixel else 2
+		_paint_mapping_grid.columns = 1 if is_paint_workspace else 2
 	if _paint_mapping_title != null:
-		_paint_mapping_title.text = "Image" if pixel else "Mapping"
+		_paint_mapping_title.text = "Image" if is_paint_workspace else "Mapping"
 	if _paint_mapping_state != null:
 		_paint_mapping_state.text = _paint_mapping_summary()
-		_paint_mapping_state.visible = not pixel
+		_paint_mapping_state.visible = is_uv_workspace
 	if _paint_density_row != null:
-		_paint_density_row.visible = not pixel
+		_paint_density_row.visible = is_uv_workspace
 	if _paint_unwrap != null:
-		_paint_unwrap.visible = not pixel
+		_paint_unwrap.visible = is_uv_workspace
+	if _paint_pack != null:
+		_paint_pack.visible = is_uv_workspace
 	var pixel_has_artwork := false
-	if pixel and _paint != null:
+	if is_paint_workspace and _paint != null:
 		var pixel_material: Variant = _paint.material()
 		pixel_has_artwork = pixel_material is StandardMaterial3D and pixel_material.albedo_texture != null
 	if _paint_texture_px_label != null:
-		_paint_texture_px_label.text = "Texture px" if not pixel or pixel_has_artwork else "New image px"
-		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and the size of a blank image created by Make Unique."
+		_paint_texture_px_label.text = "Texture px" if is_uv_workspace or pixel_has_artwork else "New image px"
+		_paint_texture_px_label.tooltip_text = "Existing artwork dimensions; Make Unique preserves them." if pixel_has_artwork else "Reference atlas resolution for Unwrap and Pack. Existing artwork is not resized."
 	if _paint_texture_px_spin != null:
 		_paint_texture_px_spin.editable = not pixel_has_artwork
 		_paint_texture_px_spin.tooltip_text = _paint_texture_px_label.tooltip_text
@@ -1535,8 +2219,32 @@ func _refresh_paint_chrome() -> void:
 		var allowed: bool = _paint != null and _paint.can_make_unique()
 		_unique_button.disabled = not allowed
 		_unique_button.tooltip_text = "Copy the current material onto the selected faces so pixel painting does not rewrite shared tiles." if allowed else "Select faces that share one material before Make Unique."
+	if _overlay_opacity != null and _paint != null:
+		_overlay_opacity.set_value_no_signal(_paint.overlay_opacity)
+	if _fill_layer_button != null:
+		_fill_layer_button.disabled = _paint == null or not _paint.can_fill_layer()
+	if _flatten_button != null:
+		var can_flatten: bool = _paint != null and _paint.can_flatten()
+		_flatten_button.disabled = not can_flatten
+		var channel_name: String = _paint.current_channel_name() if _paint else "Albedo"
+		_flatten_button.tooltip_text = "Commit all visible layers to the %s base as one undoable action." % channel_name if can_flatten else "Paint strokes on the overlay first."
+	if _channel_label != null:
+		_channel_label.visible = false
+	if _channel_picker != null:
+		_channel_picker.visible = is_paint_workspace
+		if is_paint_workspace:
+			_sync_channel_picker()
+	if _layer_list != null:
+		_layer_list.visible = is_paint_workspace
+		if is_paint_workspace:
+			_refresh_layer_list()
+	if _add_layer_button != null:
+		_add_layer_button.visible = is_paint_workspace
+	if _delete_layer_button != null:
+		_delete_layer_button.visible = is_paint_workspace
 	_refresh_paint_palette()
 	if _paint != null and _paint.active:
+		custom_minimum_size.x = _paint_workspace_minimum_width()
 		custom_minimum_size.y = maxf(_scaled(SlabPaint.PAINT_HEIGHT), _paint_workspace_minimum_height())
 	update_minimum_size()
 
@@ -1689,7 +2397,7 @@ func _tooltip_of(row: Dictionary) -> String:
 	var body: String = _actions.tooltip_of(row)
 	if body != "":
 		lines.append(body)
-	var shortcut: int = row["shortcut"]
+	var shortcut: int = _actions.shortcut_of(row)
 	if shortcut != 0:
 		lines.append("Shortcut %s." % OS.get_keycode_string(shortcut))
 	return "\n".join(lines)
@@ -1785,20 +2493,20 @@ func _make_paint_resize_form() -> VBoxContainer:
 	form.add_child(_paint_resize_aspect)
 	form.add_child(_paint_resize_sampling)
 	var actions := HFlowContainer.new()
-	var apply := Button.new()
-	apply.name = "PaintResizeConfirm"
-	apply.text = "Apply Resize"
-	apply.add_theme_font_size_override("font_size", _font(13))
-	apply.accessibility_name = "Apply image resize"
-	apply.pressed.connect(_apply_paint_resize)
 	var cancel := Button.new()
 	cancel.name = "PaintResizeCancel"
 	cancel.text = "Cancel"
 	cancel.add_theme_font_size_override("font_size", _font(13))
 	cancel.accessibility_name = "Cancel image resize"
 	cancel.pressed.connect(_close_paint_resize_form)
-	actions.add_child(apply)
+	var apply := Button.new()
+	apply.name = "PaintResizeConfirm"
+	apply.text = "Apply Resize"
+	apply.add_theme_font_size_override("font_size", _font(13))
+	apply.accessibility_name = "Apply image resize"
+	apply.pressed.connect(_apply_paint_resize)
 	actions.add_child(cancel)
+	actions.add_child(apply)
 	form.add_child(actions)
 	return form
 
@@ -1866,3 +2574,15 @@ func _apply_loop_preview() -> void:
 			for spin in _spins_under(field):
 				spin.apply()
 	_actions.loop_apply_requested.emit()
+
+
+func _on_uv_element_picked(element_id: int, additive: bool) -> void:
+	if _selection == null:
+		return
+	_selection.toggle_uv_element(element_id, additive)
+
+
+func _uv_mode_hint() -> String:
+	if _uv_placement:
+		return SlabPaint.uv_canvas_hint()
+	return "Click selects UV elements. Shift-click adds or removes. Choose Place to edit face mapping."

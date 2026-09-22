@@ -107,11 +107,11 @@ func _run() -> void:
 	actions.run("snap_vertex")
 	check(actions.snap_align_active and actions.snap_align_mode == Actions.SNAP_VERTEX, "shared viewport starts Snap to Vertex as a modal tool")
 	paint.enter()
-	check(paint.active and not actions.snap_align_active, "opening Surface Paint cancels Snap to Vertex")
+	check(paint.active and not actions.snap_align_active, "opening UV workspace cancels Snap to Vertex")
 	integrated_selection.mode = Selection.Mode.FACE
 	integrated_selection.set_ids(PackedInt64Array([integrated.call("get_faces")[0]]))
 	actions.run("align_face")
-	check(actions.snap_align_active and not paint.active, "starting Align Face closes Surface Paint")
+	check(actions.snap_align_active and not paint.active, "starting Align Face closes UV workspace")
 	integrated_selection.mode = Selection.Mode.OBJECT
 	actions.run("plane_cut")
 	check(not actions.snap_align_active and actions.plane_active, "changing to Object and starting Plane Cut leaves no Align Face modal")

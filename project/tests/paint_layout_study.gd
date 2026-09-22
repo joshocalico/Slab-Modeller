@@ -37,7 +37,7 @@ func _run() -> void:
 		if solid.call("face_normal", face).y > 0.9:
 			selection.set_ids(PackedInt64Array([face]))
 			break
-	await _click(_button_named(panel, "Surface Paint"))
+	await _click(_button_named(panel, "UV"))
 	var picker: Node = panel.find_child("PaintMaterialPicker", true, false)
 	var material := ResourceLoader.load("res://demo/signal_foundry/materials/teal_steel.tres") as StandardMaterial3D
 	if material == null:

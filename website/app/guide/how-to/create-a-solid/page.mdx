@@ -6,6 +6,8 @@ export const metadata = { title: "Create a solid" };
 
 Use this when the scene has no `SlabSolid` yet, or when you want a second volume as a cutter.
 
+<video controls preload="metadata" width="100%" src="/videos/v1/v1-01-create-solid.mp4"></video>
+
 ## Make a box
 
 1. Press <kbd>1</kbd> for Object mode.
@@ -18,12 +20,6 @@ Use this when the scene has no `SlabSolid` yet, or when you want a second volume
 Slab snaps the preview's X and Z position to its grid step. On a horizontal solid surface, Slab keeps the exact surface height. Over empty space, Slab places the preview on the world XZ plane at Y = 0. Press Escape or right-click to cancel without creating a node. Changing the shape or a dimension also cancels the preview. Click **Create** again to place the revised shape.
 
 The new `SlabSolid` keeps the box's local origin at its minimum corner. The box extends from there along positive X, Y, and Z. The selected shape and values remain ready for another **Create**. Changing them does not resize an existing solid.
-
-<Figure
-  src="/img/panel-object.png"
-  alt="The Slab panel in Object mode with Cylinder selected, its dimensions and side count visible, and a separate Create button."
-  caption="Choose a shape, set its values, then click Create. Placement uses a gold preview in the 3D view."
-/>
 
 <Figure
   src="/img/solid-box.png"

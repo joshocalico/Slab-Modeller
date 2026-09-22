@@ -1,14 +1,30 @@
 # Modeller design direction
 
-The current editor has a usable visual base. The next pass should make the active workflow easier to read before adding more commands. These priorities come from authoring Signal Foundry in the 1225 by 768 Godot editor.
+## Current checkpoint — 23 September 2026
 
-## Make the current task obvious
+The editor now has separate **UV** and **Paint** workspaces. UV owns material assignment and mapping; Paint owns Albedo, Roughness, and Emission artwork. Vertex, Edge, and Face actions share one wrapping toolbar, with **Selection** collapsed by default. The header retains target identity and element count; status shows instructions or results. The **Shortcuts** menu marks the active keyboard profile.
+
+**Fill Layer** replaces the active layer with Brush Color and Opacity as one undoable edit. It preserves other layers and the base image. Paint and UV reserve the same status-row space so feedback does not change canvas height; modelling hides an empty status row. The dock continues to respect the user's splitter position.
+
+Paint temporarily locks its target's native transform gizmo. The save boundary restores the authored `_edit_lock_` metadata before packing and resumes the temporary lock afterward, with deferred recovery when no save-complete signal arrives. Exit restores the original metadata; deleted targets are not relocked. The focused rendered save/reload test covers absent, false, and true authored lock values. This supersedes the open lock limitation in the historical study below; it does not claim verification of every native selection interaction.
+
+Camera Preview input now uses projection dimensions from the editor viewport displaying that camera. The projection helper copies camera settings without modifying the scene camera. Focused regressions cover the projection and overlay refresh; native saved-scene acceptance remains a separate check.
+
+These are implemented workflow changes, not a claim of product parity or Annex craft acceptance. Current controls are documented in the guide; release evidence and remaining checks are recorded in [UX acceptance](ux-acceptance.md).
+
+## Historical design studies
+
+The following notes preserve earlier Signal Foundry studies, measurements, and proposals. Present-tense labels such as Surface Paint, Material / UV, and Pixel describe those iterations. Statements about open work, including native gizmo ownership, are historical unless repeated in the current checkpoint above.
+
+The earlier editor had a usable visual base. The priorities below came from authoring Signal Foundry in the 1225 by 768 Godot editor.
+
+### Make the current task obvious
 
 Surface Paint now has an active gold highlight and a separator from the selection modes. Keep that distinction: the editing workspace and the vertex, edge, or face selection mode answer different questions.
 
 Keep the selected object and element count beside the active tool, even while an operation reports success. The panel header now preserves this context in modelling and painting. Preserve the specific opening-related Merge explanation.
 
-## Give each workflow a clear order
+### Give each workflow a clear order
 
 Creation should read as shape, dimensions, placement, then confirmation. The room-authoring pass exposed different Box and Cylinder origins and offscreen creation. The design review compared explicit Origin/Selection/View choices, click-to-place preview, and immediate view placement with Move active. Click-to-place now shows the destination before insertion and works without a selected solid. Each shape uses the bottom centre of its built bounds, preserving the kernel's existing shape origins. Cancellation leaves no owned node or Undo entry; confirmation creates one Undo action. The [native editor check](creation-placement-playtest.md) covers click, Enter, Escape, repeated creation, Undo/Redo, and restored object appearance.
 
@@ -16,21 +32,21 @@ Surface editing should read as selected faces, material, then UV or pixel tools.
 
 Keep tool options adjacent to the tool that owns them. Preserve separate remembered Inset, Extrude, and Bevel values and the existing Apply/Cancel boundary.
 
-## Protect the modelling view
+### Protect the modelling view
 
 Godot exposes no public bottom-panel splitter height control, so do not resize private editor ancestors. Keep the compact modelling minimum and let the user resize or collapse the dock. Check both a compact dock and a loaded material thumbnail before accepting a layout. The side-inspector Paint layout now fits the authoring dock without expanding it on entry.
 
-## Keep the first design pass focused
+### Keep the first design pass focused
 
 Placement and persistent target context now have native editor evidence. The remaining layout work should give active operation settings and Apply/Cancel a consistent location, reduce duplicate material and UV controls, and preserve enough viewport space for picking. Compare compact layouts using a selected face with a loaded material before choosing one.
 
 Selection conversion also matters during authoring. Rounding a roof requires its perimeter edges; selecting the top face should provide a direct route to that set. Judge this and other modelling additions by building another part of Signal Foundry with them.
 
-## Consolidate surface editing without losing capabilities
+### Consolidate surface editing without losing capabilities
 
 Surface Paint owns material choice, Assign, UV placement, and Mapping. Face mode keeps geometry commands and the Selection disclosure. Its right-hand settings appear for Align Face rather than repeating Paint's fields.
 
-Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions.
+Unwrap is distinct from adjusting placement. It unfolds adjacent faces, uses marked and automatic seams, packs islands at physical density, and writes their mapping bases. Pack re-atlases those existing islands without unfolding again. Fit UV frames the canvas only. Apply UV adjusts placement on the existing mapping. Edge-mode Mark Seam and Clear Seam remain available. Pixel's Image section controls blank image size and reports existing artwork dimensions. Pixel hides the UV element strip and Pack.
 
 Resize expands beside the image with Width, Height, Keep aspect, resampling, Apply Resize, and Cancel. The canvas stays visible while the author chooses dimensions. Only Apply changes the image; UV placement remains unchanged. This uses the modelling tools' explicit Apply and Cancel controls. The form shows pending dimensions, not a preview of the resampled pixels.
 
@@ -40,7 +56,7 @@ New StandardMaterial3D in the picker replaces adding anonymous blank slots. Clic
 
 The house tutorial follows this order: assign a wall material to all faces, select the roof and assign another resource, then repeat for the gables. It no longer relies on numeric material slots or the removed disclosure. The native room-workflow pass verified normal Face mode, Align Face settings and cancellation, quick repeats, saved UV values, and exact Undo restoration after this consolidation.
 
-## Paint layout comparison
+### Paint layout comparison
 
 The native 1225 × 768 editor gives Slab about 815 screen pixels between Godot's sidebars. With Paint open, the divider is at Y=409. Material/UV's canvas spans approximately Y=603–738, while Pixel's spans Y=516–738. Switching tools keeps the divider stable.
 
@@ -54,17 +70,17 @@ The inspector owns scrolling. Its action and UV sections use natural container h
 
 Native acceptance covered first entry, typed Rotation 15 without Enter followed by Apply UV, a UV canvas drag, Make Unique, Pixel canvas painting, scrolling to Opacity and Show UV, and returning to Face mode. Undo and Save restored Signal Foundry with no scene diff. The full verifier passed.
 
-## Reference workflows
+### Reference workflows
 
 ProBuilder's [UV Editor](https://docs.unity3d.com/Packages/com.unity.probuilder@6.1/manual/uv-editor.html) separates its canvas from a context-sensitive Actions panel and distinguishes automatic mapping from manual UV editing. UModeler's [UV workflow](https://unity.umodeler.com/manual/editable-mesh/uv-editor/uv-editor-guide) moves from unwrapping through island placement to checking the applied texture. Its [painting inspector](https://unity.umodeler.com/manual/editable-mesh/painting-3d-editor/painting-mode-guide) groups setup and tools into collapsible sections.
 
 For Slab, these support making mapping state and the next action visible, giving unwrap a clear place beside placement, and grouping secondary setup without hiding the canvas. They do not establish that Slab matches either product's capabilities or usability.
 
-## Acceptance
+### Acceptance
 
 Use the editor to select a wall, assign an existing material, adjust UVs, paint pixels, return to face editing, and undo each edit. Save and reopen the result. Repeat on a curved model and a room with an opening. Record where a control needs explanation or hides the next action. A screenshot alone cannot establish that the flow works.
 
-## Native gizmo ownership during Paint
+### Native gizmo ownership during Paint
 
 The 14 September native landing pass still shows Godot's transform arrows and rotation rings over the painted face. Paint consumes its gestures, but these handles imply an available transform action and obscure narrow bevel strips.
 
@@ -72,7 +88,7 @@ The installed Godot 4.7.2 extension API has no public native-transform visibilit
 
 Preserve native selection behavior for now. A future detached paint-target prototype must prove framing, Inspector context, tree selection, switching solids, scene changes, and restoration before adoption. The ordinary Godot View Transform Gizmo toggle remains a manual option. This limitation is still open.
 
-## Fit UV at different mapping scales
+### Fit UV at different mapping scales
 
 Fit UV should use the selected mapping's actual bounds and retain a margin around the outline. A quarter-tile minimum made low-density islands too small to edit. Wheel zoom must start from the fitted scale, with the point beneath the pointer held in place. Use the same finite scale limits for framing, wheel changes, and inverse pointer mapping.
 
@@ -80,7 +96,7 @@ A line fits its nonzero dimension. A point-only mapping uses a one-tile view rat
 
 Scale and rotation modifier drags use editor-scaled screen distance from the initial press. A horizontal drag of 180 logical pixels turns UVs 180 degrees; for scaling, that distance adds 100 percent on the corresponding axis. Moving retains UV-space displacement so the mapping follows the pointer. This separates view magnification from modifier sensitivity without changing the existing gesture assignments. Check held modifiers, cancellation, exact history, and the same drag at different zooms before accepting the interaction.
 
-## Keep the palette beside assignment
+### Keep the palette beside assignment
 
 The courtyard ring pass required choosing Brick from a palette below Mapping, then scrolling back to Assign. Material / UV now orders its inspector as material actions and picker, loaded palette, Placement, then Mapping. In the native compact dock, the three ring slots and Assign are visible together. Choosing a palette chip remains a preview; Assign performs the edit.
 

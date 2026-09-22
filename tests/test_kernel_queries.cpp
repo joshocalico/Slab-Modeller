@@ -215,6 +215,7 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	attrs.material_slot = 7;
 	attrs.smooth = true;
 	attrs.uv_unwrapped = true;
+	attrs.uv_texture_resolution = 2048;
 	attrs.uv_u = godot::Vector3(0.5f, 0, 0);
 	attrs.uv_v = godot::Vector3(0, 0, 0.5f);
 	attrs.uv_origin = godot::Vector2(0.125f, 0.25f);
@@ -244,6 +245,7 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	expect_eq(int(back.uv_axis), int(UvAxis::Y), "uv_axis");
 	expect_eq(int(back.material_slot), 7, "material_slot");
 	expect(back.smooth, "smooth");
+	expect_eq(back.uv_texture_resolution, 2048, "atlas resolution survives reload");
 	expect(back.uv_unwrapped && back.uv_u == attrs.uv_u && back.uv_v == attrs.uv_v
 			&& back.uv_origin == attrs.uv_origin, "unfolded face mapping survives reload");
 	expect(loaded.edge_uv_seam(edges.front()), "marked seam survives reload");
@@ -251,7 +253,14 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	emit_arrays(mesh, before_emit);
 	emit_arrays(loaded, after_emit);
 	expect(before_emit.uvs == after_emit.uvs, "rendered UVs survive serialization exactly");
-	std::vector<uint8_t> legacy = bytes;
+	std::vector<uint8_t> legacy_v3 = bytes;
+	legacy_v3[4] = 3;
+	legacy_v3.resize(legacy_v3.size() - size_t(mesh.face_count() * 4));
+	Mesh loaded_v3;
+	expect(deserialize(legacy_v3, loaded_v3).ok(), "actual v3 layout without resolution tail loads");
+	expect_eq(loaded_v3.attrs(top).uv_texture_resolution, 0, "legacy atlas resolution is unknown");
+	expect(loaded_v3.attrs(top).uv_u == attrs.uv_u, "v3 UV mapping is preserved");
+	std::vector<uint8_t> legacy = legacy_v3;
 	legacy[4] = 2;
 	legacy.resize(legacy.size() - size_t(mesh.edge_count() * 2) - size_t(mesh.face_count() * 33));
 	Mesh legacy_mesh;

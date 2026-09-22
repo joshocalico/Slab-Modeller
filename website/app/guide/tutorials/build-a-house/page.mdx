@@ -83,19 +83,19 @@ Start with one wall material on the whole house, then replace it on the roof and
 
 1. Click the house `SlabSolid` in the Scene tree and press <kbd>4</kbd> for Face mode.
 2. Click a house face, then press <kbd>A</kbd> in the 3D view to select every face.
-3. Open **Surface Paint** and stay on **Material / UV**.
+3. Click **UV** in the Slab header.
 4. Open the material picker and choose **New StandardMaterial3D**.
 5. Click its preview to open Godot's Inspector. Set **Albedo > Color** to a wall colour and choose a repeating **Albedo > Texture** if you have one.
 6. Click **Assign**. The house now uses the wall material.
 
 For the roof:
 
-1. Click the highlighted **Face** button to leave Surface Paint.
+1. Click the highlighted **Face** button to leave UV.
 2. Click a roof face, then Shift-click the remaining curved roof faces. Orbit the house to reach the back. Keep the flat gables out of this selection.
-3. Open **Surface Paint**, create another **New StandardMaterial3D**, and click its preview.
+3. Open **UV**, create another **New StandardMaterial3D**, and click its preview.
 4. Set its albedo to a roof colour or texture, then click **Assign**.
 
-Repeat that sequence for the flat gable faces using a darker material. Select faces in Face mode, then create and Assign their material in Surface Paint. Choosing a resource previews it; Assign changes the selected faces.
+Repeat that sequence for the flat gable faces using a darker material. Select faces in Face mode, then create and Assign their material in UV. Choosing a resource previews it; Assign changes the selected faces.
 
 <Figure
   src="/img/house-04.png"
@@ -103,7 +103,7 @@ Repeat that sequence for the flat gable faces using a darker material. Select fa
   caption="Separate materials on the walls, vault, and gables."
 />
 
-With the roof faces selected in Surface Paint, set **Repeat U** and **Repeat V** to 2, then click **Apply UV** if the pattern is too large. **Repeat ×2** doubles both repeat values in one edit, making the texture pattern denser.
+With the roof faces selected in UV, set **Repeat U** and **Repeat V** to 2, then click **Apply UV** if the pattern is too large. **Repeat ×2** doubles both repeat values in one edit, making the texture pattern denser.
 
 ## Check
 

@@ -45,3 +45,32 @@ static func transform(solid: Node3D, mode: int, ids: PackedInt64Array, xform: Tr
 	if verts.is_empty() or xform.is_equal_approx(Transform3D.IDENTITY):
 		return OK
 	return solid.transform_vertices(verts, xform)
+
+
+static func transform_weighted(solid: Node3D, xform: Transform3D, weights: Dictionary) -> int:
+	if weights.is_empty() or xform.is_equal_approx(Transform3D.IDENTITY):
+		return OK
+	var full_verts := PackedInt64Array()
+	var partial_verts: Array[int] = []
+	var partial_weights: Array[float] = []
+	for vertex in weights:
+		var w: float = weights[vertex]
+		if w >= 0.999:
+			full_verts.append(vertex)
+		elif w > 0.001:
+			partial_verts.append(vertex)
+			partial_weights.append(w)
+	if not full_verts.is_empty():
+		var err: int = solid.transform_vertices(full_verts, xform)
+		if err != OK:
+			return err
+	for i in partial_verts.size():
+		var vertex: int = partial_verts[i]
+		var weight: float = partial_weights[i]
+		var pos: Vector3 = solid.vertex_position(vertex)
+		var full_pos: Vector3 = xform * pos
+		var delta: Vector3 = (full_pos - pos) * weight
+		var err: int = solid.move_vertices(PackedInt64Array([vertex]), delta)
+		if err != OK:
+			return err
+	return OK

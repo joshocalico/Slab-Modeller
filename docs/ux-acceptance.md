@@ -4,7 +4,33 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 
 The next visual and interaction priorities are recorded in [Modeller design direction](modeller-design-direction.md): active workspace and selection state, material assignment order, and viewport space after leaving paint.
 
-## Verified improvements
+## Current release checkpoint — 2026-09-23
+
+This checkpoint supersedes the control names, screenshot claims, and outstanding-check lists in the historical record below. It does not claim parity with another modeller or completion of the Annex art brief.
+
+- The header exposes **UV** and **Paint** separately. UV **Place** moves face mapping; Shift scales and Cmd on macOS or Ctrl elsewhere rotates. UV Vert, Edge, and Face select canvas elements. The workspace input regression covers gestures and Undo/Redo.
+- Modelling commands use one wrapping row, secondary selection commands start collapsed, and the Shortcuts menu checks the active profile. Selection context stays in the header while status messages describe the latest action. Native editor checks covered the menu and material-aware header; rendered Undo checks verify both cleared feedback and the selected face's material.
+- UV atlas resolution belongs to each face mapping. Mixed-resolution packing, topology attribute copies, Undo, serialized reload, and older scene data have regression coverage. Object isolation preserves authored visibility when saving and reopening.
+- Paint layers belong to their material and channel and survive scene reload. Save writes the selected channel, then flattens its visible layers; hidden layers remain editable. Failed writes preserve layer state. Roughness painting preserves the effective value of untouched pixels, including a non-default material scalar. The paint state regressions cover these cases and Undo/Redo across target changes.
+- **Fill Layer** replaces the active layer using brush colour and opacity in one undoable action. Native use covered an exact black fill, keyboard Undo/Redo, a small white emission stroke, Flatten, and saving with Paint open. Painted emission multiplies the image by white rather than adding a full-surface glow. Temporary Paint transform locks are excluded from saved scene data while authored locks are preserved.
+- Camera Preview picking and overlays use the rendered editor viewport's dimensions without changing the authored camera. A native click with Preview enabled selected the visible Annex bezel; focused projection regressions cover the conversion.
+- Promote preserves supported UVs, materials, transforms, visibility, and children through Undo/Redo and refuses unsupported input. OBJ exports albedo color, opacity, and albedo PNGs with the geometry and material groups. Bundle failure and texture-alpha import regressions cover the corrected export paths; this is not PBR or shader export support.
+- Procedural guide mockups and misleading screenshot usages have been removed. Remaining captions describe visible content. The Annex README identifies historical captures that do not establish geometry, successful export/Promote, or place readability.
+
+The final `scripts/slab-verify` run passed with 164 kernel tests, 4,924 checks, and all Godot gates green (`/tmp/slab-release-final-green.log`). Website lint and production build passed with 33 pages; documentation checks passed across 29 MDX pages and 93 local references.
+
+The separate native gizmo matrix passed all 11 cases, including Paint gesture ownership and restoring native transforms after exit (`/tmp/slab-native-matrix-final.log`). Fresh-project installation, creation, save, and reopen passed (`/tmp/slab-install-final.log`). The final harness fixes wait for the requested scene to remain attached after Godot restores startup tabs, and copy the GUI test helper into the disposable installation project. They preserve the interaction assertions and do not change the addon.
+
+The Annex was revised through the native Godot editor, saved, reopened, and run with its saved camera and lighting. The stair meets the loft, open rails expose the rack, and a separate camera inspects the threshold. Its seven painted materials are external binary resources; preexisting albedo pixels are unchanged. The [saved-scene audit](qa/annex-acceptance/README.md) verifies 38 valid editable solids with collision, no temporary editor locks, 100% target-colour coverage across measured albedo UV footprints, and 69 lit emission pixels inside the bezel footprint. The [native captures and limitations](../project/demo/signal_relay_annex/README.md) distinguish this evidence from the historical composite stills.
+
+Some Annex architecture still uses projected UVs; flat colour coverage is not finished surface art, and the doorway and wide interior are shown in separate views. These remain limitations against the art brief. The sample has no player controller; Signal Foundry remains the playable example.
+
+## Historical acceptance record
+
+The following notes preserve evidence from earlier iterations. Labels such as Surface Paint, Material / UV, and Pixel, references to wireframe figures, test counts, and statements of remaining work describe those iterations. They are not current UI instructions or additional release features. Consult the current guide for controls and the checkpoint above for this release's remaining checks.
+
+### Verified improvements
+
 
 - Native Move, Rotate, and Scale pass the rendered-editor pivot and axis matrix, including exact Undo and Redo.
 - Extrude, Inset, and Bevel each have one command entry, adjustable preview, Apply, and Cancel. Bevel retains its segment control and viewport handle.
@@ -35,9 +61,13 @@ The next visual and interaction priorities are recorded in [Modeller design dire
 
 - Fit UV uses actual mapping bounds instead of a quarter-tile minimum. Rendered tests fit tiny and very large transient mappings to 82% of the limiting canvas dimension, then send real wheel input to verify monotonic zoom and pointer anchoring. A collapsed point mapping remains finite. Reviewed captures use the loaded Brick texture, including an ordinary low-density unwrap. These checks cover navigation, not zoom-independent modifier-drag sensitivity. The full verifier, docs links, and website build passed after this change.
 
+- Pack is a distinct UV action from Unwrap and from Fit UV. It re-atlases existing unwrapped islands without unfolding from 3D. Overflow refuses, leaves the solid unchanged, and names Texture px or Placement scale. Undo restores pre-pack UVs. Fit UV still frames the canvas only. Pixel hides Pack and the UV element strip. Website MDX describes the shipped actions; the Material / UV figure is still the pre-Pack capture and needs a Design recapture.
+
+- Face Isolate hides unselected faces on the active solid and leaves other solids visible. Isolate is one Solids | Faces control. Escape restores faces without clearing Soft Select and without toggling solid Isolate. External meshes refuse and stay unchanged. Website MDX matches that chrome. Phase C wireframes (`isolate-01` / `isolate-02` / `isolate-03`) teach Solids | Faces today. A live dock recapture can replace them later.
+
 - UV modifier drags use editor-scaled screen distance. The rendered regression reproduced different outcomes at two zoom levels before the fix. Afterward, a 25-logical-pixel horizontal drag rotates 25 degrees at either zoom; a diagonal Shift-drag applies the same expected U/V factors. Held modifiers, Escape, exact native Undo/Redo, stable canvas framing, and pointer-relative Move all pass. This covers gesture consistency rather than the broader paint workflow. The full verifier, documentation link check, and website build pass.
 
-## Remaining acceptance work
+### Historical remaining acceptance work
 
 The PowerHouse now has an editor-authored ceiling, a shallow segmented vault, fitted half-cylinder end panels made with Plane Cut, timber cladding, and a shadow-casting Godot light. A normal-input running-game pass reached the enclosed room and verified ceiling coverage and grounded contact. Selecting that authored light exposed and resolved stale Slab selection ownership; the restarted editor and a regression gate now verify that authored children clear the modelling target. See [PowerHouse roof playtest](powerhouse-roof-playtest.md). The interior finish and broader level design remain incomplete.
 
@@ -52,13 +82,13 @@ The compact-dock audit distinguished the author-chosen splitter height from the 
 | First use | Complete every core tutorial from a clean project; basic copied-addon creation/save/reopen is verified. Check save, reopen, collision, and player interaction. |
 | Tool discovery | Exercise creation, selection, topology, surface editing, and recovery without relying on internal names or hidden state. Check material creation and assignment across several solids. |
 | Tool consistency | Audit modal ownership, native gizmo overlap, typed input, focus, shortcuts, tool switching, cancellation, refusal recovery, and repeat operations across all tools. |
-| Topology tools | Extend rendered acceptance to vertex Connect, Weld/Collapse, concave faces and larger multi-material regions. Verify the documented topology guide as a complete user workflow. |
+| Topology tools | Rendered acceptance now drives real panel clicks for vertex Connect, Weld (including a distant no-op, a distance that merges, pinch refusal), Collapse, and concave-face Subdivide/Inset/Weld/Collapse. Verify the documented topology guide as a complete user workflow. |
 | Materials and UVs | Extend the saved roof workflow to curved and mixed-material regions. Unwrap, image resize, pixel strokes, persistence, and Undo/Redo are verified on the roof. Legacy UV controls are consolidated into Surface Paint; audit its first-target and material-switching behavior. |
 | Complex modelling | Build and play a substantial level in the editor with enclosed rooms, curved geometry, thin details, booleans, loops, bevels, platforms, and interaction. Diagnose z-fighting rather than hiding it. |
 | Documentation | Replace outdated captures, cross-check every command contract, validate links, and inspect desktop and narrow-screen layouts. Verify small phone widths and every long reference page; the right-hand contents column is checked at 1151 and 1440 px. |
 | Release readiness | Reopen saved examples, verify editable source and generated output, run all gates, and record limitations honestly. No claim of parity until the full workflow is verified. |
 
-## Repeatable evidence
+### Historical repeatable evidence
 
 The first-use documentation audit corrected mode shortcuts that previously followed a bottom-dock click without restoring viewport focus. The orientation tutorial now starts with mode buttons, and the selection guide distinguishes modelling clicks from Material / UV assignment and Pixel strokes. It explains how to leave Paint to select another face set without editing it. The pixel guide reaches painting and saving before optional UV placement and resizing, includes the default-material path, and avoids copying an already editable texture again.
 
@@ -66,7 +96,7 @@ The first-use documentation audit corrected mode shortcuts that previously follo
 
 `scripts/slab-docs-verify` checks root-relative inline links and media attributes in MDX against local page routes and public files. The current manual passes with 28 MDX pages and 75 local references. A temporary broken-link and missing-image probe was rejected. This check does not establish heading-anchor validity, external-link availability, rendered layout, or screenshot accuracy.
 
-`scripts/slab-install-verify` copies the addon to a disposable project and runs separate rendered creation/save and reopen passes. `project/tests/topology_editor_smoke.gd` exercises Subdivide/Merge and Connect/Dissolve through real panel clicks. Run it with `scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd`.
+`scripts/slab-install-verify` copies the addon to a disposable project and runs separate rendered creation/save and reopen passes. `project/tests/topology_editor_smoke.gd` exercises Subdivide/Merge, Connect/Dissolve, Weld/Collapse, and concave-face recovery through viewport mouse clicks on the panel. Run it with `scripts/godot --editor --path project --script res://tests/topology_editor_smoke.gd`.
 
 `scripts/slab-verify` covers the kernel, extension, focused GDScript suites, and editor initialization. `scripts/slab-native-gizmo-verify` covers real native transform input. `project/tests/panel_editor_smoke.gd` covers the primary operation buttons and the room tutorial in a dedicated rendered editor, without saving the fixture. `project/tests/paint_editor_smoke.gd` checks canvas gestures in a rendered editor without saving the lab scene. Run it with `scripts/godot --editor --path project --script res://tests/paint_editor_smoke.gd`. The commands and evidence formats are described in [Native gizmo verification](native-gizmo-verification.md).
 

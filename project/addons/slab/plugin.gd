@@ -9,7 +9,14 @@ const SlabIcons := preload("res://addons/slab/slab_icons.gd")
 const SlabSweepScript := preload("res://addons/slab/slab_sweep.gd")
 const SlabViewport := preload("res://addons/slab/slab_viewport.gd")
 const SlabPaint := preload("res://addons/slab/slab_paint.gd")
+const SlabEditorProjection := preload("res://addons/slab/slab_editor_projection.gd")
 const SlabEditorHostLive := preload("res://addons/slab/slab_editor_host_live.gd")
+const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
+const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
+const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
+const SlabExportFbx := preload("res://addons/slab/slab_export_fbx.gd")
+const SlabImportMesh := preload("res://addons/slab/slab_import_mesh.gd")
+const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
 const SocketGizmo := preload("res://addons/slab/gizmos/slab_socket_gizmo.gd")
 const SweepGizmo := preload("res://addons/slab/gizmos/slab_sweep_gizmo.gd")
@@ -28,9 +35,15 @@ var _subgizmo_solid: Node3D = null
 var _topology_solid: Node3D = null
 var _workspace := "3D"
 var _overlay_camera: Camera3D
+var _editor_projection: Node
+var _export_dialog: EditorFileDialog
+var _export_solids: Array[Node3D] = []
+var _import_dialog: EditorFileDialog
 
 
 func _enter_tree() -> void:
+	_editor_projection = SlabEditorProjection.new()
+	add_child(_editor_projection)
 	set_input_event_forwarding_always_enabled()
 	set_force_draw_over_forwarding_enabled()
 	set_process_shortcut_input(true)
@@ -38,6 +51,7 @@ func _enter_tree() -> void:
 	_session = SlabViewport.new(_host)
 	_selection = _session.state()
 	_actions = SlabActions.new(_selection, get_undo_redo())
+	_actions.keybind_profiles.bind_editor_settings(EditorInterface.get_editor_settings())
 	_session.bind_actions(_actions)
 	_paint = SlabPaint.new()
 	_paint.bind(_selection, _actions, get_undo_redo(), _host)
@@ -49,7 +63,7 @@ func _enter_tree() -> void:
 
 	var metrics: RefCounted = _session.metrics()
 	_panel = SlabPanel.new()
-	_panel.setup(_selection, _actions, metrics)
+	_panel.setup(_selection, _actions, metrics, _host.scene_root)
 	_panel.bind_undo(get_undo_redo())
 	_panel.bind_paint(_paint)
 	add_control_to_bottom_panel(_panel, "Slab")
@@ -66,13 +80,22 @@ func _enter_tree() -> void:
 	_sync_native_local_axes()
 	_on_editor_selection_changed()
 	main_screen_changed.connect(_on_main_screen_changed)
+	if not scene_changed.is_connected(_on_scene_changed):
+		scene_changed.connect(_on_scene_changed)
 	if not scene_saved.is_connected(_on_scene_saved):
 		scene_saved.connect(_on_scene_saved)
+	_actions.export_requested.connect(_on_export_requested)
+	_actions.import_requested.connect(_on_import_requested)
 	if OS.get_environment("SLAB_CAPTURE_VIEWPORT") != "":
 		_wait_then_capture()
 
 
 func _exit_tree() -> void:
+	if _selection:
+		_selection.exit_isolation()
+		_selection.exit_face_isolation()
+	if scene_changed.is_connected(_on_scene_changed):
+		scene_changed.disconnect(_on_scene_changed)
 	if _session:
 		_session.cancel_create_preview()
 	if _host:
@@ -81,6 +104,17 @@ func _exit_tree() -> void:
 		main_screen_changed.disconnect(_on_main_screen_changed)
 	if scene_saved.is_connected(_on_scene_saved):
 		scene_saved.disconnect(_on_scene_saved)
+	if _actions and _actions.export_requested.is_connected(_on_export_requested):
+		_actions.export_requested.disconnect(_on_export_requested)
+	if _actions and _actions.import_requested.is_connected(_on_import_requested):
+		_actions.import_requested.disconnect(_on_import_requested)
+	if _export_dialog and is_instance_valid(_export_dialog):
+		_export_dialog.queue_free()
+		_export_dialog = null
+	_export_solids.clear()
+	if _import_dialog and is_instance_valid(_import_dialog):
+		_import_dialog.queue_free()
+		_import_dialog = null
 	if _selection:
 		if _selection.changed.is_connected(_on_selection_changed):
 			_selection.changed.disconnect(_on_selection_changed)
@@ -112,21 +146,34 @@ func _exit_tree() -> void:
 	_selection = null
 	_session = null
 	_host = null
+	_overlay_camera = null
+	if _editor_projection != null:
+		_editor_projection.free()
+		_editor_projection = null
 
 
 func _handles(object: Object) -> bool:
-	return SlabSelection.editor_owning_solid(object) != null
+	return SlabSelection.editor_owning_solid(object) != null or SlabExternalMesh.is_external_mesh(object)
 
 
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
-	_overlay_camera = viewport_camera
+	var views: Array = []
+	for index in 4:
+		views.append(EditorInterface.get_editor_viewport_3d(index))
+	var window_viewport := get_viewport()
+	var input_view := SlabEditorProjection.input_view(viewport_camera, views,
+		window_viewport.gui_get_hovered_control(), window_viewport.gui_get_focus_owner())
+	if input_view == null:
+		return AFTER_GUI_INPUT_PASS
+	var input_camera: Camera3D = _editor_projection.camera_for(viewport_camera, input_view)
+	_overlay_camera = input_camera
 	update_overlays()
 	if _session == null:
 		return AFTER_GUI_INPUT_PASS
 	if event is InputEventKey and get_viewport().is_input_handled():
 		return AFTER_GUI_INPUT_STOP
 	var native_was_pending: bool = _session.native_gizmo_pending()
-	var verdict: int = _session.handle(viewport_camera, event)
+	var verdict: int = _session.handle(input_camera, event)
 	# Updating a Node3D's gizmos schedules a rebuild. Doing that between the
 	# native handle press and its motion invalidates Godot's active subgizmo.
 	if not native_was_pending and not _session.native_gizmo_pending():
@@ -162,8 +209,28 @@ func _on_main_screen_changed(screen_name: String) -> void:
 	_workspace = screen_name
 
 
-func _on_scene_saved(path: String) -> void:
+func _apply_changes() -> void:
+	# Godot calls this before packing a scene. Restore authored editor metadata.
+	if _selection != null:
+		_selection.suspend_isolation_for_save()
+		_selection.resume_isolation_after_save.call_deferred()
 	if _paint != null:
+		_paint.suspend_transform_lock_for_save()
+		_paint.resume_transform_lock_after_save.call_deferred()
+
+
+func _on_scene_changed(_scene_root: Node) -> void:
+	if _selection != null:
+		_selection.exit_isolation()
+		_selection.exit_face_isolation()
+		_selection.set_objects([])
+
+
+func _on_scene_saved(path: String) -> void:
+	if _selection != null:
+		_selection.resume_isolation_after_save()
+	if _paint != null:
+		_paint.resume_transform_lock_after_save()
 		_paint.scene_saved(path)
 
 
@@ -310,16 +377,24 @@ func _on_selected_topology_changed() -> void:
 
 
 func _refresh_gizmos() -> void:
-	if _session == null:
-		return
-	for node in _session.gizmo_targets():
-		if is_instance_valid(node):
-			node.update_gizmos()
-	_sync_subgizmo()
+	var selection_solid: Node3D = null
+	if is_instance_valid(_selection.solid):
+		selection_solid = _selection.solid
+	if selection_solid == null and is_instance_valid(_topology_solid):
+		selection_solid = _topology_solid
+	if _session != null:
+		for node in _session.gizmo_targets():
+			if is_instance_valid(node):
+				node.update_gizmos()
+	if selection_solid != null:
+		selection_solid.update_gizmos()
+	_sync_subgizmo(selection_solid)
 	update_overlays()
 
 
 func _forward_3d_force_draw_over_viewport(overlay: Control) -> void:
+	if is_instance_valid(_overlay_camera):
+		_overlay_camera = _editor_projection.refresh_camera(_overlay_camera)
 	if _selection == null or _overlay_camera == null or not is_instance_valid(_overlay_camera):
 		return
 	var label: Dictionary = SolidGizmo.operation_overlay_label(_selection.operation_preview, _overlay_camera)
@@ -358,9 +433,15 @@ func _handle_label_style() -> StyleBoxFlat:
 	return style
 
 
-func _sync_subgizmo() -> void:
-	var solid: Node3D = _selection.solid
-	if solid == null or not is_instance_valid(solid) or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
+func _sync_subgizmo(override_solid: Node3D = null) -> void:
+	var solid: Node3D = null
+	if override_solid != null:
+		solid = override_solid
+	elif is_instance_valid(_selection.solid):
+		solid = _selection.solid
+	if solid == null and is_instance_valid(_topology_solid):
+		solid = _topology_solid
+	if solid == null or _selection.mode == SlabSelection.Mode.OBJECT or _selection.ids.is_empty():
 		_clear_subgizmo()
 		return
 	var token: String = "%s:%d:%s:%d:%d:%d:%s" % [solid.get_instance_id(), _selection.mode, ",".join(_id_tokens(_selection.ids)), _selection.pivot_mode, _selection.orientation, _selection.active_id, _selection.custom_pivot_world]
@@ -368,7 +449,11 @@ func _sync_subgizmo() -> void:
 		return
 	if _subgizmo_solid != null and is_instance_valid(_subgizmo_solid) and _subgizmo_solid != solid:
 		_subgizmo_solid.clear_subgizmo_selection()
-	for gizmo in solid.get_gizmos():
+	var gizmos: Array = solid.get_gizmos()
+	if gizmos.is_empty():
+		solid.update_gizmos()
+		gizmos = solid.get_gizmos()
+	for gizmo in gizmos:
 		if gizmo.get_plugin() != _solid_gizmo:
 			continue
 		solid.set_subgizmo_selection(gizmo, SolidGizmo.SELECTION_SUBGIZMO, _solid_gizmo._get_subgizmo_transform(gizmo, SolidGizmo.SELECTION_SUBGIZMO))
@@ -444,3 +529,105 @@ func _capture_predicate() -> void:
 	img.save_png(path)
 	print("slab capture wrote ", path, " ", img.get_width(), "x", img.get_height())
 	get_tree().quit()
+
+
+func _on_export_requested(solids: Array) -> void:
+	_export_solids.clear()
+	for solid in solids:
+		if solid is Node3D and is_instance_valid(solid):
+			_export_solids.append(solid)
+	if _export_solids.is_empty():
+		_actions.reported.emit("Select a solid to export.")
+		return
+	if _export_dialog == null or not is_instance_valid(_export_dialog):
+		_export_dialog = EditorFileDialog.new()
+		_export_dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+		_export_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_export_dialog.title = "Export..."
+		_export_dialog.file_selected.connect(_on_export_file_selected)
+		EditorInterface.get_base_control().add_child(_export_dialog)
+	_export_dialog.clear_filters()
+	_export_dialog.add_filter("*.obj", "Wavefront OBJ")
+	_export_dialog.add_filter("*.stl", "STL (geometry only)")
+	_export_dialog.add_filter("*.fbx", "FBX (mesh, UVs, material names)")
+	var default_name: String = _export_solids[0].name if _export_solids.size() == 1 else "export"
+	default_name = default_name.replace(" ", "_").to_lower()
+	_export_dialog.current_file = default_name + ".obj"
+	_export_dialog.popup_centered_ratio(0.6)
+
+
+func _on_export_file_selected(path: String) -> void:
+	if _export_solids.is_empty():
+		_actions.reported.emit("No solids to export.")
+		return
+	var export_mesh := SlabExportMesh.new()
+	var err: int = export_mesh.bake(_export_solids)
+	if err != OK:
+		_actions.reported.emit("Export failed: could not bake mesh data.")
+		_export_solids.clear()
+		return
+	var ext: String = path.get_extension().to_lower()
+	match ext:
+		"stl":
+			err = SlabExportStl.write(path, export_mesh)
+		"fbx":
+			err = SlabExportFbx.write(path, export_mesh)
+		_:
+			err = SlabExportObj.write(path, export_mesh)
+	if err != OK:
+		if err == ERR_UNAVAILABLE and ext not in ["stl", "fbx"]:
+			_actions.reported.emit("OBJ export supports StandardMaterial3D albedo only. Shader materials are not supported.")
+		else:
+			_actions.reported.emit("Export failed: could not write the file or its material/texture dependencies.")
+		_export_solids.clear()
+		return
+	var count: int = _export_solids.size()
+	_actions.reported.emit("Exported %d %s → %s" % [count, "solid" if count == 1 else "solids", path])
+	_export_solids.clear()
+
+
+func _on_import_requested() -> void:
+	if _import_dialog == null or not is_instance_valid(_import_dialog):
+		_import_dialog = EditorFileDialog.new()
+		_import_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+		_import_dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+		_import_dialog.title = "Import Mesh..."
+		_import_dialog.file_selected.connect(_on_import_file_selected)
+		EditorInterface.get_base_control().add_child(_import_dialog)
+	_import_dialog.clear_filters()
+	_import_dialog.add_filter("*.obj", "Wavefront OBJ")
+	_import_dialog.add_filter("*.stl", "STL")
+	_import_dialog.popup_centered_ratio(0.6)
+
+
+func _on_import_file_selected(path: String) -> void:
+	var result: Dictionary = SlabImportMesh.load_from_file(path)
+	if result.get("error", ERR_INVALID_DATA) != OK:
+		_actions.reported.emit("Import failed: %s" % result.get("message", "Unknown error"))
+		return
+	var external_mesh: Node3D = result.get("mesh")
+	if external_mesh == null:
+		_actions.reported.emit("Import failed: No mesh created")
+		return
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null:
+		external_mesh.free()
+		_actions.reported.emit("Open a scene before importing a mesh.")
+		return
+	var parent: Node = _import_parent(root)
+	get_undo_redo().create_action("Slab Import Mesh", UndoRedo.MERGE_DISABLE, root)
+	get_undo_redo().add_do_method(parent, "add_child", external_mesh, true)
+	get_undo_redo().add_do_method(external_mesh, "set_owner", root)
+	get_undo_redo().add_do_reference(external_mesh)
+	get_undo_redo().add_undo_method(parent, "remove_child", external_mesh)
+	get_undo_redo().commit_action()
+	EditorInterface.get_selection().clear()
+	EditorInterface.get_selection().add_node(external_mesh)
+	_actions.reported.emit(result.get("status", "Imported mesh."))
+
+
+func _import_parent(root: Node) -> Node:
+	var current: Node3D = _selection.solid
+	if current != null and current.get_parent() != null:
+		return current.get_parent()
+	return root

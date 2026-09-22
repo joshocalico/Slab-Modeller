@@ -4,23 +4,25 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows **Create** and **Object**. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **Surface Paint** for materials and UVs.
+The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes show their primary actions together in one wrapping toolbar. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **UV** for materials and UVs.
 
 Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
 <Figure
   src="/img/panel.png"
-  alt="The Slab panel in Face mode, with the Selection heading collapsed and Surface Paint available in the header."
-  caption="Default Face mode. Geometry commands stay open. Selection starts collapsed; material and UV controls live in Surface Paint."
+  alt="The Slab panel showing an active Extrude op card with Distance field, Cancel on the left, and yellow Apply on the right."
+  caption="An active op card during Extrude. The card title, Distance field, Cancel, and yellow Apply button replace the idle settings."
 />
 
 The header keeps the current selection visible, for example `1 face · Box`. Long names shorten with an ellipsis; the tooltip contains the full summary. The status line below shows tool instructions, results, and recovery messages without replacing the header selection.
 
-On a wide panel, settings sit beside the command groups. On a narrow panel, settings stack below them.
+Use **Shortcuts** in the header to choose a keyboard profile; the active profile is checked.
+
+On a wide panel, settings sit beside the commands. On a narrow panel, settings stack below them. Empty settings areas stay hidden.
 
 ## Settings
 
-The settings change with the current mode and active command. In Object mode, choose a shape to show its creation fields.
+The settings area scrolls below the Create strip in Object mode. It changes with the current mode and active command. In Object mode, choose a shape to show its creation fields in the Create strip. When exactly two solids are selected, the Boolean operands appear in the scrollable settings below; the Create strip stays visible above.
 
 | Field | When it shows | Role |
 | --- | --- | --- |
@@ -35,8 +37,8 @@ There is no idle Distance or Amount field for Extrude, Inset, or Bevel. Starting
 
 <Figure
   src="/img/panel-preview.png"
-  alt="The Slab panel during an Extrude preview, with Extrude distance, Apply, and Cancel controls."
-  caption="An active Extrude preview. Adjust Extrude distance, then Apply or Cancel."
+  alt="The Slab panel during an Extrude preview, showing the active op card titled Extrude with Distance field, Cancel on the left, and yellow Apply on the right."
+  caption="The active op card during Extrude. Adjust Distance (negative goes inward), then click Cancel or yellow Apply."
 />
 
 ## Create fields
@@ -77,7 +79,9 @@ See [Create a solid](/guide/how-to/create-a-solid).
 
 ## Object
 
-Needs a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. **Target** receives the result. **Second solid** is the other operand and is the cutter for Subtract. Click **Swap operands** to exchange those roles before running the Boolean. The second solid remains in the scene after the operation.
+Boolean, Mirror, Pivot, Snap, Plane Cut, and Array need a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. **Target** receives the result. **Second solid** is the other operand and is the cutter for Subtract. Click **Swap operands** to exchange those roles before running the Boolean. The second solid remains in the scene after the operation.
+
+**Import Mesh…** is available with no selection. **Export…** works on a selected `SlabSolid` or External mesh. **Promote to Slab Solid…** needs one External mesh.
 
 | Command | Result |
 | --- | --- |
@@ -89,6 +93,9 @@ Needs a selected `SlabSolid`. Union, Subtract, and Intersect need exactly two. *
 | Snap To Grid | Rounds every vertex onto the grid step. |
 | Plane Cut | Previews an exact local-space plane, keeps the chosen side, and caps every section loop. |
 | Array | Previews 2 to 256 total instances in a linear or radial layout, then creates the copies as one undo action. |
+| Import Mesh… | Loads an OBJ or STL as an External mesh. Non-manifold and open files stay External. Import never promotes. |
+| Export… | Writes the selected solid or External mesh. Does not change the scene. |
+| Promote to Slab Solid… | Converts one closed External mesh into a `SlabSolid`. Open, empty, or non-manifold meshes are refused and left unchanged. |
 
 ## Vertex
 
@@ -126,23 +133,23 @@ Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
 
 See [Change topology](/guide/how-to/change-topology) for the selection rules and undo results of Connect, Dissolve, Subdivide, and Merge.
 
-## Surface Paint
+## UV and Paint
 
-**Surface Paint** in the header opens a separate workspace and switches to Face mode. Escape closes it. **Material / UV** assigns materials and places the selected face on the texture. **Pixel** paints the bound Texture's albedo on the canvas or directly in the 3D view.
+The header has separate **UV** and **Paint** workspace buttons. Both switch to Face mode. Escape closes the active workspace. **UV** assigns materials and adjusts texture placement. **Paint** paints Albedo, Roughness, or Emission on the canvas or directly in the 3D view.
 
-In **Material / UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening Surface Paint with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside Surface Paint.
+In **UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening UV with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside UV.
 
 When Brush is empty, clicking a face selects it and adopts its material and UV values without changing the solid. A default-material face remains selected while you choose a material. Once Brush is set, face clicks assign it. Left clicks and drags in empty space, without modifier keys, leave the target and scene unchanged.
 
-In **Pixel**, **Texture** names the selected faces' common material image. Mixed-material selections have no canvas image. A 3D stroke paints the clicked face's own image; it does not assign the Material / UV brush.
+In **Paint**, **Texture** names the selected faces' common material image. Mixed-material selections have no canvas image. A 3D stroke paints the clicked face's own image; it does not assign the UV brush.
 
-Both paint tools place their controls beside the canvas and share the same minimum workspace height. Switching between **Material / UV** and **Pixel** preserves the dock height. Pixel uses a narrower control column, giving its canvas more width. Scroll the control column to reach lower settings when the dock is compact.
+Both workspaces place their controls beside the canvas and share the same minimum workspace height. Switching between **UV** and **Paint** preserves the dock height. Paint uses a narrower control column, giving its canvas more width. Scroll the control column to reach lower settings when the dock is compact.
 
-The gold **Surface Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
+The gold **UV** or **Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
 
-### Material / UV controls
+### UV controls
 
-**Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands; **Placement** moves, rotates, and scales the current mapping. A successful Unwrap resets placement and frames the new islands in the canvas.
+**Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands. **Pack** re-atlases those islands without unfolding again. **Fit UV** frames the canvas only. **Placement** moves, rotates, and scales the current mapping. A successful Unwrap or Pack resets placement and frames the new islands in the canvas.
 
 | Control | Result |
 | --- | --- |
@@ -152,8 +159,10 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 | Material palette | Chooses the Brush without assigning it. Click **Assign**, or click a front-facing viewport face, to apply it. |
 | Material picker | Chooses or creates a `StandardMaterial3D` as the Brush preview. Click Assign to apply it to selected faces. Choosing a Brush does not change the solid or add an Undo step. Click its preview to edit the resource in Godot's Inspector. |
 | Pixels/metre | Sets the density for Unwrap. |
-| Texture px | Sets the reference atlas width for Unwrap. It does not resize existing artwork. |
+| Texture px | Sets the reference atlas width for Unwrap and Pack. It does not resize existing artwork. |
 | Unwrap | Creates seam-aware UV islands at the requested density and resets placement. An atlas that cannot fit leaves the solid unchanged and reports a suggested resolution. |
+| Pack | Re-atlases existing unwrapped islands without unfolding them again. Overflow refuses, leaves the solid unchanged, and points at Texture px or Placement scale. |
+| Fit UV | Frames the selected outlines in the UV canvas. It does not change the mesh. |
 | Repeat U, Repeat V | Sets texture repeats from 0.05 to 64. |
 | Repeat ×2, Repeat ÷2 | Doubles or halves both repeat values within the repeat limits and applies them in one undoable edit. Pending typed placement values are included. |
 | Offset U, Offset V | Moves the texture from -64 to 64. |
@@ -164,28 +173,30 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 
 The material palette sits below the Brush picker, before Placement and Mapping. Choose a loaded material there, then click **Assign** above it.
 
-<Figure
-  src="/img/panel-material-uv.png"
-  alt="Material / UV with Assign, the material picker, and loaded palette visible together beside the saved roof's UV outline and painted landing marker."
-  caption="Choose a loaded material below the picker, then Assign above it. Scroll the left column for the remaining Placement and Mapping controls. Click the image to view it at full size."
-/>
+The UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a palette chip updates this preview without changing the faces. **Assign** or a plain viewport click applies the Brush.
 
-The Material / UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a palette chip updates this preview without changing the faces. **Assign** or a plain viewport click applies the Brush.
+**Place** is the default canvas tool. Drag to move the mapping of the selected 3D faces, Shift-drag to scale it, and Cmd-drag on macOS or Ctrl-drag on other systems to rotate it. Escape cancels the drag. Numeric Placement fields edit the same faces.
 
-On the UV canvas, drag to move, Shift-drag to scale, and Ctrl-drag to rotate. Use Cmd-drag to rotate on macOS. Scale and rotation use screen distance independently of zoom. Shift-drag adjusts U horizontally and V vertically; rotation uses horizontal motion. Scroll zooms and middle-drag pans. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
+The **UV Vert**, **UV Edge**, and **UV Face** buttons select and highlight UV elements. Shift-click toggles an element in that selection. UV selection is separate from the faces selected in the 3D view. Choose **Place** to edit the face mapping again. Scroll zooms and middle-drag pans in either mode. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
 
-### Pixel controls
+### Paint controls
 
-Pixel hides Assign, Sample, the material picker, the material palette, Mapping, and the UV placement controls. Its **Image** section contains the image-size field.
+Paint hides Assign, Sample, the material picker, the material palette, Mapping, and the UV placement controls. Its **Image** section contains the image-size field.
 
 | Control | Result |
 | --- | --- |
 | Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
-| Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. It is disabled until an owned Texture is ready. Save the scene afterward. |
+| Fill Layer | Replaces the active layer with Brush Color and Opacity. Preserves other layers and the base image; supports Undo and Redo. |
+| Save Paint | Flattens visible layers and writes the current channel. Albedo uses `<solid>_m<slot>.png` under `res://slab_paint/`; Roughness and Emission add `_roughness` and `_emission`. Save each painted channel, then save the scene. |
 | Resize… | Expands Width and Height controls beside the image, with Keep aspect and Smooth or Nearest resampling. Apply Resize preserves UV placement and supports Undo. Cancel keeps the current image. Save Paint and the scene afterward. |
 | New image px | Sets the square image size used by Make Unique when the material has no artwork. For existing artwork, the read-only Texture px field shows its width. |
+| Albedo, Roughness, Emission | Chooses the material channel to paint. Each channel has its own layer list. |
+| Layers +, − | Adds a layer or deletes the active layer in the current channel. |
+| Flatten | Commits visible layers into the current channel's base image as one undoable action. Hidden layers remain editable. |
 | Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
 | Show UV | Shows the selected faces' UV outlines over the image. It is off by default. |
+
+Layer rows select the active layer. The eye control hides or shows a layer, and layer Opacity controls its contribution to the result. Scene saves retain the base images and editable layers.
 
 The inline hint asks for a face, a common material, or **Make Unique** when the selection is not ready. With an owned Texture, it says to paint on the image or model, then save the paint and the scene.
 
@@ -201,7 +212,7 @@ Shown as a collapsed heading in Vertex, Edge, and Face mode. Expand it to reveal
 | Grow | Adds the neighbours of the selection. |
 | Snap to Vertex | Highlights an actual source vertex, then moves the selection to a vertex clicked on another solid. |
 
-The selection controls above the command rows configure the editor transform gizmo. **Pivot** chooses Selection centre, the last-selected Active element, or a Custom world XYZ position. **Axes** chooses World, Object local, or Selected face orientation. Selected face axes are enabled only for a face selection. **X-ray selection** includes occluded candidates on visible solids and draws selection lines through the solid; hidden nodes and descendants of hidden nodes remain excluded. Tab and Shift-Tab cycle overlapping candidates.
+The selection controls above the command rows configure the editor transform gizmo. **Pivot** chooses Selection centre, the last-selected Active element, or a Custom world XYZ position. **Axes** chooses World, Object local, or Selected face orientation. Selected face axes are enabled only for a face selection. **X-ray selection** includes occluded candidates on visible solids and draws selection lines through the solid; hidden nodes and descendants of hidden nodes remain excluded. Tab and Shift-Tab cycle overlapping candidates. **Isolate** is one control with **Solids | Faces**. Solids hides other solids. Faces hides unselected faces on the active solid and leaves other solids visible. Escape exits Face isolation without clearing Soft Select and without toggling solid Isolate. Face Isolate refuses on an External mesh. **Soft Select** applies falloff to neighbors in Vertex, Edge, or Face mode.
 
 ## Loop cut settings
 
@@ -209,7 +220,9 @@ In Edge mode, **Cuts** sets 1 to 32 evenly spaced cuts. **Centre %** sets the gr
 
 ## Extrude, Inset, and Bevel previews
 
-**Extrude** opens **Extrude distance**, **Apply**, and **Cancel**. **Inset** opens **Inset distance**, **Apply**, and **Cancel**. **Bevel** opens **Bevel width**, **Segments**, **Apply**, and **Cancel**. **Segments** ranges from 1 to 16.
+Starting Extrude, Inset, or Bevel replaces the idle settings with an **active op card**. The card shows the operation title (Extrude, Inset, or Bevel), its settings, and **Cancel | Apply** buttons. **Apply** is primary when the current values produce valid geometry.
+
+**Extrude** opens **Extrude distance** (−64 to 64). Positive distance extrudes outward along the face normal; negative distance extrudes inward. **Inset** opens **Inset distance**. **Bevel** opens **Bevel width** and **Segments** (1 to 16).
 
 The 3D view renders the proposed geometry while the original solid remains unchanged. The coloured viewport handle changes the operation's numeric value. Enter or **Apply** commits one undo action. Escape, right-click, or **Cancel** restores the original display and leaves the solid unchanged. If a value would make invalid geometry, Slab restores the original solid and disables **Apply**.
 

@@ -3,6 +3,8 @@
 #include "kernel/mesh_edit.hpp"
 #include "kernel/ops/primitives.hpp"
 #include "kernel/ops/uv.hpp"
+#include "kernel/ops/region.hpp"
+#include "kernel/serialize.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -223,4 +225,165 @@ SLAB_TEST(uv_unwrap_atlas_overflow_is_atomic_and_actionable) {
 	MeshEdit retry(source);
 	const ops::UvUnwrapResult retried = ops::unwrap_uv(retry, faces, 256.0f, result.suggested_texture_resolution);
 	expect(retried.ok(), "retry at the suggested resolution demonstrably fits every island");
+}
+
+SLAB_TEST(uv_pack_rearranges_existing_islands_without_reunfolding) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	MeshEdit unwrapped(source);
+	expect(ops::unwrap_uv(unwrapped, faces, 64.0f, 1024).ok(), "box unwraps for pack");
+	expect(std::move(unwrapped).commit(source).ok(), "commit unwrap");
+	std::vector<double> lengths;
+	for (const FaceId face : faces) {
+		std::vector<VertexId> corners;
+		source.face_corners(face, corners);
+		lengths.push_back(uv_at(source, face, corners[0]).distance_to(uv_at(source, face, corners[1])));
+	}
+	MeshEdit shifted(source);
+	for (const FaceId face : faces) {
+		FaceAttrs attrs = shifted.scratch().attrs(face);
+		attrs.uv_offset = godot::Vector2(0.35f, 0.35f);
+		shifted.set_attrs(face, attrs);
+	}
+	expect(std::move(shifted).commit(source).ok(), "commit offset placement");
+	std::vector<VertexId> first_corners;
+	source.face_corners(faces[0], first_corners);
+	const godot::Vector2 before_pack = uv_at(source, faces[0], first_corners[0]) + source.attrs(faces[0]).uv_offset;
+	MeshEdit packed(source);
+	const ops::UvPackResult packed_result = ops::pack_uv(packed, faces, 1024, 1024);
+	expect(packed_result.ok(), "offset islands pack at the same atlas");
+	expect(packed_result.island_count >= 1, "pack reports islands");
+	for (size_t i = 0; i < faces.size(); i++) {
+		std::vector<VertexId> corners;
+		packed.scratch().face_corners(faces[i], corners);
+		expect_near(uv_at(packed.scratch(), faces[i], corners[0]).distance_to(
+				uv_at(packed.scratch(), faces[i], corners[1])),
+				lengths[i], 0.0001, "pack keeps island edge lengths instead of unfolding again");
+		for (const VertexId corner : corners) {
+			const godot::Vector2 uv = uv_at(packed.scratch(), faces[i], corner);
+			expect(uv.x >= -0.00001f && uv.y >= -0.00001f && uv.x <= 1.00001f && uv.y <= 1.00001f,
+					"packed corner returns to the atlas");
+		}
+	}
+	expect(uv_at(packed.scratch(), faces[0], first_corners[0]).distance_to(before_pack) > 0.001f,
+			"pack moves offset islands rather than leaving them where placement put them");
+	const FaceId top = upward_face(source);
+	std::vector<VertexId> top_corners;
+	source.face_corners(top, top_corners);
+	const double unwrap_len = uv_at(source, top, top_corners[0]).distance_to(uv_at(source, top, top_corners[1]));
+	MeshEdit scaled(source);
+	FaceAttrs top_attrs = scaled.scratch().attrs(top);
+	top_attrs.uv_offset = godot::Vector2();
+	top_attrs.uv_scale = godot::Vector2(2, 2);
+	scaled.set_attrs(top, top_attrs);
+	const ops::UvPackResult scaled_pack = ops::pack_uv(scaled, { top }, 1024, 1024);
+	expect(scaled_pack.ok(), "a single 2x island packs");
+	expect_near(uv_at(scaled.scratch(), top, top_corners[0]).distance_to(
+			uv_at(scaled.scratch(), top, top_corners[1])),
+			unwrap_len * 2.0, 0.0001, "pack keeps the 2x placement instead of unfolding at 1x");
+	MeshEdit again(source);
+	FaceAttrs reset = again.scratch().attrs(top);
+	reset.uv_offset = godot::Vector2();
+	reset.uv_scale = godot::Vector2(2, 2);
+	again.set_attrs(top, reset);
+	expect(ops::unwrap_uv(again, { top }, 64.0f, 1024).ok(), "unwrap of the scaled face succeeds");
+	expect_near(uv_at(again.scratch(), top, top_corners[0]).distance_to(
+			uv_at(again.scratch(), top, top_corners[1])),
+			unwrap_len, 0.0001, "unwrap rebuilds island size from 3D and drops placement scale");
+	expect(packed.scratch().attrs(faces[0]).uv_scale.is_equal_approx(godot::Vector2(1, 1)),
+			"successful pack bakes placement into the mapping");
+	expect(packed.scratch().attrs(faces[0]).uv_offset.is_equal_approx(godot::Vector2()),
+			"successful pack clears placement offset");
+}
+
+SLAB_TEST(uv_pack_overflow_is_atomic_and_actionable) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	MeshEdit unwrapped(source);
+	expect(ops::unwrap_uv(unwrapped, faces, 64.0f, 1024).ok(), "box unwraps before overflow pack");
+	expect(std::move(unwrapped).commit(source).ok(), "commit unwrap");
+	MeshEdit scaled(source);
+	for (const FaceId face : faces) {
+		FaceAttrs attrs = scaled.scratch().attrs(face);
+		attrs.uv_scale = godot::Vector2(16, 16);
+		scaled.set_attrs(face, attrs);
+	}
+	expect(std::move(scaled).commit(source).ok(), "commit oversized placement");
+	const FaceAttrs before = source.attrs(faces[0]);
+	MeshEdit edit(source);
+	const ops::UvPackResult result = ops::pack_uv(edit, faces, 1024, 1024);
+	expect(!result.ok() && result.atlas_overflow, "oversized packed islands are refused");
+	expect(result.suggested_texture_resolution > 1024, "overflow suggests a larger texture");
+	expect(edit.scratch().attrs(faces[0]).uv_scale.is_equal_approx(before.uv_scale),
+			"overflow leaves placement scale unchanged");
+	expect(edit.scratch().attrs(faces[0]).uv_origin.is_equal_approx(before.uv_origin),
+			"overflow leaves mapping origin unchanged");
+	MeshEdit retry(source);
+	const ops::UvPackResult retried = ops::pack_uv(retry, faces, result.suggested_texture_resolution, 1024);
+	expect(retried.ok(), "raising Texture px relative to the authored atlas fits the same islands");
+}
+
+SLAB_TEST(uv_pack_refuses_planar_faces_without_mutating) {
+	Mesh source = box();
+	const FaceId top = upward_face(source);
+	const FaceAttrs before = source.attrs(top);
+	MeshEdit edit(source);
+	expect(!ops::pack_uv(edit, { top }, 1024).ok(), "planar faces are not packed");
+	expect(!edit.scratch().attrs(top).uv_unwrapped &&
+			edit.scratch().attrs(top).uv_scale.is_equal_approx(before.uv_scale),
+			"planar pack refusal leaves attributes unchanged");
+}
+
+SLAB_TEST(uv_pack_preserves_per_face_atlas_density_after_reload_and_topology) {
+	Mesh source = box();
+	std::vector<FaceId> faces;
+	source.all_faces(faces);
+	const FaceId a = faces[0], b = faces[1];
+	MeshEdit first(source);
+	expect(ops::unwrap_uv(first, {a}, 32.0f, 512).ok(), "first subset unwraps at 512");
+	expect(std::move(first).commit(source).ok(), "commit first subset");
+	MeshEdit second(source);
+	expect(ops::unwrap_uv(second, {b}, 64.0f, 2048).ok(), "second subset unwraps at 2048");
+	expect(std::move(second).commit(source).ok(), "commit second subset");
+	MeshEdit placed(source);
+	FaceAttrs attrs = placed.scratch().attrs(a);
+	attrs.uv_scale = godot::Vector2(2, 2);
+	attrs.uv_rotation = 0.3f;
+	attrs.uv_offset = godot::Vector2(1, -2);
+	placed.set_attrs(a, attrs);
+	expect(std::move(placed).commit(source).ok(), "commit placement");
+	const auto snapshot = serialize(source);
+	Mesh reloaded;
+	expect(deserialize(snapshot, reloaded).ok(), "reload mixed-resolution mapping");
+	std::vector<double> pixel_lengths;
+	for (FaceId face : {a, b}) {
+		std::vector<VertexId> corners;
+		reloaded.face_corners(face, corners);
+		const double placement = face.slot == a.slot ? 2.0 : 1.0;
+		pixel_lengths.push_back(uv_at(reloaded, face, corners[0]).distance_to(
+				uv_at(reloaded, face, corners[1])) * reloaded.attrs(face).uv_texture_resolution * placement);
+	}
+	MeshEdit packed(reloaded);
+	expect(ops::pack_uv(packed, {a, b}, 4096, 8192).ok(), "pack mixed sources ignoring unrelated fallback");
+	expect(std::move(packed).commit(reloaded).ok(), "commit packed mapping");
+	int i = 0;
+	for (FaceId face : {a, b}) {
+		std::vector<VertexId> corners;
+		reloaded.face_corners(face, corners);
+		expect_near(uv_at(reloaded, face, corners[0]).distance_to(uv_at(reloaded, face, corners[1])) * 4096,
+				pixel_lengths[i++], 0.001, "per-face pixel density and placement applied exactly once");
+		expect_eq(reloaded.attrs(face).uv_texture_resolution, 4096, "pack stores new source atlas");
+	}
+	expect(deserialize(snapshot, reloaded).ok(), "undo restores complete mapping snapshot");
+	expect_eq(reloaded.attrs(a).uv_texture_resolution, 512, "undo restores first source resolution");
+	expect_eq(reloaded.attrs(b).uv_texture_resolution, 2048, "undo restores second source resolution");
+	MeshEdit topology(reloaded);
+	expect(ops::extrude_region(topology, {a}, 0.25f).ok(), "extrude preserves mapping attributes");
+	expect(std::move(topology).commit(reloaded).ok(), "commit extruded mapping");
+	reloaded.all_faces(faces);
+	int copied = 0;
+	for (FaceId face : faces) if (reloaded.attrs(face).uv_texture_resolution == 512) copied++;
+	expect(copied > 0, "topology copies retain source atlas resolution");
 }
