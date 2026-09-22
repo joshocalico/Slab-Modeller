@@ -1624,7 +1624,9 @@ func _check_multi_layer_management() -> void:
 	updated_info = paint.layer_info(1)
 	_expect(updated_info.name == "My Paint", "layer 1 renamed to My Paint")
 	
-	_expect(not paint.remove_layer(0), "cannot delete layer when it would leave none")
+	_expect(paint.remove_layer(0), "can delete the active layer while another layer remains")
+	undo.undo()
+	_expect(paint.layer_count() == 2 and paint.active_layer_index() == 0, "delete Undo restores the active layer and stack")
 	paint.set_active_layer(1)
 	_expect(paint.remove_layer(0), "can delete layer 0 when layer 1 exists")
 	_expect(paint.layer_count() == 1, "now has one layer after delete")

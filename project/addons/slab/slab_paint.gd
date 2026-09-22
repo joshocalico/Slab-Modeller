@@ -16,6 +16,7 @@ enum Channel { ALBEDO, ROUGHNESS, EMISSION }
 
 const PNG_META := "slab_paint_png"
 const OWNED_META := "slab_paint_owned"
+const LAYERS_META := "slab_paint_layers"
 const DEFAULT_SIZE := 256
 const PAINT_HEIGHT := 360.0
 const VERDICT_PASS := 0
@@ -43,6 +44,8 @@ var tool: int = Tool.MATERIAL_UV:
 		cancel_uv_drag()
 		_left_gesture_owned = false
 		tool = value
+		if tool == Tool.MATERIAL_UV:
+			channel = Channel.ALBEDO
 		if active:
 			if tool == Tool.MATERIAL_UV:
 				_bind_brush_to_selection()
@@ -53,13 +56,14 @@ var tool: int = Tool.MATERIAL_UV:
 var brush_color := Color(0.86, 0.18, 0.16)
 var brush_radius: float = 8.0
 var brush_opacity: float = 1.0
-var overlay_opacity: float = 1.0:
+var overlay_opacity: float:
+	get:
+		if _material == null:
+			return 1.0
+		return channel_state(channel).active_layer().opacity
 	set(value):
-		if is_equal_approx(value, overlay_opacity):
-			return
-		overlay_opacity = clampf(value, 0.0, 1.0)
-		_composite_overlay()
-		changed.emit()
+		if _material != null:
+			set_layer_opacity(active_layer_index(), value)
 var dirty: bool = false
 var stroke_active: bool = false
 var _left_gesture_owned := false
@@ -70,6 +74,8 @@ var channel: int = Channel.ALBEDO:
 	set(value):
 		if value == channel:
 			return
+		cancel_stroke()
+		cancel_uv_drag()
 		var old_channel := channel
 		channel = value
 		_switch_channel(old_channel, channel)
@@ -108,6 +114,7 @@ class ChannelState:
 	var layers: Array[PaintLayer] = []
 	var active_layer_index: int = 0
 	var texture: ImageTexture
+	var dirty: bool = false
 	
 	func _init(size: Vector2i = Vector2i(256, 256)) -> void:
 		base_image = Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
@@ -167,7 +174,10 @@ class ChannelState:
 				var a: float = src.a * opacity
 				base.set_pixel(x, y, dst.lerp(Color(src.r, src.g, src.b, 1.0), a))
 
-var _channel_states: Dictionary = {}  # Channel -> ChannelState
+# The material stores serialized artwork; this cache holds only live editing images.
+var _material_states: Dictionary = {}  # instance ID -> weak material reference and channels
+var _empty_channel_states: Dictionary = {}
+var _stroke_state: Dictionary = {}
 
 var _undo: Object = null
 var _selection: RefCounted
@@ -181,8 +191,6 @@ var _solid: Node3D
 var _slot: int = -1
 var _stroke_before := PackedByteArray()
 var _stroke_material: StandardMaterial3D
-var _stroke_texture: ImageTexture
-var _stroke_solid: Node3D
 var _host: RefCounted
 var _last_pixel := Vector2(-1, -1)
 var _uv_offset_start := Vector2.ZERO
@@ -237,7 +245,7 @@ func enter() -> void:
 func exit() -> void:
 	_left_gesture_owned = false
 	cancel_stroke()
-	_clear_overlay()
+	_save_current_overlay_to_channel(channel)
 	_free_brush()
 	_unlock_transform_gizmo()
 	active = false
@@ -584,34 +592,25 @@ func resize_image(width: int, height: int, smooth: bool = true, expected_materia
 		return false
 	width = clampi(width, 16, 16384)
 	height = clampi(height, 16, 16384)
-	if _image.get_width() == width and _image.get_height() == height:
+	if _image.get_size() == Vector2i(width, height):
 		_report("Image is already %d × %d px." % [width, height])
 		return false
-	var before_img: Image = _image.duplicate()
-	var after_img: Image = _image.duplicate()
-	after_img.resize(width, height, Image.INTERPOLATE_BILINEAR if smooth else Image.INTERPOLATE_NEAREST)
-	before_img.generate_mipmaps()
-	after_img.generate_mipmaps()
-	var before_tex := ImageTexture.create_from_image(before_img)
-	var after_tex := ImageTexture.create_from_image(after_img)
-	_material.albedo_texture = after_tex
-	_image = after_img
-	_texture = after_tex
-	if _undo != null:
-		_create_undo_action("Slab Resize Paint Image", _solid)
-		_undo.add_do_property(_material, "albedo_texture", after_tex)
-		_undo.add_undo_property(_material, "albedo_texture", before_tex)
-		_undo.commit_action(false)
-	_mark_dirty(_material, true)
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
+	var state := channel_state(channel)
+	var interpolation := Image.INTERPOLATE_BILINEAR if smooth else Image.INTERPOLATE_NEAREST
+	state.base_image.resize(width, height, interpolation)
+	for layer in state.layers:
+		layer.image.resize(width, height, interpolation)
+	_load_channel_overlay(channel)
+	_commit_channel_edit("Slab Resize Paint Image", before)
 	_actions.uv_texture_resolution = width
 	_report("Resized paint image to %d × %d px." % [width, height])
-	image_changed.emit()
-	changed.emit()
 	return true
 
 
 func can_flatten() -> bool:
-	return (active and tool == Tool.PIXEL and _material != null and _is_unique(_material)
+	return (active and _material != null and _is_unique(_material)
 		and _image != null and not _image.is_empty() and _solid != null
 		and not stroke_active and not uv_drag_active and has_channel_overlay_strokes())
 
@@ -621,49 +620,19 @@ func flatten() -> bool:
 		_report("No overlay strokes to flatten.")
 		return false
 	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
 	var state := channel_state(channel)
-	var before_base_png: PackedByteArray = _image.save_png_to_buffer()
-	var before_layers_data: Array = _serialize_layers(state)
-	var before_overlay_opacity: float = overlay_opacity
-	var mat_id: int = _material.get_instance_id()
-	var solid_id: int = _solid.get_instance_id()
-	var target_channel: int = channel
 	_flatten_all_layers_to_base(state)
-	var after_base_png: PackedByteArray = _image.save_png_to_buffer()
-	_image.generate_mipmaps()
-	var after_tex := ImageTexture.create_from_image(_image)
-	_texture = after_tex
-	_set_channel_texture(target_channel, after_tex)
-	state.layers.clear()
-	state.add_layer("Layer 1")
-	state.active_layer_index = 0
-	_load_channel_overlay(target_channel)
-	if _undo != null:
-		var do_state := {
-			"base": after_base_png,
-			"layers": _serialize_layers(state),
-			"opacity": 1.0,
-			"mat_id": mat_id,
-			"solid_id": solid_id,
-			"channel": target_channel
-		}
-		var undo_state := {
-			"base": before_base_png,
-			"layers": before_layers_data,
-			"opacity": before_overlay_opacity,
-			"mat_id": mat_id,
-			"solid_id": solid_id,
-			"channel": target_channel
-		}
-		_create_undo_action("Slab Flatten %s Layer" % channel_name(target_channel), _solid)
-		_add_do_method(_restore_flatten_state_v2, do_state)
-		_add_undo_method(_restore_flatten_state_v2, undo_state)
-		_undo.commit_action(false)
-	_mark_dirty(_material, true)
-	_report("Flattened layers to %s." % channel_name(target_channel))
-	layers_changed.emit()
-	image_changed.emit()
-	changed.emit()
+	# Hidden artwork remains editable. Only the visible layers were committed.
+	var hidden: Array[PaintLayer] = []
+	for layer in state.layers:
+		if not layer.visible:
+			hidden.append(layer)
+	state.layers = hidden
+	state.add_layer("Layer 1" if hidden.is_empty() else "Paint")
+	_load_channel_overlay(channel)
+	_commit_channel_edit("Slab Flatten %s Layer" % channel_name(channel), before)
+	_report("Flattened visible layers to %s." % channel_name(channel))
 	return true
 
 
@@ -672,7 +641,7 @@ func _flatten_all_layers_to_base(state: ChannelState) -> void:
 		return
 	for layer in state.layers:
 		if layer.visible and layer.image != null and not layer.image.is_empty():
-			_blend_images(_image, layer.image, layer.opacity)
+			ChannelState._blend_layer(state.base_image, layer.image, layer.opacity)
 
 
 func _serialize_layers(state: ChannelState) -> Array:
@@ -709,74 +678,18 @@ func _deserialize_layers(state: ChannelState, data: Array) -> void:
 	state.active_layer_index = clampi(active_index, 0, state.layers.size() - 1)
 
 
-func _set_channel_texture(ch: int, tex: ImageTexture) -> void:
-	if _material == null:
+func _set_channel_texture(ch: int, tex: ImageTexture, mat: StandardMaterial3D = null) -> void:
+	var target := mat if mat != null else _material
+	if target == null:
 		return
 	match ch:
 		Channel.ALBEDO:
-			_material.albedo_texture = tex
+			target.albedo_texture = tex
 		Channel.ROUGHNESS:
-			_material.roughness_texture = tex
+			target.roughness_texture = tex
 		Channel.EMISSION:
-			_material.emission_enabled = true
-			_material.emission_texture = tex
-
-
-func _restore_flatten_state_v2(state: Dictionary) -> void:
-	var mat_id: int = int(state.get("mat_id", 0))
-	var solid_id: int = int(state.get("solid_id", 0))
-	var target_channel: int = int(state.get("channel", Channel.ALBEDO))
-	if _material == null or _solid == null:
-		return
-	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
-		return
-	var base_png: PackedByteArray = state.get("base", PackedByteArray())
-	var layers_data: Array = state.get("layers", [])
-	var base_img := Image.new()
-	if base_png.is_empty() or base_img.load_png_from_buffer(base_png) != OK:
-		return
-	_image = base_img
-	var ch_state := channel_state(target_channel)
-	_deserialize_layers(ch_state, layers_data)
-	if target_channel == channel:
-		_load_channel_overlay(target_channel)
-		_composite_overlay()
-	else:
-		_image.generate_mipmaps()
-		_texture = ImageTexture.create_from_image(_image)
-		_set_channel_texture(target_channel, _texture)
-	_mark_dirty(_material, true)
-	layers_changed.emit()
-	changed.emit()
-
-
-func _restore_flatten_state(state: Dictionary) -> void:
-	var mat_id: int = int(state.get("mat_id", 0))
-	var solid_id: int = int(state.get("solid_id", 0))
-	if _material == null or _solid == null:
-		return
-	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
-		return
-	var base_png: PackedByteArray = state.get("base", PackedByteArray())
-	var overlay_png: PackedByteArray = state.get("overlay", PackedByteArray())
-	var opacity: float = float(state.get("opacity", 1.0))
-	var base_img := Image.new()
-	if base_png.is_empty() or base_img.load_png_from_buffer(base_png) != OK:
-		return
-	_image = base_img
-	if overlay_png.is_empty():
-		_clear_overlay()
-	else:
-		var overlay_img := Image.new()
-		if overlay_img.load_png_from_buffer(overlay_png) == OK:
-			_overlay_image = overlay_img
-			_overlay_dirty = not _is_overlay_empty()
-			overlay_opacity = opacity
-		else:
-			_clear_overlay()
-	_composite_overlay()
-	_mark_dirty(_material, true)
-	changed.emit()
+			target.emission_enabled = true
+			target.emission_texture = tex
 
 
 func _ensure_overlay() -> void:
@@ -793,50 +706,14 @@ func _clear_overlay() -> void:
 		_overlay_image.fill(Color(0, 0, 0, 0))
 	_overlay_dirty = false
 
-
-func _flatten_overlay_to_base() -> void:
-	if _overlay_image == null or _overlay_image.is_empty() or _image == null or _image.is_empty():
-		return
-	_blend_images(_image, _overlay_image, overlay_opacity)
-	_clear_overlay()
-
-
-func _blend_images(base: Image, overlay: Image, opacity: float) -> void:
-	if base == null or overlay == null or base.is_empty() or overlay.is_empty():
-		return
-	var w: int = mini(base.get_width(), overlay.get_width())
-	var h: int = mini(base.get_height(), overlay.get_height())
-	for y in range(h):
-		for x in range(w):
-			var src: Color = overlay.get_pixel(x, y)
-			if src.a < 0.001:
-				continue
-			var dst: Color = base.get_pixel(x, y)
-			var a: float = src.a * opacity
-			base.set_pixel(x, y, dst.lerp(Color(src.r, src.g, src.b, 1.0), a))
-
-
 func _composite_overlay() -> void:
-	if _image == null or _image.is_empty():
+	if _image == null or _image.is_empty() or _material == null:
 		return
-	if _material == null:
-		return
-	var display: Image = Image.create(_image.get_width(), _image.get_height(), false, _image.get_format())
-	display.copy_from(_image)
+	_save_current_overlay_to_channel(channel)
 	var state := channel_state(channel)
-	for i in state.layers.size():
-		var layer := state.layers[i]
-		if not layer.visible:
-			continue
-		var layer_img: Image = layer.image
-		if i == state.active_layer_index and _overlay_image != null and not _overlay_image.is_empty():
-			layer_img = _overlay_image
-		if layer_img != null and not layer_img.is_empty():
-			_blend_images(display, layer_img, layer.opacity * overlay_opacity if i == state.active_layer_index else layer.opacity)
-	display.generate_mipmaps()
-	_texture = ImageTexture.create_from_image(display)
-	_set_channel_texture(channel, _texture)
-	_material.emit_changed()
+	state.base_image = _image
+	_render_channel(_material, channel, state)
+	_texture = state.texture
 	image_changed.emit()
 
 
@@ -912,12 +789,12 @@ func cancel_uv_drag() -> void:
 func begin_stroke() -> bool:
 	if not _ensure_editable():
 		return false
+	_save_current_overlay_to_channel(channel)
+	_stroke_state = _snapshot_channel(_material, channel)
 	stroke_active = true
 	_ensure_overlay()
 	_stroke_before = _overlay_image.save_png_to_buffer() if _overlay_image != null and not _overlay_image.is_empty() else PackedByteArray()
 	_stroke_material = _material
-	_stroke_texture = _texture
-	_stroke_solid = _solid
 	_last_pixel = Vector2(-1, -1)
 	return true
 
@@ -939,97 +816,11 @@ func end_stroke() -> void:
 	if not stroke_active:
 		return
 	stroke_active = false
-	if _overlay_image == null or _overlay_image.is_empty():
+	if _overlay_image == null or _overlay_image.is_empty() or _overlay_image.save_png_to_buffer() == _stroke_before:
 		return
-	var after: PackedByteArray = _overlay_image.save_png_to_buffer()
-	if after == _stroke_before:
-		return
-	var target_channel: int = channel
-	var state := channel_state(target_channel)
-	var layer_index: int = state.active_layer_index
-	_save_current_overlay_to_channel(target_channel)
-	if _undo != null and _stroke_material != null:
-		var before_overlay := Image.new()
-		var after_overlay: Image = _overlay_image.duplicate()
-		var before_overlay_empty := _stroke_before.is_empty()
-		if before_overlay_empty:
-			before_overlay = Image.create(_overlay_image.get_width(), _overlay_image.get_height(), false, Image.FORMAT_RGBA8)
-			before_overlay.fill(Color(0, 0, 0, 0))
-		elif before_overlay.load_png_from_buffer(_stroke_before) != OK:
-			return
-		var mat_id: int = _stroke_material.get_instance_id()
-		var solid_id: int = _stroke_solid.get_instance_id()
-		var do_state := {
-			"png": after_overlay.save_png_to_buffer(),
-			"mat_id": mat_id,
-			"solid_id": solid_id,
-			"channel": target_channel,
-			"layer_index": layer_index
-		}
-		var undo_state := {
-			"png": before_overlay.save_png_to_buffer(),
-			"mat_id": mat_id,
-			"solid_id": solid_id,
-			"channel": target_channel,
-			"layer_index": layer_index
-		}
-		_create_undo_action("Slab Paint Stroke", _stroke_solid)
-		_add_do_method(_restore_overlay_v2, do_state)
-		_add_undo_method(_restore_overlay_v2, undo_state)
-		_undo.commit_action(false)
-	_mark_dirty(_material, true)
-	_report("Painted on %s layer." % channel_name(target_channel))
-	layers_changed.emit()
-	changed.emit()
-
-
-func _restore_overlay(state: Dictionary) -> void:
-	var mat_id: int = int(state.get("mat_id", 0))
-	var solid_id: int = int(state.get("solid_id", 0))
-	if _material == null or _solid == null:
-		return
-	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
-		return
-	var png_bytes: PackedByteArray = state.get("png", PackedByteArray())
-	_ensure_overlay()
-	if png_bytes.is_empty():
-		_clear_overlay()
-	else:
-		var img := Image.new()
-		if img.load_png_from_buffer(png_bytes) == OK:
-			_overlay_image = img
-			_overlay_dirty = not _is_overlay_empty()
-	_composite_overlay()
-	changed.emit()
-
-
-func _restore_overlay_v2(state: Dictionary) -> void:
-	var mat_id: int = int(state.get("mat_id", 0))
-	var solid_id: int = int(state.get("solid_id", 0))
-	var target_channel: int = int(state.get("channel", Channel.ALBEDO))
-	var layer_index: int = int(state.get("layer_index", 0))
-	if _material == null or _solid == null:
-		return
-	if _material.get_instance_id() != mat_id or _solid.get_instance_id() != solid_id:
-		return
-	var png_bytes: PackedByteArray = state.get("png", PackedByteArray())
-	var ch_state := channel_state(target_channel)
-	while ch_state.layers.size() <= layer_index:
-		ch_state.add_layer()
-	var layer := ch_state.layers[layer_index]
-	if png_bytes.is_empty():
-		layer.image = Image.create(_image.get_width() if _image else DEFAULT_SIZE, 
-			_image.get_height() if _image else DEFAULT_SIZE, false, Image.FORMAT_RGBA8)
-		layer.image.fill(Color(0, 0, 0, 0))
-	else:
-		var img := Image.new()
-		if img.load_png_from_buffer(png_bytes) == OK:
-			layer.image = img
-	if target_channel == channel:
-		_load_channel_overlay(channel)
-	_composite_overlay()
-	layers_changed.emit()
-	changed.emit()
+	_save_current_overlay_to_channel(channel)
+	_commit_channel_edit("Slab Paint Stroke", _stroke_state)
+	_report("Painted on %s layer." % channel_name(channel))
 
 
 func _is_overlay_empty() -> bool:
@@ -1059,15 +850,117 @@ func current_channel_name() -> String:
 
 
 func channel_state(ch: int) -> ChannelState:
-	if not _channel_states.has(ch):
-		var size := _image.get_size() if _image != null and not _image.is_empty() else Vector2i(DEFAULT_SIZE, DEFAULT_SIZE)
-		_channel_states[ch] = ChannelState.new(size)
-	return _channel_states[ch]
+	return _state_for_material(_material, ch)
+
+
+func _state_for_material(mat: StandardMaterial3D, ch: int) -> ChannelState:
+	var channels: Dictionary
+	if mat == null:
+		channels = _empty_channel_states
+	else:
+		var material_id := mat.get_instance_id()
+		if not _material_states.has(material_id):
+			_material_states[material_id] = {"material": weakref(mat), "channels": {}}
+		channels = _material_states[material_id]["channels"]
+	if not channels.has(ch):
+		var base: Image
+		match ch:
+			Channel.ROUGHNESS: base = _roughness_image_from_material(mat)
+			Channel.EMISSION: base = _emission_image_from_material(mat)
+			_: base = _image_from_material(mat, _new_texture_size())
+		var state := ChannelState.new(base.get_size())
+		state.base_image = base
+		if mat != null and mat.has_meta(LAYERS_META):
+			var stored: Dictionary = mat.get_meta(LAYERS_META)
+			if stored.has(ch):
+				_decode_channel(state, stored[ch])
+		channels[ch] = state
+	return channels[ch]
+
+
+func _encode_channel(state: ChannelState) -> Dictionary:
+	return {"base": state.base_image.save_png_to_buffer(), "layers": _serialize_layers(state)}
+
+
+func _decode_channel(state: ChannelState, data: Dictionary) -> void:
+	var base := Image.new()
+	if base.load_png_from_buffer(data["base"]) == OK:
+		state.base_image = base
+	_deserialize_layers(state, data["layers"])
+
+
+func _snapshot_channel(mat: StandardMaterial3D, ch: int) -> Dictionary:
+	var texture_present := false
+	if mat != null:
+		match ch:
+			Channel.ALBEDO: texture_present = mat.albedo_texture != null
+			Channel.ROUGHNESS: texture_present = mat.roughness_texture != null
+			Channel.EMISSION: texture_present = mat.emission_texture != null
+	return {"material": mat, "channel": ch, "data": _encode_channel(_state_for_material(mat, ch)),
+		"texture_present": texture_present, "emission_enabled": mat.emission_enabled if mat != null else false,
+		"roughness_component": mat.roughness_texture_channel if mat != null else BaseMaterial3D.TEXTURE_CHANNEL_RED}
+
+
+func _persist_channel(mat: StandardMaterial3D, ch: int, state: ChannelState) -> void:
+	if not _is_unique(mat):
+		return
+	var stored: Dictionary = (mat.get_meta(LAYERS_META, {}) as Dictionary).duplicate(true)
+	stored[ch] = _encode_channel(state)
+	mat.set_meta(LAYERS_META, stored)
+
+
+func _render_channel(mat: StandardMaterial3D, ch: int, state: ChannelState, publish: bool = true) -> void:
+	var display := state.composite_all_layers(state.base_image)
+	display.generate_mipmaps()
+	state.texture = ImageTexture.create_from_image(display)
+	if publish and _is_unique(mat):
+		_set_channel_texture(ch, state.texture, mat)
+		mat.emit_changed()
+
+
+func _commit_channel_edit(label: String, before: Dictionary) -> void:
+	var state := channel_state(channel)
+	_render_channel(_material, channel, state)
+	_image = state.base_image
+	_texture = state.texture
+	_persist_channel(_material, channel, state)
+	_mark_dirty(_material, true)
+	if _undo != null:
+		_create_undo_action(label, _solid)
+		_add_do_method(_restore_channel, _snapshot_channel(_material, channel))
+		_add_undo_method(_restore_channel, before)
+		_undo.commit_action(false)
+	layers_changed.emit()
+	image_changed.emit()
+	changed.emit()
+
+
+func _restore_channel(snapshot: Dictionary) -> void:
+	var mat: StandardMaterial3D = snapshot["material"]
+	var ch: int = snapshot["channel"]
+	var state := _state_for_material(mat, ch)
+	_decode_channel(state, snapshot["data"])
+	_render_channel(mat, ch, state)
+	if not snapshot["texture_present"]:
+		_set_channel_texture(ch, null, mat)
+	if ch == Channel.EMISSION:
+		mat.emission_enabled = snapshot["emission_enabled"]
+	if ch == Channel.ROUGHNESS:
+		mat.roughness_texture_channel = snapshot["roughness_component"]
+	_persist_channel(mat, ch, state)
+	state.dirty = _channel_differs_from_saved(mat, ch, state)
+	_refresh_material_dirty(mat)
+	if mat == _material and ch == channel:
+		_image = state.base_image
+		_texture = state.texture
+		_load_channel_overlay(ch)
+	layers_changed.emit()
+	image_changed.emit()
+	changed.emit()
 
 
 func _switch_channel(from_ch: int, to_ch: int) -> void:
 	_save_current_overlay_to_channel(from_ch)
-	_load_channel_overlay(to_ch)
 	_bind_channel_texture(to_ch)
 	_report("Switched to %s channel." % channel_name(to_ch))
 
@@ -1097,23 +990,12 @@ func _load_channel_overlay(ch: int) -> void:
 func _bind_channel_texture(ch: int) -> void:
 	if _material == null:
 		return
-	match ch:
-		Channel.ALBEDO:
-			_image = _image_from_material(_material)
-			_texture = _material.albedo_texture as ImageTexture
-			if _texture == null and _image != null:
-				_texture = ImageTexture.create_from_image(_image)
-		Channel.ROUGHNESS:
-			_image = _roughness_image_from_material(_material)
-			_texture = _material.roughness_texture as ImageTexture
-			if _texture == null and _image != null:
-				_texture = ImageTexture.create_from_image(_image)
-		Channel.EMISSION:
-			_image = _emission_image_from_material(_material)
-			_texture = _material.emission_texture as ImageTexture
-			if _texture == null and _image != null:
-				_texture = ImageTexture.create_from_image(_image)
-	_composite_overlay()
+	var state := channel_state(ch)
+	_image = state.base_image
+	_load_channel_overlay(ch)
+	_render_channel(_material, ch, state, false)
+	_texture = state.texture
+	image_changed.emit()
 
 
 func _roughness_image_from_material(mat: StandardMaterial3D) -> Image:
@@ -1225,12 +1107,13 @@ func active_layer_index() -> int:
 
 func set_active_layer(index: int) -> void:
 	var state := channel_state(channel)
-	if index < 0 or index >= state.layers.size():
+	if index < 0 or index >= state.layers.size() or index == state.active_layer_index:
 		return
+	cancel_stroke()
 	_save_current_overlay_to_channel(channel)
 	state.active_layer_index = index
 	_load_channel_overlay(channel)
-	_composite_overlay()
+	_persist_channel(_material, channel, state)
 	layers_changed.emit()
 	changed.emit()
 
@@ -1265,71 +1148,66 @@ func all_layers_info() -> Array[Dictionary]:
 
 
 func add_layer(layer_name: String = "") -> int:
+	cancel_stroke()
 	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
 	var state := channel_state(channel)
 	var index := state.add_layer(layer_name)
 	_load_channel_overlay(channel)
-	_composite_overlay()
-	layers_changed.emit()
-	changed.emit()
+	_commit_channel_edit("Slab Add Paint Layer", before)
 	_report("Added %s to %s." % [state.layers[index].name, channel_name(channel)])
 	return index
 
 
 func remove_layer(index: int = -1) -> bool:
-	var target_index := index if index >= 0 else active_layer_index()
 	var state := channel_state(channel)
-	if state.layers.size() <= 1:
+	var target_index := index if index >= 0 else state.active_layer_index
+	if state.layers.size() <= 1 or target_index < 0 or target_index >= state.layers.size():
 		_report("Cannot delete the last layer.")
 		return false
-	if target_index == state.active_layer_index:
-		_report("Cannot delete the active layer. Select another layer first.")
-		return false
-	if target_index < 0 or target_index >= state.layers.size():
-		return false
-	var layer_name := state.layers[target_index].name
-	if not state.remove_layer(target_index):
-		return false
+	cancel_stroke()
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
+	state.remove_layer(target_index)
 	_load_channel_overlay(channel)
-	_composite_overlay()
-	layers_changed.emit()
-	changed.emit()
-	_report("Deleted %s from %s." % [layer_name, channel_name(channel)])
+	_commit_channel_edit("Slab Delete Paint Layer", before)
 	return true
 
 
 func set_layer_visible(index: int, visible: bool) -> void:
 	var state := channel_state(channel)
-	if index < 0 or index >= state.layers.size():
+	if index < 0 or index >= state.layers.size() or state.layers[index].visible == visible:
 		return
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
 	state.layers[index].visible = visible
-	_composite_overlay()
-	layers_changed.emit()
-	changed.emit()
+	_commit_channel_edit("Slab Paint Layer Visibility", before)
 
 
 func set_layer_opacity(index: int, opacity: float) -> void:
 	var state := channel_state(channel)
-	if index < 0 or index >= state.layers.size():
+	opacity = clampf(opacity, 0.0, 1.0)
+	if index < 0 or index >= state.layers.size() or is_equal_approx(state.layers[index].opacity, opacity):
 		return
-	state.layers[index].opacity = clampf(opacity, 0.0, 1.0)
-	_composite_overlay()
-	layers_changed.emit()
-	changed.emit()
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
+	state.layers[index].opacity = opacity
+	_commit_channel_edit("Slab Paint Layer Opacity", before)
 
 
 func set_layer_name(index: int, new_name: String) -> void:
 	var state := channel_state(channel)
-	if index < 0 or index >= state.layers.size():
+	if index < 0 or index >= state.layers.size() or state.layers[index].name == new_name:
 		return
+	_save_current_overlay_to_channel(channel)
+	var before := _snapshot_channel(_material, channel)
 	state.layers[index].name = new_name
-	layers_changed.emit()
-	changed.emit()
+	_commit_channel_edit("Slab Rename Paint Layer", before)
 
 
 func has_channel_overlay_strokes() -> bool:
 	var state := channel_state(channel)
-	return state.has_visible_strokes() or has_overlay_strokes()
+	return state.has_visible_strokes()
 
 
 func cancel_stroke() -> void:
@@ -1346,37 +1224,11 @@ func cancel_stroke() -> void:
 	_composite_overlay()
 	_report("Paint stroke cancelled.")
 
-
-func apply_png(bytes: PackedByteArray, mat: StandardMaterial3D = null, tex: ImageTexture = null) -> void:
-	if bytes.is_empty():
-		return
-	var img := Image.new()
-	if img.load_png_from_buffer(bytes) != OK:
-		return
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	img.generate_mipmaps()
-	var target_mat: StandardMaterial3D = mat if mat != null else _material
-	var target_tex: ImageTexture = tex if tex != null else _texture
-	if target_tex == null:
-		target_tex = ImageTexture.create_from_image(img)
-	else:
-		target_tex.set_image(img)
-	if target_mat != null:
-		target_mat.albedo_texture = target_tex
-		_mark_dirty(target_mat, true)
-	if target_mat == _material:
-		_image = img
-		_texture = target_tex
-		image_changed.emit()
-	changed.emit()
-
-
 func save_png(path: String) -> int:
 	if _image == null:
 		_report("Nothing to save.")
 		return ERR_DOES_NOT_EXIST
-	if has_overlay_strokes():
+	if has_channel_overlay_strokes():
 		flatten()
 	_ensure_dir(path.get_base_dir())
 	var err: int = _image.save_png(path)
@@ -1384,13 +1236,12 @@ func save_png(path: String) -> int:
 		_report("Could not save %s." % path)
 		return err
 	if _material != null:
-		_material.set_meta(PNG_META, path)
+		_material.set_meta(_png_meta(channel), path)
 		_material.resource_local_to_scene = true
+		_persist_channel(_material, channel, channel_state(channel))
 		_mark_dirty(_material, false)
 		var scene_root: Node = _owning_scene_root(_solid)
-		_pending_scene_saves[_material.get_instance_id()] = {
-			"root": weakref(scene_root) if scene_root != null else null,
-		}
+		_pending_scene_saves[_material.get_instance_id()] = {"root": weakref(scene_root) if scene_root != null else null}
 	else:
 		dirty = false
 	_report("Texture saved to %s. The scene still needs saving." % path)
@@ -1401,7 +1252,8 @@ func save_png(path: String) -> int:
 func default_save_path(solid: Node3D = null) -> String:
 	var node: Node3D = solid if solid != null else (_selection.solid if _selection != null else null)
 	var name: String = node.name if node != null else "solid"
-	return "res://slab_paint/%s_m%d.png" % [name.validate_filename(), maxi(0, _slot)]
+	var suffix := "" if channel == Channel.ALBEDO else "_%s" % channel_name(channel).to_lower()
+	return "res://slab_paint/%s_m%d%s.png" % [name.validate_filename(), maxi(0, _slot), suffix]
 
 
 func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
@@ -1551,8 +1403,6 @@ func _dab_at(pixel: Vector2) -> void:
 func rebind() -> void:
 	cancel_stroke()
 	cancel_uv_drag()
-	_clear_overlay()
-	_channel_states.clear()
 	if _selection != null and _selection.solid != null:
 		_actions.clamp_material_slot()
 		var mats: Array = _selection.solid.get("materials")
@@ -1601,6 +1451,8 @@ func _bind_empty_selection_target() -> void:
 	_solid = _selection.solid if _selection != null else null
 	_slot = -1
 	_material = null
+	_overlay_image = null
+	_overlay_dirty = false
 	_image = null
 	_texture = null
 	dirty = false
@@ -1609,15 +1461,13 @@ func _bind_empty_selection_target() -> void:
 
 
 func _bind_from_selection() -> void:
+	for material_id: int in _material_states.keys():
+		var entry: Dictionary = _material_states[material_id]
+		if (entry["material"] as WeakRef).get_ref() == null:
+			_material_states.erase(material_id)
+			_dirty_ids.erase(material_id)
 	if _selection == null or _selection.solid == null:
-		_solid = null
-		_material = null
-		_image = null
-		_texture = null
-		_slot = -1
-		dirty = false
-		_hide_brush()
-		changed.emit()
+		_bind_empty_selection_target()
 		return
 	_sync_uv_from_selection()
 	if _actions != null:
@@ -1627,28 +1477,18 @@ func _bind_from_selection() -> void:
 	var mats: Array = _solid.get("materials")
 	var src: Variant = mats[_slot] if _slot >= 0 and _slot < mats.size() else null
 	if src is StandardMaterial3D:
-		var same_material: bool = src == _material
-		var preserve_base: bool = same_material and _image != null and not _image.is_empty() and has_overlay_strokes()
-		if preserve_base:
-			_sync_texture_resolution_from_artwork(src, _image)
-			_composite_overlay()
-			dirty = _is_dirty(_material)
-		else:
-			_material = src
-			_image = _image_from_material(src)
-			_sync_texture_resolution_from_artwork(src, _image)
-			if src.albedo_texture is ImageTexture and _is_unique(src):
-				_texture = src.albedo_texture
-				(_texture as ImageTexture).set_image(_image)
-			else:
-				_texture = ImageTexture.create_from_image(_image)
-				if _is_unique(src):
-					src.albedo_texture = _texture
-			dirty = _is_dirty(_material)
+		_material = src
+		if not _is_unique(src):
+			_material_states.erase(src.get_instance_id())
+		_bind_channel_texture(channel)
+		_sync_texture_resolution_from_artwork(src, _image)
+		dirty = _is_dirty(_material)
 	else:
 		_material = null
 		_image = _filled(DEFAULT_SIZE, Color(0.72, 0.55, 0.38))
 		_texture = ImageTexture.create_from_image(_image)
+		_overlay_image = null
+		_overlay_dirty = false
 		dirty = false
 	changed.emit()
 
@@ -1676,7 +1516,7 @@ func _ensure_editable() -> bool:
 	if _image.get_format() != Image.FORMAT_RGBA8:
 		_image.convert(Image.FORMAT_RGBA8)
 		_texture.set_image(_image)
-		_material.albedo_texture = _texture
+		_set_channel_texture(channel, _texture)
 	return true
 
 
@@ -1687,13 +1527,20 @@ func _is_unique(mat: StandardMaterial3D) -> bool:
 func _mark_dirty(mat: StandardMaterial3D, value: bool) -> void:
 	if mat == null:
 		return
-	var id := mat.get_instance_id()
-	if value:
-		_dirty_ids[id] = true
+	_state_for_material(mat, channel).dirty = value
+	_refresh_material_dirty(mat)
+
+
+func _refresh_material_dirty(mat: StandardMaterial3D) -> void:
+	var any_dirty := false
+	for state: ChannelState in _material_states.get(mat.get_instance_id(), {}).get("channels", {}).values():
+		any_dirty = any_dirty or state.dirty
+	if any_dirty:
+		_dirty_ids[mat.get_instance_id()] = true
 	else:
-		_dirty_ids.erase(id)
+		_dirty_ids.erase(mat.get_instance_id())
 	if mat == _material:
-		dirty = value
+		dirty = any_dirty
 
 
 func _is_dirty(mat: StandardMaterial3D) -> bool:
@@ -1804,12 +1651,13 @@ func _bind_editable(solid: Node3D, slot: int, mat: StandardMaterial3D, img: Imag
 	_solid = solid
 	_slot = slot
 	_material = mat
-	_image = img
-	_texture = tex
-	_clear_overlay()
 	mat.albedo_texture = tex
-	if _actions != null and img != null and not img.is_empty():
-		_actions.uv_texture_resolution = img.get_width()
+	var state := _state_for_material(mat, Channel.ALBEDO)
+	if not mat.has_meta(LAYERS_META):
+		state.base_image = img
+	_bind_channel_texture(channel)
+	if _actions != null and _image != null:
+		_actions.uv_texture_resolution = _image.get_width()
 
 
 func _sync_texture_resolution_from_artwork(mat: StandardMaterial3D, img: Image) -> void:
@@ -1935,32 +1783,27 @@ func _on_undo_version() -> void:
 
 
 func _sync_dirty_from_saved() -> void:
-	if _material == null or _image == null:
+	if _material == null or not _is_unique(_material):
 		return
-	if not _is_unique(_material):
-		return
-	if not _material.has_meta(PNG_META) or str(_material.get_meta(PNG_META)) == "":
-		_mark_dirty(_material, true)
-		dirty = true
-		return
-	var path: String = str(_material.get_meta(PNG_META))
-	if not FileAccess.file_exists(path):
-		_mark_dirty(_material, true)
-		dirty = true
-		return
-	var loaded := Image.new()
-	if loaded.load(path) != OK:
-		_mark_dirty(_material, true)
-		dirty = true
-		return
-	loaded = SlabPaintRaster.clone_rgba(loaded)
-	var diverged := loaded.get_size() != _image.get_size()
-	if not diverged:
-		# PNG stores the base image. Derived mip levels are not unsaved artwork.
-		var base_bytes := _image.get_width() * _image.get_height() * 4
-		diverged = loaded.get_data().slice(0, base_bytes) != _image.get_data().slice(0, base_bytes)
-	_mark_dirty(_material, diverged)
-	dirty = diverged
+	for ch: int in _material_states.get(_material.get_instance_id(), {}).get("channels", {}):
+		var state := _state_for_material(_material, ch)
+		state.dirty = _channel_differs_from_saved(_material, ch, state)
+	_refresh_material_dirty(_material)
+
+
+func _png_meta(ch: int) -> String:
+	return PNG_META if ch == Channel.ALBEDO else "%s_%s" % [PNG_META, channel_name(ch).to_lower()]
+
+
+func _channel_differs_from_saved(mat: StandardMaterial3D, ch: int, state: ChannelState) -> bool:
+	var path: String = str(mat.get_meta(_png_meta(ch), ""))
+	if path.is_empty() or not FileAccess.file_exists(path):
+		return state.dirty
+	var saved := Image.load_from_file(path)
+	if saved == null or saved.is_empty():
+		return true
+	# A PNG contains the base; editable overlay changes remain unsaved.
+	return saved.save_png_to_buffer() != state.base_image.save_png_to_buffer() or state.has_visible_strokes()
 
 
 func _ensure_dir(dir: String) -> void:
