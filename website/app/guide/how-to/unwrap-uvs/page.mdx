@@ -8,7 +8,7 @@ Use this when adjoining faces should paint continuously and keep texture pixels 
 
 1. In Edge mode, select the edges where the texture may split and click **Mark Seam**. Use **Clear Seam** to remove a mark.
 2. Switch to Face mode and select the faces to unwrap.
-3. Open **Surface Paint** and stay on **Material / UV**. In **Mapping**, set **Pixels/metre** to the detail you need.
+3. Click **UV** in the Slab header. In **Mapping**, set **Pixels/metre** to the detail you need.
 4. Set **Texture px** to the material texture's width in pixels.
 5. Click **Unwrap**.
 
@@ -22,16 +22,16 @@ The UV canvas frames the new layout after Unwrap. Undo and Redo also frame a res
 
 After placement, click **Pack** to re-atlas the existing islands without unfolding them again. The tooltip is `Repack islands without re-unwrapping.` If the islands no longer fit, Pack refuses, leaves the solid unchanged, and asks you to raise **Texture px** or scale down **Placement**.
 
-![UV Mapping chrome with Unwrap, Pack, and Fit UV](/img/pack-01-uv-chrome.png)
-
-![Pack overflow refuse naming Texture px or Placement](/img/pack-02-overflow-refuse.png)
-
 Unwrap resets Repeat U, Repeat V, Offset and Rotation so the requested density is exact. Pack also resets those fields after it bakes the new atlas. Apply placement afterward if an island needs to move, turn or repeat.
 
-Pixel mode hides the UV element strip, Unwrap, and Pack. Soft Select stays with modelling and does not appear in the UV workspace.
+Each face stores the texture resolution used for its mapping. Pack preserves its pixel density when you change **Texture px**, switch solids, undo, or reopen the scene. Faces unwrapped at different resolutions keep their own densities when packed together.
+
+Older scenes do not contain this resolution. Their first Pack keeps the current UV scale and adopts **Texture px** as the source resolution. To set an exact density for an older mapping, choose **Pixels/metre** and **Texture px**, then Unwrap again.
+
+Paint mode hides the UV element strip, Unwrap, and Pack. Soft Select stays with modelling and does not appear in the UV workspace.
 
 For example, 256 pixels per metre on a 1024-pixel texture maps one metre of mesh surface to 0.25 UV units.
 
 Save the scene after unwrapping. Seam marks, unfolded coordinates, and the scale derived from **Pixels / metre** and **Texture px** are stored in the `SlabSolid` data and follow ordinary undo and redo.
 
-If the material has no image yet, switch to **Pixel** and set **New image px** before **Make Unique**. The new paint image uses that size. Existing artwork keeps its current dimensions, and selecting it updates **Texture px** to its width. Changing the reference resolution in Mapping does not resize an existing image.
+If the material has no image yet, switch to **Paint** and set **New image px** before **Make Unique**. The new paint image uses that size. Existing artwork keeps its current dimensions, and selecting it updates **Texture px** to its width. Changing the reference resolution in Mapping does not resize an existing image.

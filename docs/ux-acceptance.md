@@ -4,7 +4,24 @@ The goal is ProBuilder or UModeler quality in the editor workflow and manual. A 
 
 The next visual and interaction priorities are recorded in [Modeller design direction](modeller-design-direction.md): active workspace and selection state, material assignment order, and viewport space after leaving paint.
 
-## Verified improvements
+## Current release checkpoint — 2026-09-23
+
+This checkpoint supersedes the control names, screenshot claims, and outstanding-check lists in the historical record below. It does not claim parity with another modeller or acceptance of the Annex composition.
+
+- The header exposes **UV** and **Paint** separately. UV **Place** moves face mapping; Shift scales and Cmd on macOS or Ctrl elsewhere rotates. UV Vert, Edge, and Face select canvas elements. The workspace input regression covers gestures and Undo/Redo.
+- UV atlas resolution belongs to each face mapping. Mixed-resolution packing, topology attribute copies, Undo, serialized reload, and older scene data have regression coverage. Object isolation preserves authored visibility when saving and reopening.
+- Paint layers belong to their material and channel and survive scene reload. Save writes the selected channel, then flattens its visible layers; hidden layers remain editable. Failed writes preserve layer state. Roughness painting preserves the effective value of untouched pixels, including a non-default material scalar. The paint state regressions cover these cases and Undo/Redo across target changes.
+- Promote preserves supported UVs, materials, transforms, visibility, and children through Undo/Redo and refuses unsupported input. OBJ exports albedo color, opacity, and albedo PNGs with the geometry and material groups. Bundle failure and texture-alpha import regressions cover the corrected export paths; this is not PBR or shader export support.
+- Procedural guide mockups and misleading screenshot usages have been removed. Remaining captions describe visible content. The Annex README identifies historical captures that do not establish geometry, successful export/Promote, or place readability.
+
+Before release, record the final `scripts/slab-verify` result on the release tip. The separate `scripts/slab-native-gizmo-verify` and `scripts/slab-install-verify` commands are not invoked by that verifier and require their own current results. Reopen the saved Annex and assess the brief's wide-view circulation, rack/loft readability, painted-island coverage, and editable source with collision. Keep missing coverage named; an old acceptance claim or a passing test suite does not substitute for that review.
+
+## Historical acceptance record
+
+The following notes preserve evidence from earlier iterations. Labels such as Surface Paint, Material / UV, and Pixel, references to wireframe figures, test counts, and statements of remaining work describe those iterations. They are not current UI instructions or additional release features. Consult the current guide for controls and the checkpoint above for this release's remaining checks.
+
+### Verified improvements
+
 
 - Native Move, Rotate, and Scale pass the rendered-editor pivot and axis matrix, including exact Undo and Redo.
 - Extrude, Inset, and Bevel each have one command entry, adjustable preview, Apply, and Cancel. Bevel retains its segment control and viewport handle.
@@ -41,7 +58,7 @@ The next visual and interaction priorities are recorded in [Modeller design dire
 
 - UV modifier drags use editor-scaled screen distance. The rendered regression reproduced different outcomes at two zoom levels before the fix. Afterward, a 25-logical-pixel horizontal drag rotates 25 degrees at either zoom; a diagonal Shift-drag applies the same expected U/V factors. Held modifiers, Escape, exact native Undo/Redo, stable canvas framing, and pointer-relative Move all pass. This covers gesture consistency rather than the broader paint workflow. The full verifier, documentation link check, and website build pass.
 
-## Remaining acceptance work
+### Historical remaining acceptance work
 
 The PowerHouse now has an editor-authored ceiling, a shallow segmented vault, fitted half-cylinder end panels made with Plane Cut, timber cladding, and a shadow-casting Godot light. A normal-input running-game pass reached the enclosed room and verified ceiling coverage and grounded contact. Selecting that authored light exposed and resolved stale Slab selection ownership; the restarted editor and a regression gate now verify that authored children clear the modelling target. See [PowerHouse roof playtest](powerhouse-roof-playtest.md). The interior finish and broader level design remain incomplete.
 
@@ -62,7 +79,7 @@ The compact-dock audit distinguished the author-chosen splitter height from the 
 | Documentation | Replace outdated captures, cross-check every command contract, validate links, and inspect desktop and narrow-screen layouts. Verify small phone widths and every long reference page; the right-hand contents column is checked at 1151 and 1440 px. |
 | Release readiness | Reopen saved examples, verify editable source and generated output, run all gates, and record limitations honestly. No claim of parity until the full workflow is verified. |
 
-## Repeatable evidence
+### Historical repeatable evidence
 
 The first-use documentation audit corrected mode shortcuts that previously followed a bottom-dock click without restoring viewport focus. The orientation tutorial now starts with mode buttons, and the selection guide distinguishes modelling clicks from Material / UV assignment and Pixel strokes. It explains how to leave Paint to select another face set without editing it. The pixel guide reaches painting and saving before optional UV placement and resizing, includes the default-material path, and avoids copying an already editable texture again.
 

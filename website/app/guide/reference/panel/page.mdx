@@ -4,7 +4,7 @@ export const metadata = { title: "The Slab panel" };
 
 # The Slab panel
 
-The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **Surface Paint** for materials and UVs.
+The panel is the bottom dock named **Slab**. Object mode shows a **Create strip** above the scrollable settings area: shape chips, dimension fields, and a **Create** button. The **Object** command group sits below. Vertex, Edge, and Face modes keep their geometry command group open. **Selection** in Vertex, Edge, and Face modes starts collapsed. Expand it to use its secondary commands. The panel remembers that choice while you switch selection modes. Open **UV** for materials and UVs.
 
 Commands have icons and labels. A command disables when the selection does not meet its requirement. Point at the disabled command to read that requirement.
 
@@ -127,37 +127,25 @@ Boolean, Mirror, Pivot, Snap, Plane Cut, and Array need a selected `SlabSolid`. 
 | Align Face | 1 face | Previews a rigid transform that seats the selected face on a face clicked on another solid. |
 | Select Boundary | 1 face | Switches to Edge mode and selects edges belonging to exactly one selected face. Edges inside the selected region are excluded. |
 
-<Figure
-  src="/img/panel-select-boundary.png"
-  alt="Face mode with Select Boundary visible in the Face command group beside Select Coplanar."
-  caption="Face mode showing Select Boundary in the Face command group. Select one or more faces, then choose Select Boundary to switch to Edge mode and select their perimeter edges."
-/>
-
-<Figure
-  src="/img/panel-select-boundary-edges.png"
-  alt="Edge mode after Select Boundary, showing 4 boundary edges selected on a box roof."
-  caption="After Select Boundary — Edge mode with the outer perimeter selected. The status shows 'Selected 4 boundary edges' for the roof face of a box."
-/>
-
 Albedo and UV steps are in [Texture a room](/guide/tutorials/texture-a-room).
 
 See [Change topology](/guide/how-to/change-topology) for the selection rules and undo results of Connect, Dissolve, Subdivide, and Merge.
 
-## Surface Paint
+## UV and Paint
 
-**Surface Paint** in the header opens a separate workspace and switches to Face mode. Escape closes it. **Material / UV** assigns materials and places the selected face on the texture. **Pixel** paints the bound Texture's albedo on the canvas or directly in the 3D view.
+The header has separate **UV** and **Paint** workspace buttons. Both switch to Face mode. Escape closes the active workspace. **UV** assigns materials and adjusts texture placement. **Paint** paints Albedo, Roughness, or Emission on the canvas or directly in the 3D view.
 
-In **Material / UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening Surface Paint with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside Surface Paint.
+In **UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening UV with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside UV.
 
 When Brush is empty, clicking a face selects it and adopts its material and UV values without changing the solid. A default-material face remains selected while you choose a material. Once Brush is set, face clicks assign it. Left clicks and drags in empty space, without modifier keys, leave the target and scene unchanged.
 
-In **Pixel**, **Texture** names the selected faces' common material image. Mixed-material selections have no canvas image. A 3D stroke paints the clicked face's own image; it does not assign the Material / UV brush.
+In **Paint**, **Texture** names the selected faces' common material image. Mixed-material selections have no canvas image. A 3D stroke paints the clicked face's own image; it does not assign the UV brush.
 
-Both paint tools place their controls beside the canvas and share the same minimum workspace height. Switching between **Material / UV** and **Pixel** preserves the dock height. Pixel uses a narrower control column, giving its canvas more width. Scroll the control column to reach lower settings when the dock is compact.
+Both workspaces place their controls beside the canvas and share the same minimum workspace height. Switching between **UV** and **Paint** preserves the dock height. Paint uses a narrower control column, giving its canvas more width. Scroll the control column to reach lower settings when the dock is compact.
 
-The gold **Surface Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
+The gold **UV** or **Paint** button identifies the active workspace. The highlighted **Face** button identifies the selection mode. Click a selection-mode button to return to modelling.
 
-### Material / UV controls
+### UV controls
 
 **Mapping** reports whether the selected faces use planar mapping, unwrapped mapping, or a mixture. **Unwrap** creates islands. **Pack** re-atlases those islands without unfolding again. **Fit UV** frames the canvas only. **Placement** moves, rotates, and scales the current mapping. A successful Unwrap or Pack resets placement and frames the new islands in the canvas.
 
@@ -183,28 +171,29 @@ The gold **Surface Paint** button identifies the active workspace. The highlight
 
 The material palette sits below the Brush picker, before Placement and Mapping. Choose a loaded material there, then click **Assign** above it.
 
-<Figure
-  src="/img/panel-material-uv.png"
-  alt="Material / UV with Assign, the material picker, and loaded palette visible together beside the saved roof's UV outline and painted landing marker."
-  caption="Choose a loaded material below the picker, then Assign above it. Scroll the left column for the remaining Placement and Mapping controls. Click the image to view it at full size."
-/>
+The UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a palette chip updates this preview without changing the faces. **Assign** or a plain viewport click applies the Brush.
 
-The Material / UV canvas previews the current Brush texture beneath the selected faces' UV outlines. Choosing a palette chip updates this preview without changing the faces. **Assign** or a plain viewport click applies the Brush.
+**Place** is the default canvas tool. Drag to move the mapping of the selected 3D faces, Shift-drag to scale it, and Cmd-drag on macOS or Ctrl-drag on other systems to rotate it. Escape cancels the drag. Numeric Placement fields edit the same faces.
 
-On the UV canvas, drag to move, Shift-drag to scale, and Ctrl-drag to rotate. Use Cmd-drag to rotate on macOS. Scale and rotation use screen distance independently of zoom. Shift-drag adjusts U horizontally and V vertically; rotation uses horizontal motion. Scroll zooms and middle-drag pans. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
+The **UV Vert**, **UV Edge**, and **UV Face** buttons select and highlight UV elements. Shift-click toggles an element in that selection. UV selection is separate from the faces selected in the 3D view. Choose **Place** to edit the face mapping again. Scroll zooms and middle-drag pans in either mode. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
 
-### Pixel controls
+### Paint controls
 
-Pixel hides Assign, Sample, the material picker, the material palette, Mapping, and the UV placement controls. Its **Image** section contains the image-size field.
+Paint hides Assign, Sample, the material picker, the material palette, Mapping, and the UV placement controls. Its **Image** section contains the image-size field.
 
 | Control | Result |
 | --- | --- |
 | Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
-| Save Paint | Writes `res://slab_paint/<solid>_m<slot>.png`. It is disabled until an owned Texture is ready. Save the scene afterward. |
+| Save Paint | Flattens visible layers and writes the current channel. Albedo uses `<solid>_m<slot>.png` under `res://slab_paint/`; Roughness and Emission add `_roughness` and `_emission`. Save each painted channel, then save the scene. |
 | Resize… | Expands Width and Height controls beside the image, with Keep aspect and Smooth or Nearest resampling. Apply Resize preserves UV placement and supports Undo. Cancel keeps the current image. Save Paint and the scene afterward. |
 | New image px | Sets the square image size used by Make Unique when the material has no artwork. For existing artwork, the read-only Texture px field shows its width. |
+| Albedo, Roughness, Emission | Chooses the material channel to paint. Each channel has its own layer list. |
+| Layers +, − | Adds a layer or deletes the active layer in the current channel. |
+| Flatten | Commits visible layers into the current channel's base image as one undoable action. Hidden layers remain editable. |
 | Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
 | Show UV | Shows the selected faces' UV outlines over the image. It is off by default. |
+
+Layer rows select the active layer. The eye control hides or shows a layer, and layer Opacity controls its contribution to the result. Scene saves retain the base images and editable layers.
 
 The inline hint asks for a face, a common material, or **Make Unique** when the selection is not ready. With an owned Texture, it says to paint on the image or model, then save the paint and the scene.
 

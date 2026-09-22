@@ -12,11 +12,11 @@ Mode keys fire even when nothing is selected. They stop in the 3D view so Godot 
 | <kbd>2</kbd> | Vertex | Pick a vertex. Move, Rotate, and Scale transform the selection around the configured pivot and axes. |
 | <kbd>3</kbd> | Edge | Pick an edge. The transform gizmo acts on both endpoints. Shift-drag bevels. Double-click selects the edge loop. |
 | <kbd>4</kbd> | Face | Pick a face. The transform gizmo acts on all its vertices. Shift-drag extrudes. |
-| <kbd>Escape</kbd> | Object | Leaves Face isolation first and restores every face without clearing Soft Select or toggling solid Isolate. If only solid Isolate is on, Escape exits that. Otherwise it leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In Surface Paint it cancels a stroke, or closes the workspace when idle. |
+| <kbd>Escape</kbd> | Object | Leaves Face isolation first and restores every face without clearing Soft Select or toggling solid Isolate. If only solid Isolate is on, Escape exits that. Otherwise it leaves element mode. During a Shift-drag, Escape cancels the grab and does not change mode. In UV or Paint it cancels the active gesture, or closes the workspace when idle. |
 
 <kbd>W</kbd>, <kbd>E</kbd>, and <kbd>R</kbd> are Godot's Move, Rotate, and Scale tools. Slab claims <kbd>E</kbd> in Face mode for Extrude when a face is selected.
 
-Clicking a mode button closes the active modelling tool before changing mode, even when you click the current mode again. The number-key shortcuts keep their normal selection-mode role and do not replace a tool's own Apply or Cancel input. In Surface Paint, <kbd>1</kbd> through <kbd>4</kbd> close the paint workspace and return to modelling in the chosen mode.
+Clicking a mode button closes the active modelling tool before changing mode, even when you click the current mode again. The number-key shortcuts keep their normal selection-mode role and do not replace a tool's own Apply or Cancel input. In UV or Paint, <kbd>1</kbd> through <kbd>4</kbd> close the paint workspace and return to modelling in the chosen mode.
 
 ## View
 
@@ -31,7 +31,7 @@ Clicking a mode button closes the active modelling tool before changing mode, ev
 
 ## Panel shortcuts
 
-These run only when the current mode and selection count match the command. They fire from the 3D view whether or not the Slab dock is open.
+The table lists the **Slab (default)** keyboard profile. These shortcuts run only when the current mode and selection count match the command. They fire from the 3D view whether or not the Slab dock is open.
 
 Shortcuts keep working while **Selection** is collapsed.
 
@@ -54,10 +54,25 @@ Select Ring, the shape buttons, **Create**, and the Object boolean icons have no
 
 <kbd>A</kbd> through those keys are ignored when Ctrl or Cmd is held, so editor chords still pass through.
 
-Surface Paint takes keyboard input while it is open, so modelling mode and command keys do not run there.
+Modelling command shortcuts do not run in UV or Paint. The number keys still return to modelling.
 
 Extrude, Inset, and Bevel always open an **active op card** with the operation's settings and **Cancel | Apply** buttons. Extrude distance accepts negative values to extrude inward. Adjust **Extrude distance**, **Inset distance**, or **Bevel width**. Bevel also exposes **Segments**. Press Enter or click **Apply** to commit. Escape, right-click, or **Cancel** discards the preview.
 
 Shift-drag remains the quick gesture. Shift-drag a face to extrude or an edge to bevel, then release to commit the grab. Escape during the drag restores the solid.
 
 Plane Cut, Array, Loop Cut, Snap to Vertex, and Align Face also preview their result. A left click chooses the target for Snap or Align. Their page or panel instructions state how to apply each preview.
+
+## Keyboard profiles
+
+The header dropdown selects **Slab (default)**, **Familiar (UMX-ish)**, or **Familiar (Blender-ish)**. The choice persists in Godot editor settings. Mode keys 1–4 and modal Escape and Enter stay fixed. Button tooltips show the active shortcuts.
+
+| Command | Slab | UMX-ish | Blender-ish |
+| --- | --- | --- | --- |
+| Dissolve | X | Backspace | X |
+| Subdivide | U | S | W |
+| Weld | J | W | J |
+| Collapse | Y | C | Y |
+| Connect | K | J | K |
+| Loop Cut | L | L | R |
+
+Other commands retain the default keys listed above. A profile command takes priority over Godot's unmodified transform key when its Slab selection requirement is met. Ctrl and Cmd editor chords still pass through.

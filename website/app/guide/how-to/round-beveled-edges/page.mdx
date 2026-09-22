@@ -1,5 +1,3 @@
-import { Figure } from "@/components/Figure";
-
 export const metadata = { title: "Round beveled edges" };
 
 # Round beveled edges
@@ -14,12 +12,6 @@ Use a segmented bevel to soften a blockout edge, round a face perimeter, or roun
 4. Set **Segments** from 1 to 16. One segment is a straight chamfer; additional segments follow a rounded profile.
 
 For a face perimeter, start in Face mode, select the face, and choose **Select Boundary**. Then choose **Bevel**. For example, a 4.4 × 0.2 × 4.4 roof accepts width 0.03 and three segments around its top face.
-
-<Figure
-  src="/img/panel-select-boundary-edges.png"
-  alt="Edge mode after Select Boundary, showing 4 boundary edges selected on a box roof."
-  caption="After selecting a roof face and choosing Select Boundary, the 4 perimeter edges are selected and ready for Bevel."
-/>
 
 The rendered preview shows the exact validated result while the original solid remains unchanged. Three selected edges meeting at one corner create a closed corner patch before their rounded edge bands are built. If a value is invalid, Slab restores the original display and disables **Apply**.
 

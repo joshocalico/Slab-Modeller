@@ -8,6 +8,10 @@ Use editable `SlabSolid` nodes directly in a scene, or build one combined mesh f
 
 **Export…** writes OBJ, STL, or FBX from a selected solid or External mesh. It does not change the scene. The clip above shows the dialog and an OBJ save.
 
+Export bakes the selected objects' transforms into triangle geometry. OBJ retains UVs, normals, material groups, and StandardMaterial3D albedo color and transparency. It writes an MTL file and albedo PNG dependencies beside the OBJ. Keep those files together when moving the export.
+
+OBJ does not export roughness, emission, normal maps, or shader behavior. Unsupported material classes and unreadable textures are refused. FBX retains geometry, UVs, normals, and material names but does not copy textures or Godot material settings. STL contains geometry only.
+
 ![Object mode with Export… visible in the Slab Object command group](/img/panel-export.png)
 
 ## Save editable solids

@@ -8,7 +8,7 @@ Use **Promote to Slab Solid** when an imported mesh is already a closed solid an
 
 <video controls preload="metadata" width="100%" src="/videos/v1/v1-07-import-external.mp4"></video>
 
-The clip shows **Import Mesh…**, the External badge, topology staying off, and an Export round trip. Promote is below when the mesh is closed.
+The clip shows **Import Mesh…**, the External badge, topology staying off, and an Export round trip. **Promote** appears for one selected External mesh; it checks whether the geometry can become a closed solid.
 
 ## Idle External mesh
 
@@ -19,25 +19,25 @@ The clip shows **Import Mesh…**, the External badge, topology staying off, and
 
 **Import Mesh…** and **Export…** stay available. Object move, rotate, and scale stay available.
 
-![Idle External mesh — badge and disabled V/E/F with locked tooltip](/img/promote-01-idle.png)
-
-![Live tip — External badge, disabled V/E/F, Promote to Slab Solid enabled](/img/panel-external.png)
+![External mesh selected in the Object panel with Promote to Slab Solid available](/img/panel-external.png)
 
 ## Promote
 
 1. Keep the External mesh selected in Object mode (one External only).
 2. Click **Promote to Slab Solid**. It sits with Import and Export.
 
-On success the badge clears. Topology modes unlock. Status reads `Promoted to Slab solid. Topology tools are available.` Undo puts the External mesh back when the editor can keep that history.
-
-![Promote success — badge cleared, topology tools available](/img/promote-02-success.png)
+On success the badge clears and topology modes unlock. The solid retains the mesh's supported UVs, material slots, active material overrides, transform, visibility, and child nodes. Undo restores the External mesh and its children.
 
 ## Refuse
 
 Promote does not repair the mesh. If the soup is empty, open, or non-manifold, the External mesh stays as it is. Status names the reason, for example `Could not promote: mesh is open. External mesh unchanged.` There is no partial convert.
 
+Promote also refuses data it cannot preserve, including blend shapes, skin weights, secondary UVs, vertex colors, and material overlays. A direct child named `Mesh` or `__body` conflicts with the generated solid children and also prevents conversion.
+
 Fix the mesh in the source file, or keep it as External and export it as a triangle mesh.
 
-![Promote refuse — External intact, status names the reason](/img/promote-03-refuse.png)
-
 See [Closed solids](/guide/explanation/closed-solids) for why Slab refuses an open sheet.
+
+## Import an OBJ with materials
+
+Keep the OBJ, its MTL library, and its albedo textures together. Import reads material groups, diffuse color, transparency, and plain albedo texture paths. A missing MTL library, undefined material, missing texture, or unsupported texture option is refused with a reason. STL imports geometry without materials.

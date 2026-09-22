@@ -1,8 +1,6 @@
 # Signal Relay Annex (v3.1 surface pass)
 
-Status: shipped demo on bleeding (PRS-40 Done, Annex v3.1 via PR #46). PR #47 holds merge to main until Joshua/Astra.
-
-Editor-authored Slab level for [PRS-40](https://linear.app/joshsteele/issue/PRS-40). This tree is the brief v3.1 surface rebuild (high-contrast palette + full UV island fills). It supersedes the weak / incomplete paint on tip `6cf335bc` / [PR #44](https://github.com/joshocalico/slab-modeller/pull/44). Do not squash #44 as Done.
+An editor modelling demo with an enclosed bay, a stair, a loft, and a relay rack. The scene contains editable Slab solids and painted materials. It has no player controller, runtime camera, or gameplay script.
 
 ## How to try it
 
@@ -10,11 +8,11 @@ Editor-authored Slab level for [PRS-40](https://linear.app/joshsteele/issue/PRS-
 2. Open `signal_relay_annex.tscn`.
 3. Use the Slab bottom panel to select and edit the solids.
 
-Brief: [docs/briefs/prs-40-level-brief.md](../../../docs/briefs/prs-40-level-brief.md).
+Brief: [docs/briefs/prs-40-level-brief.md](../../../../docs/briefs/prs-40-level-brief.md).
 
-## v3.1 surface
+## Intended palette
 
-Thumbnail-readable high-contrast palette with flood-filled UV islands (then Flatten):
+The v3.1 brief calls for this palette:
 
 - Bay floor: cool blue-grey
 - Walls: warm ochre
@@ -24,13 +22,13 @@ Thumbnail-readable high-contrast palette with flood-filled UV islands (then Flat
 - Rack body: near-black + Roughness
 - Bezel: saturated amber + Emission
 
-Fill floors after flood (brush ≥40% island diameter): bay / loft / rack / wall / ceil / jamb / bezel all **1.0**. Sparse dabs avoided.
+The existing captures do not prove the brief's readability and surface-quality criteria. In particular, `annex-06-paint.png` shows the paint controls and amber atlas, but its overexposed, partly occluded scene view does not show the rack and loft clearly enough for acceptance.
 
-Place massing is unchanged from the v3 stranger-test rebuild: shell ~10×8×4; enclosed bay (~4 m); loft over the back half; thick doorway threshold; pier + half-wall; wall stair bay↔loft; rack on a plinth in the back niche; crate / cable / light / rail props.
+The scene includes a bay, a loft, a doorway threshold, a pier and half-wall, stairs, a rack on a plinth, and crate, cable, light, and rail props.
 
 ## Solids
 
-Thirty-three `SlabSolid` nodes under `SignalRelayAnnex`:
+Thirty-four `SlabSolid` nodes under `SignalRelayAnnex`:
 
 - Threshold: `ExteriorPad`, `Stoop`, `DoorLintel`, `DoorJambL`, `DoorJambR`, `DoorSill`
 - Shell: `BayFloor`, `WallN`, `WallE`, `WallW`, `WallS_L`, `WallS_R`, `Ceiling`
@@ -44,15 +42,15 @@ Thirty-three `SlabSolid` nodes under `SignalRelayAnnex`:
 
 Audit stills use **SubViewport + Camera3D.make_current** and a viewport texture composite (`root.get_viewport().get_texture().get_image()`). **Never** `DisplayServer.screen_get_image`. See [CAPTURE.md](CAPTURE.md). Tip base `2b60ce1`.
 
-- `media/annex-01-create.png` — entrance / threshold look-into; cool bay, ochre walls, charcoal ceil
-- `media/annex-02-topo.png` — enclosed bay + loft; rack topo; cool floor vs warm loft
-- `media/annex-03-soft-select.png` — Soft Select falloff on the rack
-- `media/annex-04-face-isolate.png` — Face Isolate; Soft Select preserved
-- `media/annex-05-uv-pack.png` — Unwrap then Pack + Fit
-- `media/annex-06-paint.png` — loft + rack strip; Flatten; dock visible; filled amber bezel atlas
-- `media/annex-07-export.png` — OBJ (+ STL on disk)
-- `media/annex-08-external-promote.png` — doorway → bay → stair → loft; Promote chrome
+- `media/annex-01-create.png`: doorway view and Object controls after Subtract.
+- `media/annex-02-topo.png`: Edge mode, with status reporting Connect on RelayRack. The rack geometry is occluded.
+- `media/annex-03-soft-select.png`: Soft Select controls with Radius 1.2 and Smooth falloff. The rack deformation is not visible.
+- `media/annex-04-face-isolate.png`: Faces isolation active while Soft Select controls remain enabled.
+- `media/annex-05-uv-pack.png`: UV outlines with status reporting three packed islands.
+- `media/annex-06-paint.png`: Paint controls and a solid amber image. Rack and loft surface readability remains unproven.
+- `media/annex-07-export.png`: Object controls with Export available. The still does not show a saved export or round trip.
+- `media/annex-08-external-promote.png`: an External mesh selected with Promote available. The still does not show a successful conversion.
 
-## Coverage gaps (named)
+## Recorded coverage gaps
 
-`export_fbx`, `uv_element_select`. Promote External→Solid succeeded on this tip (PRS-41 fix at `8ece671`).
+The original capture pass did not cover FBX export or UV element selection. These are capture gaps, not a statement about current tool availability.

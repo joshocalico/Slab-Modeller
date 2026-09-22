@@ -10,12 +10,6 @@ Use this when a solid is in the scene and you need to pick objects or mesh eleme
 
 Soft Select applies falloff to neighbors during transforms. Enable it in the panel, set radius and curve, then move a vertex.
 
-<Figure
-  src="/img/panel-soft-select.png"
-  alt="Vertex mode with Soft Select on, Radius 2.5, and Smooth falloff visible in the Slab panel."
-  caption="Soft Select on in Vertex mode. Set Radius and Falloff, then move a vertex so neighbors follow the curve."
-/>
-
 ## Switch mode
 
 Click **Object**, **Vertex**, **Edge**, or **Face** in the Slab header. With the 3D viewport focused, the corresponding shortcuts are <kbd>1</kbd>, <kbd>2</kbd>, <kbd>3</kbd>, and <kbd>4</kbd>. After editing a panel field, use the mode buttons or click the viewport before using shortcuts. Both mode strips stay in sync. Changing mode clears the element selection.
@@ -28,19 +22,13 @@ Click **Object**, **Vertex**, **Edge**, or **Face** in the Slab header. With the
 
 ## Click to select
 
-With Surface Paint closed, click a solid in the 3D view. In Object mode that focuses the node. In Vertex, Edge, or Face mode the click also picks the nearest element under the cursor.
+With UV and Paint closed, click a solid in the 3D view. In Object mode that focuses the node. In Vertex, Edge, or Face mode the click also picks the nearest element under the cursor.
 
 Shift, Ctrl, or Cmd click adds or removes that element. A double-click on an edge selects the edge loop.
 
 <kbd>A</kbd>, Grow, Invert, Select Loop, and Select Ring also change the set. Expand **Selection** for Grow and Invert. Select Loop and Select Ring stay in the open Edge group; Select Ring follows the parallel edges across quads.
 
 To select the edges around a face region, select its faces and choose **Select Boundary**. Slab switches to Edge mode and selects the outer edges, excluding edges shared by two selected faces. Selecting every face of a closed solid leaves no boundary.
-
-<Figure
-  src="/img/panel-select-boundary-edges.png"
-  alt="Edge mode after Select Boundary, showing 4 boundary edges selected on a box roof."
-  caption="After selecting a roof face and choosing Select Boundary, the editor switches to Edge mode with the 4 perimeter edges selected."
-/>
 
 ## Move the selection
 
@@ -88,12 +76,6 @@ X-ray does not include a node hidden in Godot or a node under a hidden ancestor.
 
 Face Isolate needs Face mode and at least one selected face on a `SlabSolid`. On an External mesh it refuses, names Promote first, and leaves the mesh unchanged.
 
-![Solid Isolate vs Face Isolate — other solids stay visible in Faces](/img/isolate-01-solid-vs-face.png)
-
-![Isolate control with Solids | Faces segments](/img/isolate-02-face-chrome.png)
-
-![Exit Faces — Soft Select preserved](/img/isolate-03-exit.png)
-
 These figures are Phase C Design wireframes of the locked chrome. A live panel recapture can replace them later; they teach Solids | Faces today.
 
 ## Keep a multi-selection when you move
@@ -106,10 +88,10 @@ Element selection stays on one solid. Object mode can add solids to the editor s
 
 ## Select while painting
 
-To change the selected face set without painting, click **Face** to leave Surface Paint, select the faces, then reopen **Surface Paint**.
+To change the selected face set without painting, click **Face** to leave UV or Paint, select the faces, then reopen **UV**.
 
-In **Material / UV**, a plain face click applies the current Brush. To inspect another face without assigning that Brush, Alt-click the face to sample its material and UV values. With Brush empty, the first plain click selects and adopts the face's existing material without editing it. A default-material face is selected but leaves Brush empty.
+In **UV**, a plain face click applies the current Brush. To inspect another face without assigning that Brush, Alt-click the face to sample its material and UV values. With Brush empty, the first plain click selects and adopts the face's existing material without editing it. A default-material face is selected but leaves Brush empty.
 
-In **Pixel**, a face click starts a pixel stroke on that face's image. Select the intended faces before entering Pixel. See [Paint texture pixels](/guide/how-to/paint-texture-pixels) for shared-material preparation.
+In **Paint**, a face click starts a pixel stroke on that face's image. Select the intended faces before entering Paint. See [Paint texture pixels](/guide/how-to/paint-texture-pixels) for shared-material preparation.
 
-Unmodified clicks and drags in empty space preserve the Paint target. To return to modelling, click a mode button. Escape cancels an active stroke or UV drag first; with no gesture active, it closes Surface Paint.
+Unmodified clicks and drags in empty space preserve the Paint target. To return to modelling, click a mode button. Escape cancels an active stroke or UV drag first; with no gesture active, it closes the active workspace.
