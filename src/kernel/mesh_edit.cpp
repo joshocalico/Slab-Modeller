@@ -1022,6 +1022,17 @@ MeshFault MeshEdit::append(const Mesh &p_other, bool p_flip) {
 		dst.uv_seam = src.uv_seam;
 		dst.hard = src.hard;
 		dst.corner = src.corner;
+		if (p_flip) {
+			// Appending a subtractive shell reverses its outward shading frame.
+			// UVs and position deltas stay attached to their original vertices.
+			auto &surface = dst.corner.surface;
+			if (surface.flags & SurfaceAttrs::NORMAL) surface.normal = -surface.normal;
+			if (surface.flags & SurfaceAttrs::TANGENT) surface.tangent[3] = -surface.tangent[3];
+			for (auto &morph : surface.morphs) {
+				morph.normal = -morph.normal;
+				morph.tangent_w = -morph.tangent_w;
+			}
+		}
 	}
 	for (const auto &kv : vmap) {
 		const uint32_t out = p_other.vertices[kv.first].out.i;

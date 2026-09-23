@@ -774,11 +774,10 @@ func _width_matrix(panel: Control, editor: Object) -> void:
 		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-uv-%s" % logical_size.x}, "after")
 		await _click(_button_named(panel, "Paint"))
 		var channels: Control = panel.find_child("ChannelPicker", true, false)
-		await _click(panel.find_child("ChannelAlbedo", true, false))
 		await _wait_layout([inspector, channels, canvas])
 		_check(inspector.get_global_rect().grow(1.0).encloses(channels.get_global_rect())
 			and not inspector.get_global_rect().intersects(canvas.get_global_rect()),
-			"%s Paint channel buttons fit their dock without covering canvas" % logical_size.x)
+			"%s Paint opens with all six channel buttons visible without covering canvas" % logical_size.x)
 		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-pixel-%s" % logical_size.x}, "after")
 
 

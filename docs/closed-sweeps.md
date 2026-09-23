@@ -21,4 +21,4 @@ Regression coverage lives in `tests/test_kernel_prims.cpp` and `project/tests/sw
 5. Reduce the closed path to two points, then try a profile wider than the loop. Each invalid edit must show a warning and preserve the previous mesh and collision. Undo the edit and verify recovery.
 6. Save and reopen the scene. Confirm the Closed value, path points and rebuilt loop remain intact.
 
-These steps are a manual checklist, not a claim that a native editor run has already passed.
+On 24 September 2026, native checks covered closed-preset creation, Inspector-authored four-point closure, handle dragging with Undo/Redo, two-point refusal/recovery, and scene reopen. The pass found and fixed Slab picking a solid underneath a sweep handle. The editor-authored fixture is `project/demo/extended_tools_acceptance.tscn`. Tilted-plane dragging and cancellation still need the remaining checklist steps.

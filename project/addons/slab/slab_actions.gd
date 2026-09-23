@@ -462,6 +462,7 @@ func _apply(row: Dictionary, plan: Dictionary) -> void:
 
 func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -> void:
 	var before: PackedByteArray = target.get("data")
+	var before_materials: Array = target.get("materials").duplicate()
 	var before_ids := PackedInt64Array(_selection.ids)
 	var before_elements := SlabTopology.all_ids(target, _selection.mode) if method in ["subdivide_faces", "merge_faces", "connect_edges"] else PackedInt64Array()
 	var err: int = target.callv(method, args)
@@ -469,7 +470,8 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		_report("%s failed. %s" % [row["label"], describe_error(err, row["id"])])
 		return
 	var after: PackedByteArray = target.get("data")
-	if after == before:
+	var after_materials: Array = target.get("materials").duplicate()
+	if after == before and after_materials == before_materials:
 		_report("%s did not change the solid." % row["label"])
 		return
 	var after_ids := before_ids
@@ -488,6 +490,9 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
 		_undo.add_undo_property(target, "data", before)
+		if after_materials != before_materials:
+			_undo.add_do_property(target, "materials", after_materials)
+			_undo.add_undo_property(target, "materials", before_materials)
 		if after_ids != before_ids:
 			_undo.add_do_method(_selection, "restore_ids_for", target, _selection.mode, after_ids)
 			_undo.add_undo_method(_selection, "restore_ids_for", target, _selection.mode, before_ids)
@@ -714,6 +719,13 @@ func _loop_op() -> Dictionary:
 
 
 func _boolean_op(mode: int) -> Dictionary:
+	var receiver: Dictionary = _selection.solid.get("deformation")
+	var operand: Dictionary = _selection.objects[1].get("deformation")
+	if receiver.get("skin") != null or operand.get("skin") != null:
+		return {"status": "Boolean cannot combine skinned solids yet. Bone bindings would need remapping."}
+	var operand_shapes: PackedStringArray = operand.get("blend_names", PackedStringArray())
+	if not operand_shapes.is_empty() and operand_shapes != receiver.get("blend_names", PackedStringArray()):
+		return {"status": "Boolean needs matching blend shape names on the receiving solid and operand."}
 	return { "method": "boolean_with", "args": [_selection.objects[1], mode] }
 
 
@@ -1051,7 +1063,7 @@ func _build() -> Array[Dictionary]:
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
 		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
-		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh file (OBJ/STL). Non-manifold and open meshes are allowed.", 0, _import_op),
+		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh or scene (GLB/glTF, OBJ, STL). Non-manifold and open meshes are allowed.", 0, _import_op),
 		_row("promote_to_solid", PROMOTE_LABEL, "QuadMesh", object, 1, "Convert a closed External mesh into an editable Slab solid. Open, empty, or non-manifold meshes are refused.", 0, _promote_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),

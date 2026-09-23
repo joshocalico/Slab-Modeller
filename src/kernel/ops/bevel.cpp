@@ -1,3 +1,4 @@
+#include "../rebuild_attributes.hpp"
 #include "bevel.hpp"
 
 #include "weld.hpp"
@@ -824,7 +825,7 @@ MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_am
 	return bevel(p_edit, p_edges, p_amount, 1);
 }
 
-MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_amount, int p_segments) {
+static MeshFault bevel_geometry(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_amount, int p_segments) {
 	if (p_edges.empty() || !(p_amount > 0.0f)) {
 		return _bad(MeshError::DEGENERATE_FACE);
 	}
@@ -908,6 +909,13 @@ MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_am
 		}
 	}
 	return p_edit.last_fault();
+}
+
+MeshFault bevel(MeshEdit &p_edit, const std::vector<EdgeId> &p_edges, float p_amount, int p_segments) {
+	const Mesh source = p_edit.scratch();
+	const auto result = bevel_geometry(p_edit, p_edges, p_amount, p_segments);
+	if (result.ok() && has_authored_attributes(source)) transfer_rebuilt_attributes(p_edit, {&source}, false);
+	return result.ok() ? p_edit.last_fault() : result;
 }
 
 } // namespace ops

@@ -8,6 +8,8 @@ const VERSION := 1
 @export var evaluator_version: int = 1
 @export var node_uuid: String = Step.new_uuid()
 @export var steps: Array[Step] = []
+@export var base_deformation: Dictionary = {}
+@export var cached_deformation: Dictionary = {}
 @export var base_materials: Array[Material] = []
 # Persist the last accepted result. Loading a recipe never evaluates it implicitly.
 @export var cached_data: PackedByteArray = PackedByteArray()
@@ -24,6 +26,8 @@ func copy_recipe() -> Resource:
 		copy.steps.append(step.copy_step())
 	# Material resources deliberately keep their identity and paint ownership.
 	copy.base_materials.assign(base_materials)
+	copy.base_deformation = base_deformation.duplicate()
+	copy.cached_deformation = cached_deformation.duplicate()
 	copy.cached_data = cached_data.duplicate()
 	copy.cached_materials.assign(cached_materials)
 	copy.cached_instances.assign(cached_instances.duplicate(true))

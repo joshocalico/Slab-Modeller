@@ -65,6 +65,7 @@ var _uv_toggle: Button
 var _paint_toggle: Button
 var _paint_canvas: Control
 var _paint_brush: Control
+var _paint_channel_section: Control
 var _paint_face: Label
 var _paint_mat: Label
 var _paint_dirty: Label
@@ -1407,6 +1408,8 @@ func _paint_block() -> Control:
 	inspector.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	inspector.add_theme_constant_override("separation", 4)
 	inspector_scroll.add_child(inspector)
+	_paint_channel_section = _paint_channel_controls()
+	inspector.add_child(_paint_channel_section)
 	inspector.add_child(_paint_action_row())
 	_paint_palette = ScrollContainer.new()
 	_paint_palette.name = "PaintPalette"
@@ -1824,7 +1827,7 @@ func _apply_picker_fonts(node: Node) -> void:
 		_apply_picker_fonts(child)
 
 
-func _brush_column() -> Control:
+func _paint_channel_controls() -> Control:
 	var col := VBoxContainer.new()
 	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -1869,8 +1872,14 @@ func _brush_column() -> Control:
 	_channel_label.visible = false
 	col.add_child(_channel_label)
 	
-	col.add_child(HSeparator.new())
-	
+	return col
+
+
+func _brush_column() -> Control:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
+	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	col.add_theme_constant_override("separation", 2)
 	var layer_header := HBoxContainer.new()
 	layer_header.add_theme_constant_override("separation", 4)
 	var layer_label := Label.new()
@@ -2157,6 +2166,9 @@ func _enter_workspace(ws: int) -> void:
 	if _paint == null:
 		return
 	_workspace = ws
+	# UV and Paint have different fields; enter at their primary controls.
+	if _paint_inspector != null:
+		_paint_inspector.scroll_vertical = 0
 	if ws == Workspace.UV:
 		_paint.tool = SlabPaint.Tool.MATERIAL_UV
 	else:
@@ -2301,6 +2313,8 @@ func _refresh_paint_chrome() -> void:
 		_paint_fit_uv.visible = is_uv_workspace
 	if _paint_uv_controls != null:
 		_paint_uv_controls.visible = is_uv_workspace
+	if _paint_channel_section != null:
+		_paint_channel_section.visible = is_paint_workspace
 	if _paint_brush != null:
 		_paint_brush.visible = is_paint_workspace
 	_apply_paint_left_dock_width(is_paint_workspace)

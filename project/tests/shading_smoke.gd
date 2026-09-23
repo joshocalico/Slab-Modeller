@@ -92,6 +92,41 @@ func _run() -> void:
 	check(not actions.disabled_reason(actions.find("hard_edges")).is_empty(), "edge controls require Edge mode")
 	actions.operation_active = true
 	check(not actions.disabled_reason(actions.find("shade_flat")).is_empty(), "shading cannot interrupt an active geometry preview")
+	# Imported custom normals must yield to an explicit edge shading command.
+	var authored := ClassDB.instantiate("SlabSolid") as Node3D
+	root.add_child(authored)
+	var input: ArrayMesh = solid.call("build_mesh")
+	var flat_input: Dictionary = preload("res://addons/slab/slab_mesh_attributes.gd").flatten(input)
+	for i in flat_input.attributes.normals.size():
+		flat_input.attributes.normals[i] = Vector3.UP
+	var morph_positions := PackedVector3Array()
+	var morph_normals := PackedVector3Array()
+	for i in flat_input.vertices.size():
+		morph_positions.append(Vector3(0.2, 0, 0))
+		morph_normals.append(Vector3(0.1, 0, 0))
+	flat_input.attributes.blend_shapes = [{"name": "Offset", "positions": morph_positions, "normals": morph_normals}]
+	check(authored.call("import_from_mesh", flat_input.vertices, flat_input.indices, flat_input.uvs, flat_input.slots, flat_input.attributes).error == OK,
+		"custom-normal mesh imports")
+	var authored_before: PackedByteArray = authored.get("data")
+	check(normals(authored)[0].distance_to(Vector3.UP) < 0.0001, "imported authored normals initially control emission")
+	check(authored.call("mark_hard_edges", authored.call("get_edges"), true) == OK, "hard edges accept imported mesh")
+	var non_up := false
+	for normal in normals(authored): non_up = non_up or normal.distance_to(Vector3.UP) > 0.1
+	check(non_up, "hard edges replace authored directions with geometric face normals")
+	var shaded: ArrayMesh = authored.call("build_mesh")
+	var morph_shading_cleared := true
+	for surface in shaded.get_surface_count():
+		var shapes: Array = shaded.surface_get_blend_shape_arrays(surface)
+		var arrays: Array = shaded.surface_get_arrays(surface)
+		check(shaded.blend_shape_mode == Mesh.BLEND_SHAPE_MODE_NORMALIZED, "morph targets store absolute directions")
+		for vertex in arrays[Mesh.ARRAY_VERTEX].size():
+			morph_shading_cleared = morph_shading_cleared and shapes[0][Mesh.ARRAY_NORMAL][vertex].distance_to(arrays[Mesh.ARRAY_NORMAL][vertex]) < 0.0001
+			check((shapes[0][Mesh.ARRAY_VERTEX][vertex] - arrays[Mesh.ARRAY_VERTEX][vertex]).is_equal_approx(Vector3(0.2, 0, 0)), "edge shading retains morph position offset")
+	check(morph_shading_cleared, "recomputed edge shading replaces morph directions with new base normals")
+
+	authored.set("data", authored_before)
+	check(normals(authored)[0].distance_to(Vector3.UP) < 0.0001, "restoring prior data restores authored normals")
+	authored.free()
 	copy.free()
 	solid.free()
 	print("shading_smoke failures=", failures)

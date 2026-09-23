@@ -27,7 +27,19 @@ func verify_mesh(mesh: ArrayMesh, label: String) -> void:
 		check(arrays[Mesh.ARRAY_COLOR] != null and arrays[Mesh.ARRAY_COLOR][0].is_equal_approx(Color(0.2, 0.4, 0.6, 0.8)), label + " retains vertex color")
 		check(arrays[Mesh.ARRAY_WEIGHTS] != null and is_equal_approx(arrays[Mesh.ARRAY_WEIGHTS][0], 1.0), label + " retains skin weights")
 		var shapes: Array = mesh.surface_get_blend_shape_arrays(surface)
-		if not shapes.is_empty(): check(shapes[0][Mesh.ARRAY_VERTEX][0].is_equal_approx(Vector3(0.25, 0, 0)), label + " emits relative morph deltas")
+		if not shapes.is_empty():
+			check(mesh.blend_shape_mode == Mesh.BLEND_SHAPE_MODE_NORMALIZED, label + " emits absolute targets for direction-safe storage")
+			var base: Vector3 = arrays[Mesh.ARRAY_VERTEX][0]
+			var target: Vector3 = shapes[0][Mesh.ARRAY_VERTEX][0]
+			check((target - base).is_equal_approx(Vector3(0.25, 0, 0)), label + " retains canonical morph displacement")
+			for weight in [0.0, 0.6, 1.0, 1.5]:
+				check(((1.0 - weight) * base + weight * target).is_equal_approx(base + Vector3(0.25, 0, 0) * weight), label + " preserves morph displacement at weight " + str(weight))
+			var neutral_directions := true
+			for vertex in count:
+				neutral_directions = neutral_directions and shapes[0][Mesh.ARRAY_NORMAL][vertex].distance_to(arrays[Mesh.ARRAY_NORMAL][vertex]) < 0.0001
+				for component in 4:
+					neutral_directions = neutral_directions and absf(shapes[0][Mesh.ARRAY_TANGENT][vertex * 4 + component] - arrays[Mesh.ARRAY_TANGENT][vertex * 4 + component]) < 0.0001
+			check(neutral_directions, label + " neutral morph preserves base normals and tangents")
 
 func _run() -> void:
 	for normalized in [false, true]:
@@ -74,6 +86,14 @@ func _run() -> void:
 	check(selection.solid == solid, "Promote Redo restores attributed solid")
 	check(solid.call("move_vertices", solid.call("get_vertices"), Vector3(0, 1, 0)) == OK, "attributed solid remains editable")
 	verify_mesh(solid.call("build_mesh"), "Edit")
+	var operand: Node3D = ClassDB.instantiate("SlabSolid")
+	scene.add_child(operand)
+	operand.call("make_box", Vector3.ONE)
+	var before_boolean: PackedByteArray = solid.get("data")
+	check(solid.call("boolean_with", operand, 1) != OK and solid.get("data") == before_boolean,
+		"unsupported skinned Boolean refuses atomically instead of corrupting bindings")
+	operand.free()
+
 	var packed := PackedScene.new()
 	check(packed.pack(scene) == OK, "deformed solid scene packs")
 	var path: String = "user://deformation_scene.tscn"

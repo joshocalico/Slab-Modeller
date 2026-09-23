@@ -30,6 +30,7 @@ static func from_mesh(target: Node3D) -> Resource:
 	recipe.base_materials.assign(_materials_for(target))
 	var source := Step.new()
 	source.kind = Step.Kind.MESH_SOURCE
+	recipe.base_deformation = target.get("deformation").duplicate()
 	source.parameters = {"data": target.get("data")}
 	recipe.steps.append(source)
 	return recipe
@@ -43,7 +44,7 @@ static func checkpoint(target: Node3D) -> Resource:
 	var step := Step.new()
 	step.kind = Step.Kind.CHECKPOINT
 	step.input_fingerprint = Step.fingerprint(previous.cached_data)
-	step.parameters = {"data": target.get("data"), "materials": target.get("materials").duplicate()}
+	step.parameters = {"data": target.get("data"), "materials": target.get("materials").duplicate(), "deformation": target.get("deformation").duplicate()}
 	candidate.steps.append(step)
 	return candidate
 
@@ -110,7 +111,7 @@ func _evaluate(recipe: Resource, target: Node3D, registry: Dictionary, visiting:
 				source.set("data", step.parameters.data)
 			if error != OK or source.call("face_count") == 0: return _failure("Source could not build a valid solid.", step.id)
 			instances.append({"id": "primary", "transform": Transform3D.IDENTITY,
-				"data": source.get("data"), "materials": recipe.base_materials.duplicate()})
+				"data": source.get("data"), "materials": recipe.base_materials.duplicate(), "deformation": recipe.base_deformation.duplicate()})
 			continue
 		if step.kind in [Step.Kind.ARRAY_LINEAR, Step.Kind.ARRAY_RADIAL]:
 			if instances.size() * int(step.parameters.count) > MAX_OUTPUTS: return _failure("Array exceeds the construction output limit.", step.id)
@@ -137,16 +138,17 @@ func _evaluate(recipe: Resource, target: Node3D, registry: Dictionary, visiting:
 			if operand == target or chain.has(step.operand_uuid): return _failure("Construction operand cycle detected.", step.id)
 			var operand_recipe = (operand.get_meta(RECIPE_META) if operand.has_meta(RECIPE_META) else null)
 			if operand_recipe != null:
-				if not operand_recipe is Recipe or operand.get("data") != operand_recipe.cached_data or operand.get("materials") != operand_recipe.cached_materials:
+				if not operand_recipe is Recipe or operand.get("data") != operand_recipe.cached_data or operand.get("materials") != operand_recipe.cached_materials or operand.get("deformation") != operand_recipe.cached_deformation:
 					return _failure("Boolean operand has unrecorded manual edits; checkpoint it first.", step.id)
 				operand_result = _evaluate(operand_recipe, operand, registry, chain, scratch)
 				if operand_result.error != OK: return operand_result
 				if not operand_result.instances.is_empty(): return _failure("Boolean operand has generated objects; choose an independent output.", step.id)
 			else:
-				operand_result = {"data": operand.get("data"), "materials": _materials_for(operand)}
+				operand_result = {"data": operand.get("data"), "materials": _materials_for(operand), "deformation": operand.get("deformation")}
 		for entry in instances:
 			var solid := _new_solid(scratch)
 			solid.set("data", entry.data)
+			solid.set("deformation", entry.deformation)
 			if solid.call("face_count") == 0: return _failure("Invalid intermediate mesh.", step.id)
 			var error: int = OK
 			match step.kind:
@@ -171,37 +173,37 @@ func _evaluate(recipe: Resource, target: Node3D, registry: Dictionary, visiting:
 						edges = selected
 					error = solid.call("bevel_edges", edges, step.parameters.amount, step.parameters.segments)
 				Step.Kind.BOOLEAN:
+					if entry.deformation.get("skin") != null or operand_result.deformation.get("skin") != null:
+						return _failure("Boolean construction cannot combine skinned solids; bone bindings need remapping.", step.id)
+					var cutter_shapes: PackedStringArray = operand_result.deformation.get("blend_names", PackedStringArray())
+					if not cutter_shapes.is_empty() and cutter_shapes != entry.deformation.get("blend_names", PackedStringArray()):
+						return _failure("Boolean construction needs matching blend shape names.", step.id)
 					var cutter := _new_solid(scratch)
 					cutter.set("data", operand_result.data)
+					cutter.set("deformation", operand_result.deformation)
 					if cutter.call("face_count") == 0: return _failure("Boolean operand has invalid mesh data.", step.id)
-					var materials: Array = entry.materials.duplicate()
-					var cutter_materials: Array = operand_result.materials
-					for face in cutter.call("get_faces"):
-						var old_slot: int = cutter.call("face_uv", face).slot
-						var material: Material = cutter_materials[old_slot] if old_slot < cutter_materials.size() else null
-						var new_slot := materials.find(material)
-						if new_slot < 0:
-							new_slot = materials.size()
-							materials.append(material)
-						cutter.call("set_face_material", PackedInt64Array([face]), new_slot)
+					solid.set("materials", entry.materials)
+					cutter.set("materials", operand_result.materials)
 					solid.transform = entry.transform
 					cutter.transform = target.global_transform.affine_inverse() * operand.global_transform
 					error = solid.call("boolean_with", cutter, step.parameters.mode)
-					entry.materials = materials
+					entry.materials = solid.get("materials").duplicate()
 				Step.Kind.CHECKPOINT:
 					if instances.size() != 1 or Step.fingerprint(entry.data) != step.input_fingerprint:
 						return _failure("Manual topology/UV checkpoint needs rebasing before upstream changes.", step.id)
 					solid.set("data", step.parameters.data)
 					entry.materials = step.parameters.get("materials", entry.materials)
+					entry.deformation = step.parameters.get("deformation", entry.deformation)
 			if error != OK or solid.call("face_count") == 0:
 				return _failure("Construction operation failed (%d); last good result is unchanged." % error, step.id)
 			entry.data = solid.get("data")
 	var accepted: Resource = recipe.copy_recipe()
 	accepted.cached_data = instances[0].data
 	accepted.cached_materials.assign(instances[0].materials)
+	accepted.cached_deformation = instances[0].deformation.duplicate()
 	accepted.cached_instances.assign(instances.slice(1).duplicate(true))
 	return {"error": OK, "recipe": accepted, "data": accepted.cached_data,
-		"materials": accepted.cached_materials, "instances": accepted.cached_instances}
+		"materials": accepted.cached_materials, "deformation": accepted.cached_deformation, "instances": accepted.cached_instances}
 
 func _validate_step(step: Resource) -> String:
 	var p: Dictionary = step.parameters
@@ -323,20 +325,22 @@ func apply_candidate(target: Node3D, candidate: Resource, scene_root: Node, undo
 			var last: Resource = candidate.steps.back()
 			checkpoint_matches = (last.kind == Step.Kind.CHECKPOINT and last.enabled
 				and last.parameters.get("data") == target.get("data")
+				and last.parameters.get("deformation", {}) == target.get("deformation")
+				and last.parameters.get("materials") == target.get("materials")
 				and last.input_fingerprint == Step.fingerprint(current.cached_data))
-		if (target.get("data") != current.cached_data or target.get("materials") != current.cached_materials) and not checkpoint_matches:
+		if (target.get("data") != current.cached_data or target.get("materials") != current.cached_materials or target.get("deformation") != current.cached_deformation) and not checkpoint_matches:
 			return _failure("Manual topology or UV changes need an explicit construction checkpoint.")
 		var existing := _outputs(target)
 		if existing.size() != current.cached_instances.size(): return _failure("Generated objects changed; make them independent before rebuilding.")
 		for entry in current.cached_instances:
 			if not existing.has(entry.id): return _failure("A generated object is missing; restore it or make the array independent.")
 			var child: Node3D = existing[entry.id]
-			if child.get("data") != entry.data or child.transform != entry.transform or child.get("materials") != entry.materials or child.get_child_count() > 0:
+			if child.get("data") != entry.data or child.transform != entry.transform or child.get("materials") != entry.materials or child.get("deformation") != _output_deformation(entry.get("deformation", {})) or child.get_child_count() > 0:
 				return _failure("A generated object was edited; make it independent before rebuilding.")
 	var result := evaluate(candidate, scene_root, target, operand_bindings)
 	if result.error != OK: return result
 	var before := _capture_state(target)
-	var after := {"data": result.data, "materials": result.materials, "recipe": result.recipe,
+	var after := {"data": result.data, "materials": result.materials, "deformation": result.deformation, "recipe": result.recipe,
 		"has_uuid": true, "uuid": candidate.node_uuid, "outputs": []}
 	before["bindings"] = []
 	after["bindings"] = []
@@ -353,7 +357,7 @@ func apply_candidate(target: Node3D, candidate: Resource, scene_root: Node, undo
 			child.set("prototype_color", target.get("prototype_color"))
 			child.set("collision_enabled", target.get("collision_enabled"))
 		after.outputs.append({"node": child, "id": entry.id, "data": entry.data,
-			"transform": entry.transform, "materials": entry.materials})
+			"transform": entry.transform, "materials": entry.materials, "deformation": _output_deformation(entry.get("deformation", {}))})
 	_restore_state(target, after)
 	if undo != null:
 		if undo is UndoRedo:
@@ -386,13 +390,14 @@ func _outputs(target: Node3D) -> Dictionary:
 
 func _capture_state(target: Node3D) -> Dictionary:
 	var state := {"data": target.get("data"), "materials": target.get("materials").duplicate(),
+		"deformation": target.get("deformation").duplicate(),
 		"recipe": (target.get_meta(RECIPE_META) if target.has_meta(RECIPE_META) else null), "has_uuid": target.has_meta(UUID_META),
 		"uuid": target.get_meta(UUID_META, ""), "outputs": []}
 	var outputs := _outputs(target)
 	for id in outputs:
 		var child: Node3D = outputs[id]
 		state.outputs.append({"node": child, "id": id, "data": child.get("data"),
-			"transform": child.transform, "materials": child.get("materials").duplicate()})
+			"transform": child.transform, "materials": child.get("materials").duplicate(), "deformation": child.get("deformation").duplicate()})
 	return state
 
 func _restore_state(target: Node3D, state: Dictionary) -> void:
@@ -413,9 +418,20 @@ func _restore_state(target: Node3D, state: Dictionary) -> void:
 		var child: Node3D = entry.node
 		child.set("data", entry.data)
 		child.set("materials", entry.materials)
+		child.set("deformation", entry.get("deformation", {}))
 		child.transform = entry.transform
 		child.set_meta(OUTPUT_META, entry.id)
 		if child.get_parent() != target: target.add_child(child, true)
 		child.owner = target.owner if target.owner != null else target
 	target.set("materials", state.materials)
 	target.set("data", state.data)
+	target.set("deformation", state.get("deformation", {}))
+
+# Generated outputs live one node below the recipe owner. Keep bindings relative
+# to their new location without duplicating Skin resources.
+static func _output_deformation(envelope: Dictionary) -> Dictionary:
+	var result := envelope.duplicate()
+	var path: NodePath = result.get("skeleton", NodePath())
+	if not path.is_empty() and not path.is_absolute():
+		result.skeleton = NodePath("../" + str(path))
+	return result

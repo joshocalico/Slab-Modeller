@@ -8,9 +8,17 @@ const Ids := preload("res://addons/slab/slab_construction_step.gd")
 static func load_scene(path: String) -> Dictionary:
 	var document := GLTFDocument.new()
 	var state := GLTFState.new()
+	# Runtime registers this converter automatically; editor imports normally keep
+	# ImporterMeshInstance3D nodes for the asset pipeline. Our dialog needs editable
+	# MeshInstance3D nodes immediately, including skins and visibility settings.
+	var converter := GLTFDocumentExtensionConvertImporterMesh.new()
+	GLTFDocument.register_gltf_document_extension(converter)
 	var error := document.append_from_file(path, state)
-	if error != OK: return {"error": error, "message": "Could not read glTF scene and its dependencies."}
+	if error != OK:
+		GLTFDocument.unregister_gltf_document_extension(converter)
+		return {"error": error, "message": "Could not read glTF scene and its dependencies."}
 	var scene := document.generate_scene(state)
+	GLTFDocument.unregister_gltf_document_extension(converter)
 	if scene == null: return {"error": ERR_INVALID_DATA, "message": "glTF scene could not be generated."}
 	# Skinned nodes can be replaced during scene generation, leaving the state's
 	# original scene-node handle stale. Resolve those nodes by their generated name.
@@ -24,10 +32,15 @@ static func load_scene(path: String) -> Dictionary:
 		if mesh_index < 0: continue
 		var generated: Node = state.get_scene_node(index)
 		if not is_instance_valid(generated):
+			var matches: Array[Node] = []
 			for candidate in generated_meshes:
 				if candidate.name == nodes[index].resource_name:
-					generated = candidate
-					break
+					matches.append(candidate)
+			if matches.size() == 1:
+				generated = matches[0]
+			elif not meshes[mesh_index].blend_weights.is_empty():
+				scene.free()
+				return {"error": ERR_INVALID_DATA, "message": "Could not resolve blend shape weights to a unique imported mesh."}
 		if generated is MeshInstance3D:
 			var weights := PackedFloat32Array(meshes[mesh_index].blend_weights)
 			if index < records.size() and records[index].has("weights"):
@@ -78,6 +91,9 @@ static func scene_from_solids(solids: Array) -> Dictionary:
 		var deformation: Dictionary = Attributes.envelope(solid) if solid is MeshInstance3D else solid.get("deformation")
 		instance.skin = deformation.get("skin")
 		var skeleton_path: NodePath = deformation.get("skeleton", NodePath())
+		if instance.skin != null and skeleton_path.is_empty():
+			scene.free()
+			return {"error": ERR_INVALID_DATA, "message": "A skin has no Skeleton3D binding; export would lose deformation."}
 		if not skeleton_path.is_empty():
 			var skeleton: Node = solid.get_node_or_null(skeleton_path)
 			if skeleton is Skeleton3D:

@@ -35,3 +35,37 @@ For example, 256 pixels per metre on a 1024-pixel texture maps one metre of mesh
 Save the scene after unwrapping. Seam marks, unfolded coordinates, and the scale derived from **Pixels / metre** and **Texture px** are stored in the `SlabSolid` data and follow ordinary undo and redo.
 
 If the material has no image yet, switch to **Paint** and set **New image px** before **Make Unique**. The new paint image uses that size. Existing artwork keeps its current dimensions, and selecting it updates **Texture px** to its width. Changing the reference resolution in Mapping does not resize an existing image.
+
+
+## Keep UV points fixed
+
+1. Choose **UV Vert**, **UV Edge**, or **UV Face** on the UV canvas.
+2. Select the elements to hold in place.
+3. Choose **Tools → Pin**.
+4. Run **Unwrap** or **Pack**.
+
+Pinned corners stay at their UV coordinates. Pack places other islands around pinned islands. If the density, resolution, or layout cannot satisfy the pins, the operation refuses and leaves the solid unchanged. Select the pinned elements and choose **Tools → Unpin** before making a conflicting change.
+
+## Relax an island
+
+1. Select UV elements in the area to relax.
+2. Choose **Tools → Relax**.
+3. Inspect the result and undo if necessary.
+
+Relax keeps seams, selection boundaries, and pinned corners fixed. To return selected UV faces to projected mapping, choose **Tools → Reset projection**. Unpin those faces first if their pins prevent the reset.
+
+## Stitch two islands
+
+1. Choose **UV Edge**.
+2. Select one side of a shared mesh edge on the island that should stay fixed.
+3. Shift-click the opposite side on the other island.
+4. Choose **Tools → Stitch**.
+
+Stitch moves, rotates, and scales the second island to match the first edge, then clears that seam. Unpin the moving island if a pin prevents the operation.
+
+## Align islands
+
+1. Select UV elements in at least two islands.
+2. Choose a **Tools → Align** command for the desired edge or center.
+
+Alignment translates whole islands and preserves their shapes. Unpin an island before an alignment that would move its pinned corners. Click **Pack** afterward if the aligned islands overlap.

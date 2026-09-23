@@ -36,17 +36,41 @@ Saving only output snapshots for construction steps makes Undo easy but cannot r
 
 | Requirement | Current evidence | Remaining acceptance |
 | --- | --- | --- |
-| UV editing | Corner storage and IDs, direct transforms, pins, relax, stitch and alignment. `uv_edit_smoke` passes; `uv_element_modes_smoke` passes 15 cases. Native editor vertex drag, Undo/Redo and Pin exercised on demo face. | Pack/Unwrap must use edited corners and respect pins; topology propagation; broader native gestures and reload |
-| Painting | Eraser, hardness, layer organisation and shared face/island masks implemented. `paint_extended_smoke` passes 69 checks; six existing paint suites pass. | Rendered canvas and model strokes, mask/Fill interaction, real layer controls and save |
+| UV editing | Corner storage and IDs, direct transforms, pins, relax, stitch and alignment. `uv_edit_smoke` passes; `uv_element_modes_smoke` passes 15 cases. Native editor vertex drag, Undo/Redo and Pin exercised on demo face. | Pin-aware Pack/Unwrap and rebuild propagation now implemented and tested; broader native gestures and reload remain |
+| Painting | Eraser, hardness, layer organisation and shared face/island masks implemented. `paint_extended_smoke` passes 69 checks; six existing paint suites pass. | Rendered paint editor smoke passes, including six channel saves, layer controls and 1280/1440 layout. Hands-on model strokes and visual channel review remain |
 | Channels | Six channels bind and persist in focused tests. Height uses Godot parallax mapping. | Native material appearance and saved texture review, especially normal/height |
-| Shading | Hard edges and smooth normals implemented. `shading_smoke` passes 20 checks, including emitted normals, Undo/Redo and scene reopen. | Native curved/bevelled model acceptance and imported authored-normal interaction |
-| Construction history | Saved recipes, replay, parameter edits, bypass, reorder and arrays implemented. Engine passes 33 checks; panel passes 8. | Native complete authoring flow and interaction with manual mesh/UV edits |
-| Interchange | Native per-corner attributes and version 6 persistence implemented. Promote deformation test passes 36 checks, including edit, Undo/Redo, scene reload and actual GLB/glTF round trips with current morph weights. | Complete topology transfer through Boolean, bevel and plane cuts; Import/Export dialog integration; broader malformed-data and native editor acceptance. |
-| Closed sweeps | Kernel closed sweeps pass. `sweep_smoke` passes 22 checks; panel integration passes. | Native closed-path creation, path gizmo drag/Undo/cancel, invalid-edit recovery and scene reopen |
+| Shading | Hard edges and smooth normals implemented. `shading_smoke` passes 20 checks, including emitted normals, Undo/Redo and scene reopen. | Imported authored-normal replacement and neutral morph shading pass focused tests. Native curved/bevelled visual acceptance remains |
+| Construction history | Saved recipes, replay, parameter edits, bypass, reorder and arrays implemented. Engine passes 33 checks; panel passes 8. | Deformation recipe snapshots and generated bindings pass 12 checks through Undo/Redo and scene reopen. Native mesh-source → array → count edit → Undo/Redo → bypass passes. Reorder and manual checkpoint gestures remain to exercise |
+| Interchange | Native per-corner attributes and version 6 persistence implemented. Promote deformation test passes 36 checks, including edit, Undo/Redo, scene reload and actual GLB/glTF round trips with current morph weights. | Boolean/bevel/cut attribute transfer and Import/Export dialogs implemented. Native GLB export/import and whole-hierarchy Undo/Redo pass after fixing editor-only importer node conversion. Broader native acceptance remains. |
+| Closed sweeps | Kernel closed sweeps pass. `sweep_smoke` passes 22 checks; panel integration passes. | Native closed creation, Inspector-authored loop, path drag, Undo/Redo, invalid two-point recovery and scene reopen pass. Tilted handle plane and drag cancellation remain to exercise |
 
-Latest combined kernel run: `scons target=template_debug -j8` and `bin/slab_kernel_test`, 184 tests, 5352 checks, zero failures. `chrome_smoke` passes 42 cases. This kernel run includes surface attribute storage/interpolation and pin-aware Pack/Unwrap. The full Godot verifier still needs an integration run.
+Latest combined kernel run: `scons target=template_debug -j8` and `bin/slab_kernel_test`, 190 tests, 6330 checks, zero failures. `chrome_smoke` passes 42 cases. This kernel run includes surface attribute storage/interpolation and pin-aware Pack/Unwrap. The first resumed full verifier passed all gates after fixing the stale UV drag assertion, paint clipping, editor-only GLTF import, and native sweep input routing. A final run is in progress after material-table remapping and morph-direction encoding fixes.
 
 The native UV check used `demo/demo.tscn` in the extended-tools worktree. The agent selected a face, switched to UV Vert, dragged a corner, used Undo/Redo, pinned it through Tools, then undid both changes. The scene returned to its clean state and was not saved. This proves that interaction sequence only; it is not acceptance of the whole UV requirement.
 
 
 Build the shared library and kernel test binary together. Run Godot processes serially, including headless checks, so one editor's startup cannot steal input from another editor acceptance run. Keep the original checkout unchanged; this work lives in the `slab-extended-tools` worktree.
+
+## Attribute transfer policy
+
+Retained Boolean, bevel and cut faces sample the original triangulated surface. New cap and bevel faces inherit nearest-surface colour, UV2, skin weights and position morph deltas; shading directions are recomputed. Pins survive at exact retained source corners, while new corners start unpinned. Authored Boolean inputs keep coplanar subdivisions to preserve material and UV boundaries, so they can produce more faces than plain graybox inputs.
+
+Booleans on skinned solids refuse explicitly until binding remapping is implemented. A morph-bearing cutter must use the receiving solid's blend shape names. Construction checkpoints preserve deformation envelopes as well as geometry and materials; generated array copies rebase skeleton paths to their child-node location.
+
+## Native acceptance, 24 September 2026
+
+Using the actual Godot editor, exported demo Solid to `/tmp/slab-native-extended.glb`, imported it through Import Mesh, then verified that one Undo removed the hierarchy and Redo restored it. The first attempt exposed an editor-only importer-node conversion bug; the repaired workflow was repeated successfully.
+
+Started construction history from the existing demo solid, added a linear array, changed Count from 3 to 4, verified Undo/Redo and bypass, then undid the full sequence to restore the demo.
+
+Created and placed a closed Curve Sweep through the Slab panel. Separately added SlabSweep through Godot's Add Node dialog and authored its four rectangle points in the Inspector. Reducing the closed path to two points displayed a warning and retained the previous mesh; Undo restored the valid path. Saved this as `project/demo/extended_tools_acceptance.tscn` and reopened it. Direct path-handle dragging initially selected the SlabSolid underneath; the native-input routing fix was repeated successfully. Dragging changed point 2 from `(2, 0, 2)` to `(3, 0, 2)`; Undo and Redo restored each exact value. The saved fixture retains the original rectangular path.
+
+## Known pre-existing handle lifetime gap
+
+Whole-mesh rebuilds use `MeshEdit::assemble`, which replaces the mesh and restarts allocation generations at 1. A cached face or UV-corner handle can therefore become valid for a different rebuilt element. The connected-bevel, plane-cut and Boolean rebuild paths need generation invalidation or explicit selection remapping/clearing. The attribute-transfer implementation uses immutable source snapshots and does not depend on old handles referring to rebuilt elements, but editor selection lifetime remains a separate unresolved issue.
+
+The ordinary Boolean adapter now merges material tables atomically and records them with geometry in Undo/Redo. Sixteen checks cover distinct material colours, shared resource identity, refusal, scene reload and prototype fallback snapshots. Construction uses the same native mapping contract.
+
+Godot packs normal/tangent arrays as directions, so a zero relative morph normal cannot survive its storage format. Slab now emits normalized blend shapes with absolute target vertices and directions while keeping relative deltas in its kernel. The Promote/deformation suite passes 55 checks, including neutral normals/tangents and displacement weights above one; exchange passes 44 checks.
+
+Documentation reference verification passes and the production Next.js build succeeds.

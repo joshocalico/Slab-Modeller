@@ -784,6 +784,11 @@ int SlabSolid::set_face_smooth(const PackedInt64Array &p_faces, bool p_smooth) {
 		live_mesh.face_corner_attrs(face, corners);
 		for (uint32_t i = 0; i < corners.size(); ++i) {
 			corners[i].surface.flags &= ~(slab::SurfaceAttrs::NORMAL | slab::SurfaceAttrs::TANGENT);
+			for (auto &morph : corners[i].surface.morphs) {
+				morph.normal = Vector3();
+				morph.tangent = Vector3();
+				morph.tangent_w = 0;
+			}
 			edit.set_corner_attrs(face, i, corners[i]);
 		}
 	}
@@ -794,7 +799,30 @@ int SlabSolid::mark_hard_edges(const PackedInt64Array &p_edges, bool p_hard) {
 	std::vector<slab::EdgeId> edges;
 	if (!_edge_ids(p_edges, edges)) return int(slab::MeshError::STALE_HANDLE);
 	slab::MeshEdit edit(live_mesh);
-	for (slab::EdgeId edge : edges) edit.set_hard_edge(edge, p_hard);
+	// Edge shading takes ownership of normals on the incident faces. Imported
+	// normals would otherwise override the new hard/soft boundaries at emission.
+	std::vector<slab::FaceId> affected;
+	for (slab::EdgeId edge : edges) {
+		edit.set_hard_edge(edge, p_hard);
+		slab::FaceId a, b;
+		live_mesh.edge_faces(edge, a, b);
+		affected.push_back(a);
+		affected.push_back(b);
+	}
+	for (slab::FaceId face : affected) {
+		if (!live_mesh.alive(face)) continue;
+		std::vector<slab::CornerAttrs> corners;
+		live_mesh.face_corner_attrs(face, corners);
+		for (uint32_t i = 0; i < corners.size(); ++i) {
+			corners[i].surface.flags &= ~(slab::SurfaceAttrs::NORMAL | slab::SurfaceAttrs::TANGENT);
+			for (auto &morph : corners[i].surface.morphs) {
+				morph.normal = Vector3();
+				morph.tangent = Vector3();
+				morph.tangent_w = 0;
+			}
+			edit.set_corner_attrs(face, i, corners[i]);
+		}
+	}
 	return _commit(std::move(edit));
 }
 
@@ -1296,6 +1324,20 @@ int SlabSolid::boolean_with(SlabSolid *p_other, int p_mode) {
 	if (p_other == nullptr) {
 		return int(slab::MeshError::STALE_HANDLE);
 	}
+	// Bone indices are local to a Skin and morph indices to a named envelope.
+	// Refuse combinations that cannot share the receiver's binding table.
+	const Ref<Skin> own_skin = deformation.get("skin", Variant());
+	const Ref<Skin> other_skin = p_other->deformation.get("skin", Variant());
+	if (own_skin.is_valid() || other_skin.is_valid()) {
+		ERR_PRINT("Boolean on skinned solids is unsupported: bone bindings cannot be merged safely.");
+		return int(slab::MeshError::INVALID_SELECTION);
+	}
+	const PackedStringArray own_shapes = deformation.get("blend_names", PackedStringArray());
+	const PackedStringArray other_shapes = p_other->deformation.get("blend_names", PackedStringArray());
+	if (!other_shapes.is_empty() && own_shapes != other_shapes) {
+		ERR_PRINT("Boolean blend shape names must match the receiving solid.");
+		return int(slab::MeshError::INVALID_SELECTION);
+	}
 	slab::Mesh cutter = p_other->live_mesh;
 	const Transform3D to_host = get_global_transform().affine_inverse() * p_other->get_global_transform();
 	const bool moved = to_host.origin != Vector3() || to_host.basis != Basis();
@@ -1310,17 +1352,98 @@ int SlabSolid::boolean_with(SlabSolid *p_other, int p_mode) {
 			}
 			xf.move_vertex(id, q);
 		}
+		const Basis normal_basis = to_host.basis.inverse().transposed();
+		std::vector<slab::FaceId> faces;
+		cutter.all_faces(faces);
+		for (slab::FaceId face : faces) {
+			std::vector<slab::CornerAttrs> corners;
+			cutter.face_corner_attrs(face, corners);
+			for (uint32_t i = 0; i < corners.size(); ++i) {
+				auto &attrs = corners[i].surface;
+				const Vector3 base_normal = attrs.normal;
+				const Vector3 base_tangent(attrs.tangent[0], attrs.tangent[1], attrs.tangent[2]);
+				const Vector3 normal = normal_basis.xform(base_normal).normalized();
+				const Vector3 tangent = to_host.basis.xform(base_tangent).normalized();
+				for (auto &morph : attrs.morphs) {
+					morph.position = to_host.basis.xform(morph.position);
+					morph.normal = normal_basis.xform(base_normal + morph.normal).normalized() - normal;
+					morph.tangent = to_host.basis.xform(base_tangent + morph.tangent).normalized() - tangent;
+					if (to_host.basis.determinant() < 0) morph.tangent_w = -morph.tangent_w;
+				}
+				attrs.normal = normal;
+				for (int axis = 0; axis < 3; ++axis) attrs.tangent[axis] = tangent[axis];
+				if (to_host.basis.determinant() < 0) attrs.tangent[3] = -attrs.tangent[3];
+				xf.set_corner_attrs(face, i, corners[i]);
+			}
+		}
 		const slab::MeshFault baked = std::move(xf).commit(cutter);
 		if (!baked.ok()) {
 			return int(baked.code);
 		}
 	}
+	// Material slots are local to each solid. Reserve receiver fallbacks before
+	// appending operand resources so an out-of-range host slot cannot suddenly
+	// bind to an unrelated appended cutter material.
+	TypedArray<Material> merged_materials = materials.duplicate();
+	auto material_slot = [&](const Ref<Material> &material) -> uint32_t {
+		for (int i = 0; i < merged_materials.size(); ++i) {
+			const Ref<Material> existing = merged_materials[i];
+			if (existing == material) return uint32_t(i);
+		}
+		const uint32_t slot = uint32_t(merged_materials.size());
+		merged_materials.append(material);
+		return slot;
+	};
 	slab::MeshEdit edit(live_mesh);
+	std::vector<slab::FaceId> host_faces;
+	live_mesh.all_faces(host_faces);
+	for (slab::FaceId face : host_faces) {
+		auto attrs = live_mesh.attrs(face);
+		Ref<Material> material;
+		if (attrs.material_slot < uint32_t(materials.size())) material = materials[attrs.material_slot];
+		attrs.material_slot = material_slot(material);
+		edit.set_attrs(face, attrs);
+	}
+	slab::MeshEdit remapped(cutter);
+	std::vector<slab::FaceId> cutter_faces;
+	cutter.all_faces(cutter_faces);
+	// Prototype colour is node state, not an authored shared resource. Snapshot
+	// it so later recolouring the operand does not recolour the result.
+	Ref<Material> cutter_fallback;
+	for (slab::FaceId face : cutter_faces) {
+		auto attrs = cutter.attrs(face);
+		Ref<Material> material;
+		if (attrs.material_slot < uint32_t(p_other->materials.size())) material = p_other->materials[attrs.material_slot];
+		if (material.is_null() && p_other->prototype_color != prototype_color) {
+			if (cutter_fallback.is_null()) {
+				Ref<StandardMaterial3D> fallback;
+				fallback.instantiate();
+				fallback->set_roughness(0.7f);
+				fallback->set_shading_mode(BaseMaterial3D::SHADING_MODE_PER_PIXEL);
+				fallback->set_albedo(p_other->prototype_color);
+				cutter_fallback = fallback;
+			}
+			material = cutter_fallback;
+		}
+		attrs.material_slot = material_slot(material);
+		remapped.set_attrs(face, attrs);
+	}
+	const slab::MeshFault remap_fault = std::move(remapped).commit(cutter);
+	if (!remap_fault.ok()) return _reject(remapped.scratch(), remap_fault);
 	const slab::MeshFault fault = slab::ops::boolean(edit, cutter, p_mode);
 	if (!fault.ok()) {
 		return _reject(edit.scratch(), fault);
 	}
-	return _commit(std::move(edit));
+	slab::Mesh result;
+	const slab::MeshFault committed = std::move(edit).commit(result);
+	if (!committed.ok()) return _reject(edit.scratch(), committed);
+	// Publish geometry and bindings together; refusals above leave both intact.
+	edit_diagnostic.clear();
+	live_mesh = std::move(result);
+	materials = merged_materials;
+	_rebuild();
+	emit_signal("topology_changed");
+	return 0;
 }
 
 int SlabSolid::plane_cut(const Vector3 &p_origin, const Vector3 &p_normal, bool p_keep_positive, int p_cap_material) {
@@ -1572,7 +1695,10 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 	size_t morph_count = 0;
 	for (const auto &attributes : emitted.surface) morph_count = std::max(morph_count, attributes.morphs.size());
 	const PackedStringArray shape_names = deformation.get("blend_names", PackedStringArray());
-	array_mesh->set_blend_shape_mode(Mesh::BLEND_SHAPE_MODE_RELATIVE);
+	// Godot oct-encodes shape normals/tangents as unit directions. Relative
+	// zero vectors therefore cannot survive storage. Emit absolute targets while
+	// keeping canonical deltas in the kernel: (1-sum(w))*base + sum(w*(base+d)).
+	array_mesh->set_blend_shape_mode(Mesh::BLEND_SHAPE_MODE_NORMALIZED);
 	for (size_t i = 0; i < morph_count; ++i)
 		array_mesh->add_blend_shape(i < size_t(shape_names.size()) ? shape_names[int64_t(i)] : String("Shape_") + String::num_int64(i));
 	r_surface_slots.clear();
@@ -1623,10 +1749,11 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 					}
 					for (size_t shape = 0; shape < morph_count; ++shape) {
 						const slab::MorphDelta delta = shape < attribute.morphs.size() ? attribute.morphs[shape] : slab::MorphDelta{};
-						bucket.shape_positions[shape].append(delta.position);
-						bucket.shape_normals[shape].append(delta.normal);
-						for (int component = 0; component < 3; ++component) bucket.shape_tangents[shape].append(delta.tangent[component]);
-						bucket.shape_tangents[shape].append(delta.tangent_w);
+						bucket.shape_positions[shape].append(emitted.verts[size_t(src)] + delta.position);
+						bucket.shape_normals[shape].append(emitted.normals[size_t(src)] + delta.normal);
+						for (int component = 0; component < 3; ++component)
+							bucket.shape_tangents[shape].append(emitted.tangents[size_t(src) * 4 + component] + delta.tangent[component]);
+						bucket.shape_tangents[shape].append(emitted.tangents[size_t(src) * 4 + 3] + delta.tangent_w);
 					}
 					for (size_t component = 0; component < 4; ++component) bucket.tangents.append(emitted.tangents[size_t(src) * 4 + component]);
 				}

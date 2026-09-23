@@ -93,7 +93,7 @@ Boolean, Mirror, Pivot, Snap, Plane Cut, and Array need a selected `SlabSolid`. 
 | Snap To Grid | Rounds every vertex onto the grid step. |
 | Plane Cut | Previews an exact local-space plane, keeps the chosen side, and caps every section loop. |
 | Array | Previews 2 to 256 total instances in a linear or radial layout, then creates the copies as one undo action. |
-| Import Mesh… | Loads an OBJ or STL as an External mesh. Non-manifold and open files stay External. Import never promotes. |
+| Import Mesh… | Loads GLB or glTF as an External mesh hierarchy, or OBJ or STL as an External mesh. Non-manifold and open files stay External. Import never promotes. |
 | Export… | Writes the selected solid or External mesh. Does not change the scene. |
 | Promote to Slab Solid… | Converts one closed External mesh into a `SlabSolid`. Open, empty, or non-manifold meshes are refused and left unchanged. |
 
@@ -135,7 +135,7 @@ See [Change topology](/guide/how-to/change-topology) for the selection rules and
 
 ## UV and Paint
 
-The header has separate **UV** and **Paint** workspace buttons. Both switch to Face mode. Escape closes the active workspace. **UV** assigns materials and adjusts texture placement. **Paint** paints Albedo, Roughness, or Emission on the canvas or directly in the 3D view.
+The header has separate **UV** and **Paint** workspace buttons. Both switch to Face mode. Escape closes the active workspace. **UV** assigns materials and adjusts texture placement. **Paint** paints Albedo, Roughness, Emission, Metallic, Normal, or Height on the canvas or directly in the 3D view.
 
 In **UV**, **Brush** names the material that Assign and a plain viewport click will apply. The target summary separately reports the selected faces' material as a name, **Mixed**, or the default material. Opening UV with a common selected material adopts it as the Brush without assigning anything. A mixed or default-material selection opens with no assignable Brush. The Brush then stays active while you change selections inside UV.
 
@@ -177,7 +177,7 @@ The UV canvas previews the current Brush texture beneath the selected faces' UV 
 
 **Place** is the default canvas tool. Drag to move the mapping of the selected 3D faces, Shift-drag to scale it, and Cmd-drag on macOS or Ctrl-drag on other systems to rotate it. Escape cancels the drag. Numeric Placement fields edit the same faces.
 
-The **UV Vert**, **UV Edge**, and **UV Face** buttons select and highlight UV elements. Shift-click toggles an element in that selection. UV selection is separate from the faces selected in the 3D view. Choose **Place** to edit the face mapping again. Scroll zooms and middle-drag pans in either mode. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
+The **UV Vert**, **UV Edge**, and **UV Face** buttons select UV elements for direct editing. Drag moves selected elements, Alt-drag scales them, and Cmd-drag on macOS or Ctrl-drag on other systems rotates them. Shift-click toggles an element in that selection. UV selection is separate from the faces selected in the 3D view. **Tools** provides Pin, Unpin, Relax, Stitch, island alignment, and Reset projection. Choose **Place** to edit the face mapping again. Scroll zooms and middle-drag pans in either mode. See [Paint texture pixels](/guide/how-to/paint-texture-pixels).
 
 ### Paint controls
 
@@ -186,14 +186,17 @@ Paint hides Assign, Sample, the material picker, the material palette, Mapping, 
 | Control | Result |
 | --- | --- |
 | Make Unique | Copies the selected shared Texture, or creates an image for default-material faces, and assigns the owned copy to the selection. Mixed-material selections are refused. |
-| Fill Layer | Replaces the active layer with Brush Color and Opacity. Preserves other layers and the base image; supports Undo and Redo. |
-| Save Paint | Flattens visible layers and writes the current channel. Albedo uses `<solid>_m<slot>.png` under `res://slab_paint/`; Roughness and Emission add `_roughness` and `_emission`. Save each painted channel, then save the scene. |
+| Fill Layer | Replaces the active layer inside the mask with Brush Color and Opacity, or clears that area in Erase mode. Preserves other layers and the base image; supports Undo and Redo. |
+| Save Paint | Flattens visible layers and writes the current channel. Albedo uses `<solid>_m<slot>.png` under `res://slab_paint/`; Other channels append their lowercase name before `.png`. Save each painted channel, then save the scene. |
 | Resize… | Expands Width and Height controls beside the image, with Keep aspect and Smooth or Nearest resampling. Apply Resize preserves UV placement and supports Undo. Cancel keeps the current image. Save Paint and the scene afterward. |
 | New image px | Sets the square image size used by Make Unique when the material has no artwork. For existing artwork, the read-only Texture px field shows its width. |
-| Albedo, Roughness, Emission | Chooses the material channel to paint. Each channel has its own layer list. |
+| Albedo, Roughness, Emission, Metallic, Normal, Height | Chooses the material channel to paint. Each channel has its own layer list. |
 | Layers +, − | Adds a layer or deletes the active layer in the current channel. |
 | Flatten | Commits visible layers into the current channel's base image as one undoable action. Hidden layers remain editable. |
-| Color, Radius, Opacity | Sets the pixel brush. Radius is 1 to 64 texture pixels. |
+| Color or Value, Radius, Opacity, Hardness | Sets the pixel brush. Hardness ranges from 0 (soft edge) to 1 (solid edge). Radius is 1 to 64 texture pixels. |
+| Paint, Erase | Adds pixels or removes active-layer pixels to reveal lower layers. |
+| Whole texture, Selected faces, Selected UV islands | Limits strokes and Fill Layer to the chosen area. |
+| Layer name, Raise, Lower | Renames or reorders the active layer. |
 | Show UV | Shows the selected faces' UV outlines over the image. It is off by default. |
 
 Layer rows select the active layer. The eye control hides or shows a layer, and layer Opacity controls its contribution to the result. Scene saves retain the base images and editable layers.
