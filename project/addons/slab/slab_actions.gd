@@ -585,6 +585,10 @@ func _ids_op(method: String) -> Dictionary:
 	return { "method": method, "args": [_selection.ids] }
 
 
+func _shading_op(method: String, enabled: bool) -> Dictionary:
+	return { "method": method, "args": [_selection.ids, enabled] }
+
+
 func _seam_op(marked: bool) -> Dictionary:
 	return { "method": "mark_uv_seams", "args": [_selection.ids, marked] }
 
@@ -754,45 +758,7 @@ func _promote_op() -> Dictionary:
 
 
 func _flatten_mesh(mesh: Mesh) -> Dictionary:
-	var vertices := PackedVector3Array()
-	var indices := PackedInt32Array()
-	var uvs := PackedVector2Array()
-	var slots := PackedInt32Array()
-	var has_uvs := false
-	if mesh == null:
-		return {"vertices": vertices, "indices": indices, "uvs": uvs, "slots": slots}
-	if mesh is ArrayMesh and mesh.get_blend_shape_count() > 0:
-		return {"error": "blend shapes are not supported"}
-	for surface_idx in mesh.get_surface_count():
-		if mesh is ArrayMesh and mesh.surface_get_primitive_type(surface_idx) != Mesh.PRIMITIVE_TRIANGLES:
-			return {"error": "only triangle surfaces are supported"}
-		var arrays: Array = mesh.surface_get_arrays(surface_idx)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		var tex: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
-		if not tex.is_empty() and tex.size() != verts.size():
-			return {"error": "UV data is malformed"}
-		for unsupported in [Mesh.ARRAY_BONES, Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_COLOR]:
-			if arrays[unsupported] != null and not arrays[unsupported].is_empty():
-				return {"error": "skin, secondary UV, or vertex color data is not supported"}
-		if (idx.size() if not idx.is_empty() else verts.size()) % 3 != 0:
-			return {"error": "triangle indices are malformed"}
-		var base: int = vertices.size()
-		vertices.append_array(verts)
-		has_uvs = has_uvs or not tex.is_empty()
-		for i in verts.size():
-			uvs.append(tex[i] if not tex.is_empty() else Vector2.ZERO)
-		if idx.is_empty():
-			for i in verts.size():
-				indices.append(base + i)
-		else:
-			for i in idx:
-				if i < 0 or i >= verts.size():
-					return {"error": "triangle indices are malformed"}
-				indices.append(base + i)
-		for i in (idx.size() if not idx.is_empty() else verts.size()) / 3:
-			slots.append(surface_idx)
-	return {"vertices": vertices, "indices": indices, "uvs": uvs if has_uvs else PackedVector2Array(), "slots": slots}
+	return preload("res://addons/slab/slab_mesh_attributes.gd").flatten(mesh)
 
 
 func _editor_scene_root() -> Node:
@@ -886,7 +852,7 @@ func _run_promote() -> Dictionary:
 	if solid == null:
 		return { "status": "SlabSolid is not built yet." }
 
-	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"])
+	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"], arrays["attributes"])
 	var err: int = int(imported.get("error", ERR_INVALID_DATA))
 	if err != OK:
 		var reason: String = str(imported.get("refuse_reason", "non-manifold"))
@@ -895,6 +861,7 @@ func _run_promote() -> Dictionary:
 		solid.free()
 		return { "status": "Could not promote: mesh is %s. External mesh unchanged." % reason }
 
+	solid.set("deformation", preload("res://addons/slab/slab_mesh_attributes.gd").envelope(external))
 	solid.name = external.name
 	solid.top_level = external.top_level
 	solid.transform = external.transform
@@ -1092,6 +1059,8 @@ func _build() -> Array[Dictionary]:
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
 		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes coplanar internal edges and merges their adjacent faces.", KEY_X, _ids_op.bind("dissolve_edges")),
 		_row("mark_uv_seam", "Mark Seam", "MaterialPreviewCube", edge, 1, "Marks selected edges as UV island boundaries.", 0, _seam_op.bind(true)),
+		_row("hard_edges", "Hard Edge", "CurveLinear", edge, 1, "Split shading normals across the selected edges. UV seams are unchanged.", 0, _shading_op.bind("mark_hard_edges", true)),
+		_row("soft_edges", "Soft Edge", "CurveIn", edge, 1, "Remove hard boundaries from the selected edges. Adjacent faces must also use smooth shading to blend their normals.", 0, _shading_op.bind("mark_hard_edges", false)),
 		_row("clear_uv_seam", "Clear Seam", "Save", edge, 1, "Removes UV seam marks from selected edges.", 0, _seam_op.bind(false)),
 
 		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _operation_op.bind(0)),
@@ -1100,6 +1069,8 @@ func _build() -> Array[Dictionary]:
 		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins one connected coplanar face region into a single face.", KEY_M, _ids_op.bind("merge_faces")),
 		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
 		_row("select_boundary", "Select Boundary", "Path3D", face, 1, "Switches to Edge mode and selects the perimeter edges of the selected faces.", 0, _select_op.bind(_select_face_boundary)),
+		_row("shade_smooth", "Shade Smooth", "CSGSphere3D", face, 1, "Blend normals across selected smooth faces, stopping at hard edges and flat neighbours. Geometry and UVs stay unchanged.", 0, _shading_op.bind("set_face_smooth", true)),
+		_row("shade_flat", "Shade Flat", "BoxMesh", face, 1, "Use each selected face's own normal. Geometry, UVs and hard-edge marks stay unchanged.", 0, _shading_op.bind("set_face_smooth", false)),
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),
