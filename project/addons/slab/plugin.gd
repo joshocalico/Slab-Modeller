@@ -480,7 +480,9 @@ func _id_tokens(ids: PackedInt64Array) -> PackedStringArray:
 func _add_gizmos() -> void:
 	_solid_gizmo = SolidGizmo.new()
 	_solid_gizmo.setup(_selection, get_undo_redo(), _paint)
-	_gizmos = [_solid_gizmo, SocketGizmo.new(), SweepGizmo.new()]
+	var sweep_gizmo := SweepGizmo.new()
+	sweep_gizmo.setup(get_undo_redo())
+	_gizmos = [_solid_gizmo, SocketGizmo.new(), sweep_gizmo]
 	for gizmo in _gizmos:
 		add_node_3d_gizmo_plugin(gizmo)
 

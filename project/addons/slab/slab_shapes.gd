@@ -5,6 +5,7 @@ const ARC_MIN_DEG := 15.0
 const ARC_MAX_DEG := 360.0
 
 const PARAMS: Dictionary = {
+	&"sweep_closed": { "label": "Closed path", "about": "Join the sweep path into a loop without end caps", "min": 0.0, "max": 1.0, "step": 1.0, "default": 0.0, "phrase": "%s closed" },
 	&"size_x": { "label": "Width", "about": "Width in metres", "min": 0.05, "max": 64.0, "step": 0.05, "default": 2.0, "phrase": "%s m wide" },
 	&"size_y": { "label": "Height", "about": "Height in metres", "min": 0.05, "max": 64.0, "step": 0.05, "default": 2.0, "phrase": "%s m tall" },
 	&"size_z": { "label": "Depth", "about": "Depth in metres", "min": 0.05, "max": 64.0, "step": 0.05, "default": 2.0, "phrase": "%s m deep" },
@@ -48,7 +49,7 @@ const CATALOG: Dictionary = {
 	},
 	&"make_sweep": {
 		"label": "Curve Sweep", "icon": "Curve3D", "tooltip": "Sweeps a corridor profile along a path.",
-		"params": [&"size_x", &"size_y", &"size_z"], "derives": "Depth sets the path length.",
+		"params": [&"size_x", &"size_y", &"size_z", &"sweep_closed"], "derives": "Depth sets the path length. Closed paths leave space for the profile.",
 	},
 }
 
@@ -83,7 +84,7 @@ func plan(id: StringName) -> Dictionary:
 		&"make_poly_shape":
 			return _built("make_prism", "PolyShape", [_square_outline(), height()])
 		&"make_sweep":
-			return _built("make_sweep", "Sweep", [_sweep_path(), Vector2(width(), height()), false])
+			return _built("make_sweep", "Sweep", [_sweep_path(), Vector2(width(), height()), int_of(&"sweep_closed") != 0])
 	return {}
 
 
@@ -131,6 +132,9 @@ func describe(id: StringName) -> String:
 	var entry: Dictionary = CATALOG[id]
 	var bits := PackedStringArray()
 	for key in entry["params"]:
+		if key == &"sweep_closed":
+			bits.append("closed path" if int_of(key) != 0 else "open path")
+			continue
 		var phrase: String = entry.get("field_overrides", {}).get(key, {}).get("phrase", PARAMS[key]["phrase"])
 		bits.append(phrase % _number(value_of(key)))
 	var text: String = ", ".join(bits) + "."
@@ -218,6 +222,9 @@ func _square_outline() -> PackedVector3Array:
 
 func _sweep_path() -> PackedVector3Array:
 	var length: float = depth() * 2.0
+	if int_of(&"sweep_closed") != 0:
+		length = maxf(length, width() * 2.0)
+		return PackedVector3Array([Vector3.ZERO, Vector3(0, 0, length), Vector3(length, 0, length), Vector3(length, 0, 0)])
 	return PackedVector3Array([
 		Vector3.ZERO,
 		Vector3(0.0, 0.0, length * 0.5),
