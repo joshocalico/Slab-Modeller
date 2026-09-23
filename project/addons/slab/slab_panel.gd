@@ -1547,7 +1547,7 @@ func _build_uv_mode_strip() -> Control:
 	operations.add_theme_font_size_override("font_size", _font(13))
 	operations.tooltip_text = "Pins, relaxation, stitching and island alignment."
 	var popup := operations.get_popup()
-	for label in ["Pin", "Unpin", "Relax", "Stitch", "Align left", "Align horizontal centers", "Align right", "Align top", "Align vertical centers", "Align bottom"]:
+	for label in ["Pin", "Unpin", "Relax", "Stitch", "Align left", "Align horizontal centers", "Align right", "Align top", "Align vertical centers", "Align bottom", "Reset projection"]:
 		popup.add_item(label)
 	popup.id_pressed.connect(_on_uv_tool)
 	tools.add_child(operations)
@@ -2722,6 +2722,8 @@ func _on_uv_tool(id: int) -> void:
 			message = editor.relax(_selection, _actions._undo)
 		3:
 			message = editor.stitch(_selection, _actions._undo)
+		10:
+			message = editor.reset_projection(_selection, _actions._undo)
 		_:
 			message = editor.align(_selection, _actions._undo, 0 if id < 7 else 1, (id - 4) % 3 - 1)
 	if not message.is_empty():

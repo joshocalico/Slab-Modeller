@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/classes/skin.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -47,6 +48,8 @@ public:
 
 	void set_materials(const TypedArray<Material> &p_materials);
 	TypedArray<Material> get_materials() const;
+	void set_deformation(const Dictionary &p_deformation);
+	Dictionary get_deformation() const;
 
 	void set_collision_enabled(bool p_enabled);
 	bool is_collision_enabled() const;
@@ -88,7 +91,8 @@ public:
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
 	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
-			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array());
+			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array(),
+			const Dictionary &p_attributes = Dictionary());
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
 	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);
@@ -110,6 +114,7 @@ public:
 	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
 	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
 	Dictionary pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution, int p_source_texture_resolution = 0);
+	Dictionary reset_uv_projection(const PackedInt64Array &p_faces, int p_axis = 0);
 	int set_face_material(const PackedInt64Array &p_faces, int p_slot);
 
 	int bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1);
@@ -140,6 +145,7 @@ private:
 	Color prototype_color = Color(0.62f, 0.64f, 0.68f);
 	Ref<StandardMaterial3D> prototype_material;
 	TypedArray<Material> materials;
+	Dictionary deformation;
 	bool collision_enabled = true;
 	PackedInt64Array last_edited_faces;
 	Dictionary edit_diagnostic;

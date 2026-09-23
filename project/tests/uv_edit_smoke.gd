@@ -28,6 +28,7 @@ func _run() -> void:
 	_transform()
 	_stitch_align()
 	_relax()
+	_projection_reset()
 	print("uv_edit_smoke failures=", failures)
 	quit(1 if failures else 0)
 
@@ -150,4 +151,24 @@ func _relax() -> void:
 				check(points[i].distance_to(boundary[candidate][i]) > .05, "relax moves distorted interior vertex")
 			else:
 				check(points[i].distance_to(boundary[candidate][i]) < .00001, "relax preserves patch boundary")
+	solid.free()
+
+func _projection_reset() -> void:
+	var f := _fixture()
+	var solid: Node3D = f.solid
+	var face: int = solid.get_faces()[0]
+	f.selection.set_uv_selection(PackedInt64Array([face]))
+	var points := PackedVector2Array([Vector2(.1, .1), Vector2(.3, .1), Vector2(.25, .3), Vector2(.1, .25)])
+	solid.set_face_uv_points(face, points)
+	solid.pin_uv_corners(face, PackedInt32Array([0]), true)
+	var before: PackedByteArray = solid.data
+	check(not Edit.reset_projection(f.selection, f.undo).is_empty() and solid.data == before, "projection reset refuses pinned corners without mutation")
+	solid.pin_uv_corners(face, PackedInt32Array([0]), false)
+	before = solid.data
+	check(Edit.reset_projection(f.selection, f.undo).is_empty(), "projection reset clears edited UV mapping")
+	check(not solid.face_uv(face)["explicit"], "projection reset removes explicit overrides")
+	f.undo.undo()
+	check(solid.data == before, "projection reset has exact Undo")
+	var packed: Dictionary = solid.pack_uv(PackedInt64Array([face]), 1024, 1024)
+	check(packed.error == OK, "Pack accepts an explicitly edited face without prior Unwrap")
 	solid.free()

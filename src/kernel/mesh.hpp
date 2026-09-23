@@ -2,6 +2,7 @@
 
 #include "handles.hpp"
 #include "quantize.hpp"
+#include "surface_attrs.hpp"
 
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/vector2.hpp>
@@ -45,6 +46,7 @@ struct Vertex {
 };
 
 struct CornerAttrs {
+	SurfaceAttrs surface;
 	bool uv_explicit = false;
 	bool uv_pinned = false;
 	godot::Vector2 uv;

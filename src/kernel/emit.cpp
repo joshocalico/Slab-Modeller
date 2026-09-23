@@ -45,6 +45,7 @@ godot::Vector2 face_projection(const godot::Vector3 &p_p, const FaceAttrs &p_att
 godot::Vector2 apply_uv(godot::Vector2 uv, const godot::Vector2 &p_centroid, const FaceAttrs &p_attrs, UvAxis p_axis) {
 	uv.x *= p_attrs.uv_scale.x;
 	uv.y *= p_attrs.uv_scale.y;
+	if (p_attrs.uv_rotation == 0.0f) return uv + p_attrs.uv_offset;
 	godot::Vector2 c = p_centroid;
 	c.x *= p_attrs.uv_scale.x;
 	c.y *= p_attrs.uv_scale.y;
@@ -156,6 +157,7 @@ bool face_uv_at_point(const Mesh &p_mesh, FaceId p_face, const godot::Vector3 &p
 }
 
 void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
+	r_out.surface.clear();
 	r_out.verts.clear();
 	r_out.normals.clear();
 	r_out.uvs.clear();
@@ -172,6 +174,8 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		if (corners.size() < 3) {
 			continue;
 		}
+		std::vector<CornerAttrs> attributes;
+		p_mesh.face_corner_attrs(id, attributes);
 		const FaceAttrs attrs = p_mesh.attrs(id);
 		std::vector<godot::Vector2> uvs;
 		face_uv_points(p_mesh, id, uvs);
@@ -182,7 +186,9 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 			const VertexId v = corners[corner];
 			const godot::Vector3 p = p_mesh.position(v);
 			r_out.verts.push_back(p);
-			r_out.normals.push_back(corner_normal(p_mesh, id, v));
+			const SurfaceAttrs &surface = attributes[corner].surface;
+			r_out.surface.push_back(surface);
+			r_out.normals.push_back((surface.flags & SurfaceAttrs::NORMAL) && surface.normal.length_squared() > 0 ? surface.normal.normalized() : corner_normal(p_mesh, id, v));
 			r_out.uvs.push_back(uvs[corner]);
 			loop.push_back(p_mesh.position_i(v));
 		}
@@ -197,6 +203,10 @@ void emit_arrays(const Mesh &p_mesh, EmitOut &r_out) {
 		}
 	}
 	build_tangents(r_out);
+	for (size_t i = 0; i < r_out.surface.size(); ++i) {
+		if (!(r_out.surface[i].flags & SurfaceAttrs::TANGENT)) continue;
+		for (int k = 0; k < 4; ++k) r_out.tangents[i*4+k] = r_out.surface[i].tangent[k];
+	}
 }
 
 } // namespace slab

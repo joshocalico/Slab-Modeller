@@ -41,10 +41,10 @@ Saving only output snapshots for construction steps makes Undo easy but cannot r
 | Channels | Six channels bind and persist in focused tests. Height uses Godot parallax mapping. | Native material appearance and saved texture review, especially normal/height |
 | Shading | Hard edges and smooth normals implemented. `shading_smoke` passes 20 checks, including emitted normals, Undo/Redo and scene reopen. | Native curved/bevelled model acceptance and imported authored-normal interaction |
 | Construction history | Saved recipes, replay, parameter edits, bypass, reorder and arrays implemented. Engine passes 33 checks; panel passes 8. | Native complete authoring flow and interaction with manual mesh/UV edits |
-| Interchange | Canonical attribute adapter and GLB/glTF source work underway. | Native versioned attribute storage, emission, deformation bindings, topology transfer and complete round trips. Promote's new adapter call is not usable until the native backend lands. |
+| Interchange | Native per-corner attributes and version 6 persistence implemented. Promote deformation test passes 36 checks, including edit, Undo/Redo, scene reload and actual GLB/glTF round trips with current morph weights. | Complete topology transfer through Boolean, bevel and plane cuts; Import/Export dialog integration; broader malformed-data and native editor acceptance. |
 | Closed sweeps | Kernel closed sweeps pass. `sweep_smoke` passes 22 checks; panel integration passes. | Native closed-path creation, path gizmo drag/Undo/cancel, invalid-edit recovery and scene reopen |
 
-Latest combined kernel run: `scons target=template_debug -j8` and `bin/slab_kernel_test`, 172 tests, 5144 checks, zero failures. `chrome_smoke` passes 42 cases. These counts precede the new interchange backend and Pack/Unwrap changes; rerun after integration.
+Latest combined kernel run: `scons target=template_debug -j8` and `bin/slab_kernel_test`, 184 tests, 5352 checks, zero failures. `chrome_smoke` passes 42 cases. This kernel run includes surface attribute storage/interpolation and pin-aware Pack/Unwrap. The full Godot verifier still needs an integration run.
 
 The native UV check used `demo/demo.tscn` in the extended-tools worktree. The agent selected a face, switched to UV Vert, dragged a corner, used Undo/Redo, pinned it through Tools, then undid both changes. The scene returned to its clean state and was not saved. This proves that interaction sequence only; it is not acceptance of the whole UV requirement.
 

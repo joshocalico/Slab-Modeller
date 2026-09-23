@@ -43,10 +43,10 @@ func _initialize() -> void:
 	fresh_actions.uv_texture_resolution = 1024
 	check(fresh_actions._pack_target(reopened).begins_with("Packed"), "pack works in fresh session")
 	check(is_equal_approx(_edge_length(reopened, face_a), length_a / 2.0), "reload preserves source density")
-	# Version 3 is the same payload without the per-face resolution tail.
+	# Version 3 predates the per-half-edge v5 corners and per-face v4 resolution.
 	var legacy := saved_a.duplicate()
 	legacy[4] = 3
-	legacy.resize(legacy.size() - int(a.call("face_count")) * 4)
+	legacy.resize(legacy.size() - legacy.decode_u32(12) * 9 - legacy.decode_u32(16) * 4)
 	reopened.set("data", legacy)
 	check(reopened.call("face_uv", face_a).texture_resolution == 0, "old scene loads unknown source resolution")
 	check(fresh_actions._pack_target(reopened).begins_with("Packed"), "old scene can pack")

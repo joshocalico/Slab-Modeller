@@ -13,6 +13,7 @@ struct ImportTriangleAttrs {
 	uint32_t material_slot = 0;
 	bool has_uvs = false;
 	std::array<godot::Vector2, 3> uvs;
+	std::array<SurfaceAttrs, 3> surface;
 };
 
 struct ImportResult {

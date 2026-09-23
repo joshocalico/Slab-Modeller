@@ -1,4 +1,5 @@
 #include "slab_solid.hpp"
+#include "slab_surface_attributes.hpp"
 
 #include "kernel/emit.hpp"
 #include "kernel/triangulate.hpp"
@@ -21,6 +22,8 @@
 #include "kernel/serialize.hpp"
 
 #include <godot_cpp/classes/mesh.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_string_array.hpp>
 #include <godot_cpp/classes/shape3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
@@ -45,6 +48,8 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_material"), &SlabSolid::get_material);
 	ClassDB::bind_method(D_METHOD("set_materials", "materials"), &SlabSolid::set_materials);
 	ClassDB::bind_method(D_METHOD("get_materials"), &SlabSolid::get_materials);
+	ClassDB::bind_method(D_METHOD("set_deformation", "deformation"), &SlabSolid::set_deformation);
+	ClassDB::bind_method(D_METHOD("get_deformation"), &SlabSolid::get_deformation);
 	ClassDB::bind_method(D_METHOD("set_collision_enabled", "enabled"), &SlabSolid::set_collision_enabled);
 	ClassDB::bind_method(D_METHOD("is_collision_enabled"), &SlabSolid::is_collision_enabled);
 
@@ -82,8 +87,8 @@ void SlabSolid::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("make_box", "size"), &SlabSolid::make_box);
 	ClassDB::bind_method(D_METHOD("make_plane", "size"), &SlabSolid::make_plane);
-	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices", "uvs", "material_slots"), &SlabSolid::import_from_mesh,
-			DEFVAL(PackedVector2Array()), DEFVAL(PackedInt32Array()));
+	ClassDB::bind_method(D_METHOD("import_from_mesh", "vertices", "indices", "uvs", "material_slots", "attributes"), &SlabSolid::import_from_mesh,
+			DEFVAL(PackedVector2Array()), DEFVAL(PackedInt32Array()), DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("make_stair", "size", "steps"), &SlabSolid::make_stair);
 	ClassDB::bind_method(D_METHOD("make_cylinder", "radius", "height", "sides"), &SlabSolid::make_cylinder);
 	ClassDB::bind_method(D_METHOD("make_arch", "span", "depth", "segments", "thickness", "arc"), &SlabSolid::make_arch, DEFVAL(Math_PI));
@@ -105,6 +110,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_hard_edges"), &SlabSolid::get_hard_edges);
 	ClassDB::bind_method(D_METHOD("set_face_uv", "faces", "scale", "offset", "rotation"), &SlabSolid::set_face_uv);
 	ClassDB::bind_method(D_METHOD("mark_uv_seams", "edges", "marked"), &SlabSolid::mark_uv_seams);
+	ClassDB::bind_method(D_METHOD("reset_uv_projection", "faces", "axis"), &SlabSolid::reset_uv_projection, DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("unwrap_uv", "faces", "pixels_per_meter", "texture_resolution"), &SlabSolid::unwrap_uv);
 	ClassDB::bind_method(D_METHOD("pack_uv", "faces", "texture_resolution", "source_texture_resolution"),
 			&SlabSolid::pack_uv, DEFVAL(0));
@@ -132,6 +138,7 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("center_pivot"), &SlabSolid::center_pivot);
 	ClassDB::bind_method(D_METHOD("snap_to_grid"), &SlabSolid::snap_to_grid);
 
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "deformation", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_deformation", "get_deformation");
 	ADD_PROPERTY(PropertyInfo(Variant::PACKED_BYTE_ARRAY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_data", "get_data");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "grid_step", PROPERTY_HINT_RANGE, "0.05,8,0.05,suffix:m"), "set_grid_step", "get_grid_step");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "prototype_color"), "set_prototype_color", "get_prototype_color");
@@ -210,6 +217,38 @@ Ref<Material> SlabSolid::get_material() const {
 		return Ref<Material>();
 	}
 	return materials[0];
+}
+
+void SlabSolid::set_deformation(const Dictionary &p_deformation) {
+	if (p_deformation.has("skeleton")) {
+		ERR_FAIL_COND_MSG(Variant(p_deformation["skeleton"]).get_type() != Variant::NODE_PATH, "Deformation skeleton must be a NodePath.");
+	}
+	if (p_deformation.has("blend_names")) {
+		ERR_FAIL_COND_MSG(Variant(p_deformation["blend_names"]).get_type() != Variant::PACKED_STRING_ARRAY, "Blend names must be a packed string array.");
+	}
+	if (p_deformation.has("blend_values")) {
+		ERR_FAIL_COND_MSG(Variant(p_deformation["blend_values"]).get_type() != Variant::PACKED_FLOAT32_ARRAY, "Blend values must be a packed float array.");
+	}
+	const PackedStringArray names = p_deformation.get("blend_names", PackedStringArray());
+	const PackedFloat32Array values = p_deformation.get("blend_values", PackedFloat32Array());
+	ERR_FAIL_COND_MSG(names.size() != values.size(), "Blend names and values must have equal length.");
+	for (int i = 0; i < names.size(); ++i) {
+		ERR_FAIL_COND_MSG(names[i].is_empty() || !std::isfinite(values[i]), "Invalid blend name or weight.");
+		for (int j = 0; j < i; ++j) ERR_FAIL_COND_MSG(names[i] == names[j], "Blend shape names must be unique.");
+	}
+	const Variant skin = p_deformation.get("skin", Variant());
+	ERR_FAIL_COND_MSG(skin.get_type() != Variant::NIL && skin.get_type() != Variant::OBJECT, "Deformation skin must be a Skin resource.");
+	if (skin.get_type() == Variant::OBJECT) {
+		Object *object = skin;
+		ERR_FAIL_COND_MSG(object != nullptr && Object::cast_to<Skin>(object) == nullptr, "Deformation skin must be a Skin resource.");
+	}
+	ERR_FAIL_COND_MSG(int(p_deformation.get("blend_mode", Mesh::BLEND_SHAPE_MODE_RELATIVE)) != Mesh::BLEND_SHAPE_MODE_RELATIVE, "Deformation uses relative blend shape deltas.");
+	deformation = p_deformation.duplicate();
+	_rebuild();
+}
+
+Dictionary SlabSolid::get_deformation() const {
+	return deformation.duplicate();
 }
 
 void SlabSolid::set_materials(const TypedArray<Material> &p_materials) {
@@ -565,7 +604,7 @@ int SlabSolid::make_box(const Vector3 &p_size) {
 }
 
 Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
-		const PackedVector2Array &p_uvs, const PackedInt32Array &p_material_slots) {
+		const PackedVector2Array &p_uvs, const PackedInt32Array &p_material_slots, const Dictionary &p_attributes) {
 	Dictionary out;
 	std::vector<slab::IVec3> verts;
 	verts.reserve(size_t(p_vertices.size()));
@@ -591,8 +630,15 @@ Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, con
 		out["refuse_reason"] = "malformed attributes";
 		return out;
 	}
+	std::vector<slab::SurfaceAttrs> surface;
+	String attribute_error;
+	if (!decode_slab_surface_attributes(p_attributes, p_vertices.size(), surface, attribute_error)) {
+		out["error"] = int(slab::MeshError::INVALID_SELECTION);
+		out["refuse_reason"] = attribute_error;
+		return out;
+	}
 	std::vector<slab::ops::ImportTriangleAttrs> attrs;
-	if (!p_uvs.is_empty() || !p_material_slots.is_empty()) {
+	if (!p_uvs.is_empty() || !p_material_slots.is_empty() || !p_attributes.is_empty()) {
 		attrs.resize(size_t(index_count / 3));
 		for (int64_t t = 0; t < index_count / 3; t++) {
 			if (!p_material_slots.is_empty() && p_material_slots[t] < 0) {
@@ -603,14 +649,20 @@ Dictionary SlabSolid::import_from_mesh(const PackedVector3Array &p_vertices, con
 			auto &triangle = attrs[size_t(t)];
 			triangle.material_slot = p_material_slots.is_empty() ? 0 : uint32_t(p_material_slots[t]);
 			triangle.has_uvs = !p_uvs.is_empty();
-			for (int k = 0; k < 3 && triangle.has_uvs; k++) {
+			for (int k = 0; k < 3; k++) {
 				const int64_t index = p_indices.is_empty() ? t * 3 + k : p_indices[t * 3 + k];
-				if (index < 0 || index >= p_uvs.size()) {
+				if (index < 0 || index >= p_vertices.size()) {
 					out["error"] = int(slab::MeshError::DEGENERATE_FACE);
 					out["refuse_reason"] = "malformed indices";
 					return out;
 				}
-				triangle.uvs[size_t(k)] = p_uvs[index];
+				if (triangle.has_uvs) triangle.uvs[size_t(k)] = p_uvs[index];
+				triangle.surface[size_t(k)] = surface[size_t(index)];
+				if (k > 0 && ((triangle.surface[k].flags ^ triangle.surface[0].flags) & slab::SurfaceAttrs::SKIN)) {
+					out["error"] = int(slab::MeshError::INVALID_SELECTION);
+					out["refuse_reason"] = "Skin presence must be consistent within a triangle.";
+					return out;
+				}
 			}
 		}
 	}
@@ -728,6 +780,12 @@ int SlabSolid::set_face_smooth(const PackedInt64Array &p_faces, bool p_smooth) {
 		slab::FaceAttrs attrs = live_mesh.attrs(face);
 		attrs.smooth = p_smooth;
 		edit.set_attrs(face, attrs);
+		std::vector<slab::CornerAttrs> corners;
+		live_mesh.face_corner_attrs(face, corners);
+		for (uint32_t i = 0; i < corners.size(); ++i) {
+			corners[i].surface.flags &= ~(slab::SurfaceAttrs::NORMAL | slab::SurfaceAttrs::TANGENT);
+			edit.set_corner_attrs(face, i, corners[i]);
+		}
 	}
 	return _commit(std::move(edit));
 }
@@ -767,6 +825,8 @@ Dictionary SlabSolid::unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_
 	slab::MeshEdit edit(live_mesh);
 	const slab::ops::UvUnwrapResult result = slab::ops::unwrap_uv(edit, ids, p_pixels_per_meter, p_texture_resolution);
 	if (!result.ok()) {
+		out["refuse_reason"] = String(result.refuse_reason.c_str());
+		out["pinned_conflict"] = result.pinned_conflict;
 		out["error"] = int(result.fault.code);
 		out["atlas_overflow"] = result.atlas_overflow;
 		if (result.atlas_overflow) out["suggested_texture_resolution"] = result.suggested_texture_resolution;
@@ -797,6 +857,8 @@ Dictionary SlabSolid::pack_uv(const PackedInt64Array &p_faces, int p_texture_res
 	const slab::ops::UvPackResult result = slab::ops::pack_uv(edit, ids, p_texture_resolution,
 			p_source_texture_resolution);
 	if (!result.ok()) {
+		out["refuse_reason"] = String(result.refuse_reason.c_str());
+		out["pinned_conflict"] = result.pinned_conflict;
 		out["error"] = int(result.fault.code);
 		out["atlas_overflow"] = result.atlas_overflow;
 		if (result.atlas_overflow) out["suggested_texture_resolution"] = result.suggested_texture_resolution;
@@ -981,6 +1043,21 @@ int SlabSolid::merge_faces(const PackedInt64Array &p_faces) {
 		return _reject(edit.scratch(), fault, slab::FaultElement::FACE, ids.empty() ? slab::INVALID_IDX : ids[0].slot);
 	}
 	return _commit(std::move(edit));
+}
+
+Dictionary SlabSolid::reset_uv_projection(const PackedInt64Array &p_faces, int p_axis) {
+	Dictionary out;
+	std::vector<slab::FaceId> faces;
+	if (p_axis < 0 || p_axis > 3 || !_face_ids(p_faces, faces)) {
+		out["error"] = int(slab::MeshError::INVALID_SELECTION);
+		return out;
+	}
+	slab::MeshEdit edit(live_mesh);
+	const auto result = slab::ops::reset_uv_projection(edit, faces, slab::UvAxis(p_axis));
+	out["refuse_reason"] = String(result.refuse_reason.c_str());
+	out["pinned_conflict"] = result.pinned_conflict;
+	out["error"] = result.ok() ? _commit(std::move(edit)) : int(result.fault.code);
+	return out;
 }
 
 int SlabSolid::set_face_material(const PackedInt64Array &p_faces, int p_slot) {
@@ -1492,27 +1569,43 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 
 	Ref<ArrayMesh> array_mesh;
 	array_mesh.instantiate();
+	size_t morph_count = 0;
+	for (const auto &attributes : emitted.surface) morph_count = std::max(morph_count, attributes.morphs.size());
+	const PackedStringArray shape_names = deformation.get("blend_names", PackedStringArray());
+	array_mesh->set_blend_shape_mode(Mesh::BLEND_SHAPE_MODE_RELATIVE);
+	for (size_t i = 0; i < morph_count; ++i)
+		array_mesh->add_blend_shape(i < size_t(shape_names.size()) ? shape_names[int64_t(i)] : String("Shape_") + String::num_int64(i));
 	r_surface_slots.clear();
 	if (emitted.provenance.size() > 0 && emitted.indices.size() >= 3) {
 		struct Bucket {
 			PackedVector3Array verts;
 			PackedVector3Array normals;
 			PackedVector2Array uvs;
+			PackedVector2Array uv2;
+			PackedColorArray colors;
+			PackedInt32Array bones;
+			PackedFloat32Array weights;
+			uint8_t flags = 0;
+			std::vector<PackedVector3Array> shape_positions, shape_normals;
+			std::vector<PackedFloat32Array> shape_tangents;
 			PackedFloat32Array tangents;
 			PackedInt32Array indices;
 			std::map<int32_t, int32_t> remap;
 		};
-		std::map<uint32_t, Bucket> buckets;
-		std::vector<uint32_t> order;
+		std::map<uint64_t, Bucket> buckets;
+		std::vector<uint64_t> order;
 		for (size_t t = 0; t < emitted.provenance.size(); t++) {
 			if (p_face_mask != nullptr && p_face_mask->count(slab::pack(emitted.provenance[t])) == 0) {
 				continue;
 			}
 			const uint32_t slot = t < emitted.slots.size() ? emitted.slots[t] : 0;
-			if (buckets.find(slot) == buckets.end()) {
-				order.push_back(slot);
-			}
-			Bucket &bucket = buckets[slot];
+			const bool skinned = emitted.surface[size_t(emitted.indices[t*3])].flags & slab::SurfaceAttrs::SKIN;
+			const uint64_t key = (uint64_t(slot) << 1) | uint64_t(skinned);
+			if (buckets.find(key) == buckets.end()) order.push_back(key);
+			Bucket &bucket = buckets[key];
+			bucket.shape_positions.resize(morph_count);
+			bucket.shape_normals.resize(morph_count);
+			bucket.shape_tangents.resize(morph_count);
 			for (int k = 0; k < 3; k++) {
 				const int32_t src = emitted.indices[t * 3 + size_t(k)];
 				if (bucket.remap.find(src) == bucket.remap.end()) {
@@ -1520,13 +1613,29 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 					bucket.verts.append(emitted.verts[size_t(src)]);
 					bucket.normals.append(emitted.normals[size_t(src)]);
 					bucket.uvs.append(emitted.uvs[size_t(src)]);
+					const auto &attribute = emitted.surface[size_t(src)];
+					bucket.flags |= attribute.flags;
+					bucket.uv2.append(attribute.uv2);
+					bucket.colors.append(attribute.color);
+					if (skinned) for (int influence = 0; influence < 8; ++influence) {
+						bucket.bones.append(attribute.bones[influence]);
+						bucket.weights.append(attribute.weights[influence]);
+					}
+					for (size_t shape = 0; shape < morph_count; ++shape) {
+						const slab::MorphDelta delta = shape < attribute.morphs.size() ? attribute.morphs[shape] : slab::MorphDelta{};
+						bucket.shape_positions[shape].append(delta.position);
+						bucket.shape_normals[shape].append(delta.normal);
+						for (int component = 0; component < 3; ++component) bucket.shape_tangents[shape].append(delta.tangent[component]);
+						bucket.shape_tangents[shape].append(delta.tangent_w);
+					}
 					for (size_t component = 0; component < 4; ++component) bucket.tangents.append(emitted.tangents[size_t(src) * 4 + component]);
 				}
 				bucket.indices.append(bucket.remap[src]);
 			}
 		}
-		for (uint32_t slot : order) {
-			const Bucket &bucket = buckets[slot];
+		for (uint64_t key : order) {
+			const uint32_t slot = uint32_t(key >> 1);
+			const Bucket &bucket = buckets[key];
 			Array arrays;
 			arrays.resize(Mesh::ARRAY_MAX);
 			arrays[Mesh::ARRAY_VERTEX] = bucket.verts;
@@ -1534,7 +1643,23 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 			arrays[Mesh::ARRAY_TEX_UV] = bucket.uvs;
 			arrays[Mesh::ARRAY_TANGENT] = bucket.tangents;
 			arrays[Mesh::ARRAY_INDEX] = bucket.indices;
-			array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
+			if (bucket.flags & slab::SurfaceAttrs::UV2) arrays[Mesh::ARRAY_TEX_UV2] = bucket.uv2;
+			if (bucket.flags & slab::SurfaceAttrs::COLOR) arrays[Mesh::ARRAY_COLOR] = bucket.colors;
+			uint64_t format = 0;
+			if (key & 1) {
+				arrays[Mesh::ARRAY_BONES] = bucket.bones;
+				arrays[Mesh::ARRAY_WEIGHTS] = bucket.weights;
+				format |= Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS;
+			}
+			TypedArray<Array> shapes;
+			for (size_t i = 0; i < morph_count; ++i) {
+				Array shape; shape.resize(Mesh::ARRAY_MAX);
+				shape[Mesh::ARRAY_VERTEX] = bucket.shape_positions[i];
+				shape[Mesh::ARRAY_NORMAL] = bucket.shape_normals[i];
+				shape[Mesh::ARRAY_TANGENT] = bucket.shape_tangents[i];
+				shapes.append(shape);
+			}
+			array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays, shapes, Dictionary(), format);
 			r_surface_slots.push_back(slot);
 		}
 	}
@@ -1590,6 +1715,13 @@ void SlabSolid::_assign_committed_display() {
 
 void SlabSolid::_assign_display(const Ref<ArrayMesh> &p_mesh, const std::vector<uint32_t> &p_surface_slots) {
 	mesh_instance->set_mesh(p_mesh);
+	const Ref<Skin> skin = deformation.get("skin", Variant());
+	mesh_instance->set_skin(skin);
+	const NodePath path = deformation.get("skeleton", NodePath());
+	mesh_instance->set_skeleton_path(path.is_empty() || path.is_absolute() ? path : NodePath(String("../") + String(path)));
+	const PackedFloat32Array values = deformation.get("blend_values", PackedFloat32Array());
+	for (int i = 0; i < values.size() && i < p_mesh->get_blend_shape_count(); ++i)
+		mesh_instance->set_blend_shape_value(i, values[i]);
 	for (int i = 0; i < int(p_surface_slots.size()); i++) {
 		const uint32_t slot = p_surface_slots[size_t(i)];
 		Ref<Material> mat;

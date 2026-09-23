@@ -12,6 +12,7 @@ struct EmitOut {
 	std::vector<godot::Vector3> normals;
 	std::vector<godot::Vector2> uvs;
 	std::vector<float> tangents;
+	std::vector<SurfaceAttrs> surface;
 	std::vector<int32_t> indices;
 	std::vector<FaceId> provenance;
 	std::vector<uint32_t> slots;

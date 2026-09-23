@@ -966,6 +966,8 @@ func _pick_ring(target: Node3D) -> String:
 func _unwrap_target(target: Node3D) -> String:
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("unwrap_uv", _selection.ids, uv_pixels_per_meter, uv_texture_resolution)
+	if bool(result.get("pinned_conflict", false)):
+		return str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
 	if bool(result.get("atlas_overflow", false)):
 		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
 		return "Unwrap atlas is too small. Lower Pixels / metre or raise Texture px to at least %d. The solid was unchanged." % suggested
@@ -988,10 +990,12 @@ func _unwrap_target(target: Node3D) -> String:
 func _pack_target(target: Node3D) -> String:
 	for face in _selection.ids:
 		var attrs: Dictionary = target.call("face_uv", face)
-		if not bool(attrs.get("unwrapped", false)):
+		if not bool(attrs.get("unwrapped", false)) and not bool(attrs.get("explicit", false)):
 			return "Pack needs unwrapped islands. Unwrap first. The solid was unchanged."
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, 0)
+	if bool(result.get("pinned_conflict", false)):
+		return str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
 	if bool(result.get("atlas_overflow", false)):
 		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
 		return "Pack refused: islands exceed atlas. Increase Texture px to at least %d, or scale down Placement. The solid was unchanged." % suggested

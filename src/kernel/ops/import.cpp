@@ -296,7 +296,16 @@ ImportResult import_from_triangles(const std::vector<IVec3> &p_verts, const std:
 	// assemble allocates one face per loop in order; the exact count was checked above.
 	std::vector<FaceId> faces;
 	edit.scratch().all_faces(faces);
-	for (size_t i = 0; i < attrs.size(); i++) edit.set_attrs(faces[i], attrs[i]);
+	for (size_t i = 0; i < attrs.size(); i++) {
+		edit.set_attrs(faces[i], attrs[i]);
+		if (p_attrs.empty()) continue;
+		for (uint32_t k = 0; k < 3; ++k) {
+			CornerAttrs corner;
+			corner.surface = p_attrs[i].surface[k];
+			if (!valid_surface_attrs(corner.surface)) return _refuse("malformed surface attributes", MeshError::INVALID_SELECTION);
+			edit.set_corner_attrs(faces[i], k, corner);
+		}
+	}
 
 	const MeshFault checked = validate(edit.scratch());
 	if (checked.code == MeshError::INVERTED_VOLUME) {

@@ -9,7 +9,7 @@ namespace slab {
 namespace {
 
 constexpr uint32_t MAGIC = 0x31424C53u;
-constexpr uint32_t VERSION = 5;
+constexpr uint32_t VERSION = 6;
 constexpr uint32_t VERSION_SLOT_U8 = 1;
 
 MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
@@ -114,7 +114,10 @@ MeshFault read_free_list(Reader &r_in, uint32_t p_count, std::vector<uint32_t> &
 std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 	std::vector<uint8_t> out;
 	write_u32(out, MAGIC);
-	write_u32(out, VERSION);
+	bool extended = false;
+	for (const HalfEdge &he : p_mesh.half_edges)
+		extended |= he.corner.surface.flags != 0 || !he.corner.surface.morphs.empty();
+	write_u32(out, extended ? VERSION : 5);
 	write_u32(out, uint32_t(p_mesh.vertices.size()));
 	write_u32(out, uint32_t(p_mesh.half_edges.size()));
 	write_u32(out, uint32_t(p_mesh.faces.size()));
@@ -169,6 +172,27 @@ std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 		write_f32(out, he.corner.uv.x);
 		write_f32(out, he.corner.uv.y);
 	}
+	if (extended) {
+		for (const HalfEdge &he : p_mesh.half_edges) {
+			const SurfaceAttrs &a = he.corner.surface;
+			write_u8(out, a.flags);
+			if (a.flags & SurfaceAttrs::UV2) for (int k = 0; k < 2; ++k) write_f32(out, a.uv2[k]);
+			if (a.flags & SurfaceAttrs::COLOR) for (int k = 0; k < 4; ++k) write_f32(out, a.color[k]);
+			if (a.flags & SurfaceAttrs::NORMAL) for (int k = 0; k < 3; ++k) write_f32(out, a.normal[k]);
+			if (a.flags & SurfaceAttrs::TANGENT) for (float v : a.tangent) write_f32(out, v);
+			if (a.flags & SurfaceAttrs::SKIN) {
+				for (int32_t v : a.bones) write_i32(out, v);
+				for (float v : a.weights) write_f32(out, v);
+			}
+			write_u32(out, uint32_t(a.morphs.size()));
+			for (const MorphDelta &m : a.morphs) {
+				for (int k = 0; k < 3; ++k) write_f32(out, m.position[k]);
+				for (int k = 0; k < 3; ++k) write_f32(out, m.normal[k]);
+				for (int k = 0; k < 3; ++k) write_f32(out, m.tangent[k]);
+				write_f32(out, m.tangent_w);
+			}
+		}
+	}
 	return out;
 }
 
@@ -182,7 +206,7 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 
 	const uint32_t magic = r.u32();
 	const uint32_t version = r.u32();
-	if (!r.ok || magic != MAGIC || (version != VERSION && version != 4 && version != 3 && version != 2 && version != VERSION_SLOT_U8)) {
+	if (!r.ok || magic != MAGIC || (version != VERSION && version != 5 && version != 4 && version != 3 && version != 2 && version != VERSION_SLOT_U8)) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
 
@@ -308,6 +332,31 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 		for (const HalfEdge &he : tmp.half_edges) {
 			if (he.twin.i != INVALID_IDX && he.hard != tmp.half_edges[he.twin.i].hard)
 				return fault(MeshError::CORRUPT_DATA);
+		}
+	}
+	if (version >= 6) {
+		for (HalfEdge &he : tmp.half_edges) {
+			SurfaceAttrs &a = he.corner.surface;
+			a.flags = r.u8();
+			if (!r.ok || a.flags > 31) return fault(MeshError::CORRUPT_DATA);
+			if (a.flags & SurfaceAttrs::UV2) for (int k = 0; k < 2; ++k) a.uv2[k] = r.f32();
+			if (a.flags & SurfaceAttrs::COLOR) for (int k = 0; k < 4; ++k) a.color[k] = r.f32();
+			if (a.flags & SurfaceAttrs::NORMAL) for (int k = 0; k < 3; ++k) a.normal[k] = r.f32();
+			if (a.flags & SurfaceAttrs::TANGENT) for (float &v : a.tangent) v = r.f32();
+			if (a.flags & SurfaceAttrs::SKIN) {
+				for (int32_t &v : a.bones) v = r.i32();
+				for (float &v : a.weights) v = r.f32();
+			}
+			const uint32_t count = r.u32();
+			if (!r.ok || uint64_t(count) * 40 > uint64_t(r.end - r.p)) return fault(MeshError::CORRUPT_DATA);
+			a.morphs.resize(count);
+			for (MorphDelta &m : a.morphs) {
+				for (int k = 0; k < 3; ++k) m.position[k] = r.f32();
+				for (int k = 0; k < 3; ++k) m.normal[k] = r.f32();
+				for (int k = 0; k < 3; ++k) m.tangent[k] = r.f32();
+				m.tangent_w = r.f32();
+			}
+			if (!r.ok || !valid_surface_attrs(a)) return fault(MeshError::CORRUPT_DATA);
 		}
 	}
 	if (!r.ok || r.p != r.end) {

@@ -335,3 +335,16 @@ static func relax(selection: RefCounted, undo: Object, iterations: int = 20) -> 
 			loop[i] = nodes[_root(parents, infos[face]["ids"][i])]["uv"]
 		points[face] = loop
 	return _publish(solid, undo, _candidate(solid.get("data"), points), "Slab Relax UV")
+
+
+static func reset_projection(selection: RefCounted, undo: Object) -> String:
+	var solid: Node3D = selection.solid
+	var selected := selected_corners(solid, selection.uv_mode, selection.get_uv_selection())
+	if selected.is_empty():
+		return "Select UV elements to reset their face projections."
+	var before: PackedByteArray = solid.data
+	var result: Dictionary = solid.reset_uv_projection(PackedInt64Array(selected.keys()), 0)
+	if result.error != OK:
+		return result.get("refuse_reason", "Could not reset the selected projections.")
+	_record(solid, undo, before, solid.data, "Slab Reset UV Projection")
+	return ""
