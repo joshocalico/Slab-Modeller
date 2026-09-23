@@ -787,6 +787,39 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 	await _click(panel.find_child("AddLayer", true, false))
 	_check(paint.layer_count() == before_count + 1 and paint.active_layer_index() == before_count,
 		"Add Layer button selects its new layer")
+	var name_input: LineEdit = panel.find_child("LayerRename", true, false)
+	var scroll := name_input.get_parent()
+	while scroll != null:
+		if scroll is ScrollContainer:
+			scroll.ensure_control_visible(name_input)
+			await process_frame
+		scroll = scroll.get_parent()
+	await _wait_layout([name_input])
+	await _click_at(name_input, name_input.get_global_rect().get_center())
+	_check(name_input.has_focus(), "layer name field receives real keyboard focus")
+	name_input.select_all()
+	for character in "Editor renamed layer":
+		var key := InputEventKey.new()
+		key.unicode = character.unicode_at(0)
+		key.pressed = true
+		panel.get_viewport().push_input(key, true)
+		key = key.duplicate()
+		key.pressed = false
+		panel.get_viewport().push_input(key, true)
+	var submit := InputEventKey.new()
+	submit.keycode = KEY_ENTER
+	submit.pressed = true
+	panel.get_viewport().push_input(submit, true)
+	submit = submit.duplicate()
+	submit.pressed = false
+	panel.get_viewport().push_input(submit, true)
+	_check(paint.layer_info(paint.active_layer_index()).name == "Editor renamed layer",
+		"layer name typing commits through its real LineEdit")
+	await _click(panel.find_child("LayerDown", true, false))
+	_check(paint.active_layer_index() == before_count - 1 and paint.layer_info(paint.active_layer_index()).name == "Editor renamed layer",
+		"Lower button moves and retains the active layer")
+	await _click(panel.find_child("LayerUp", true, false))
+	_check(paint.active_layer_index() == before_count, "Raise button returns the layer above its neighbour")
 	await _click(panel.find_child("DeleteLayer", true, false))
 	_check(paint.layer_count() == before_count, "Delete Layer button removes the selected layer")
 	await _history_shortcut(panel, false)
@@ -796,7 +829,7 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 	var saved_name := solid.name
 	solid.name = "PaintEditorSmoke_%s" % Time.get_ticks_msec()
 	var paths: Array[String] = []
-	for channel_button in ["ChannelAlbedo", "ChannelRoughness"]:
+	for channel_button in ["ChannelAlbedo", "ChannelRoughness", "ChannelEmission", "ChannelMetallic", "ChannelNormal", "ChannelHeight"]:
 		await _click(panel.find_child(channel_button, true, false))
 		await _wait_layout([canvas])
 		await _click_at(canvas, canvas.global_position + canvas.image_rect().get_center())
@@ -813,5 +846,8 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 		_check(saved != null and saved.save_png_to_buffer() == expected,
 			"%s Save Paint button writes exact displayed pixels" % channel_button)
 		paths.append(path)
-	_check(paths[0] != paths[1], "Albedo and Roughness Save buttons target different PNGs")
+	var unique_paths: Dictionary = {}
+	for path in paths:
+		unique_paths[path] = true
+	_check(unique_paths.size() == 6, "all six channel Save buttons target independent PNGs")
 	solid.name = saved_name
