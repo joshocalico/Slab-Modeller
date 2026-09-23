@@ -448,6 +448,10 @@ func _handle_label_style() -> StyleBoxFlat:
 
 
 func _sync_subgizmo(override_solid: Node3D = null) -> void:
+	# Topology/material updates must not recreate element transforms over Paint.
+	if _paint != null and _paint.active:
+		_clear_subgizmo()
+		return
 	var solid: Node3D = null
 	if override_solid != null:
 		solid = override_solid

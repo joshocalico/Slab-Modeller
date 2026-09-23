@@ -683,13 +683,19 @@ func _finish() -> void:
 		return
 	var after: PackedByteArray = g.solid.get("data")
 	if g.plan == Grab.Plan.BEVEL_EDGES and after != g.before:
-		_selection.set_ids(PackedInt64Array())
+		_selection.clear_rebuilt_handles_for(g.solid)
 	if after == g.before:
 		return
 	var undo: Object = _host.undo()
 	if undo == null:
 		return
-	_record_undo(undo, g.solid, g.label, g.before, after)
+	if g.plan == Grab.Plan.BEVEL_EDGES:
+		undo.create_action(g.label, UndoRedo.MERGE_DISABLE, g.solid)
+		undo.add_do_method(self, "_restore_rebuilt_operation", g.solid, after, {"mode": g.mode, "ids": PackedInt64Array()})
+		undo.add_undo_method(self, "_restore_rebuilt_operation", g.solid, g.before, {"mode": g.mode, "ids": g.ids})
+		undo.commit_action(false)
+	else:
+		_record_undo(undo, g.solid, g.label, g.before, after)
 
 
 func _cancel() -> int:
@@ -967,14 +973,14 @@ func _confirm_operation() -> void:
 	if after_ids.is_empty(): after_ids = before_ids
 	var undo: Object = _host.undo()
 
-	if source_mode == SlabSelection.Mode.FACE and not source_face_ids.is_empty():
+	if operation_name == "Bevel":
+		var original_ids := source_face_ids if source_mode == SlabSelection.Mode.FACE else before_ids
 		if undo != null:
 			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
-			undo.add_do_method(self, "_restore_face_bevel_operation", result["solid"], result["after"], source_face_ids)
-			undo.add_undo_method(self, "_restore_face_bevel_operation", result["solid"], result["before"], source_face_ids)
+			undo.add_do_method(self, "_restore_rebuilt_operation", result["solid"], result["after"], {"mode": before_mode, "ids": PackedInt64Array()})
+			undo.add_undo_method(self, "_restore_rebuilt_operation", result["solid"], result["before"], {"mode": before_mode, "ids": original_ids})
 			undo.commit_action(false)
-		_selection.mode = SlabSelection.Mode.FACE
-		_selection.set_ids(source_face_ids)
+		_selection.clear_rebuilt_handles_for(result["solid"])
 	else:
 		if undo != null:
 			undo.create_action("Slab " + operation_name, UndoRedo.MERGE_DISABLE, result["solid"])
@@ -990,7 +996,6 @@ func _restore_operation(solid: Node3D, data: PackedByteArray, ids: PackedInt64Ar
 	_selection.set_ids(ids)
 
 
-func _restore_face_bevel_operation(solid: Node3D, data: PackedByteArray, face_ids: PackedInt64Array) -> void:
+func _restore_rebuilt_operation(solid: Node3D, data: PackedByteArray, handles: Dictionary) -> void:
 	solid.set("data", data)
-	_selection.mode = SlabSelection.Mode.FACE
-	_selection.set_ids(face_ids)
+	_selection.restore_rebuilt_ids_for(solid, handles.mode, handles.ids)

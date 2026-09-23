@@ -499,6 +499,27 @@ func set_ids(value: PackedInt64Array) -> void:
 	changed.emit()
 
 
+func clear_rebuilt_handles_for(target: Node3D) -> void:
+	# Rebuilt meshes can reuse numeric handles for different elements. An empty
+	# 3D selection does not imply that the UV or hover selection is empty.
+	if hover_solid == target:
+		set_hover(null, 0)
+	if solid != target:
+		return
+	if face_isolated:
+		exit_face_isolation()
+	set_ids(PackedInt64Array())
+	clear_uv_selection()
+
+
+func restore_rebuilt_ids_for(target: Node3D, target_mode: int, value: PackedInt64Array) -> void:
+	if solid != target:
+		return
+	clear_rebuilt_handles_for(target)
+	if mode == target_mode:
+		set_ids(value)
+
+
 func restore_ids_for(target: Node3D, target_mode: int, value: PackedInt64Array) -> void:
 	# Undoing a mesh edit must not put its handles onto another selected solid.
 	if solid == target and mode == target_mode:

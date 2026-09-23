@@ -474,6 +474,7 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 	if after == before and after_materials == before_materials:
 		_report("%s did not change the solid." % row["label"])
 		return
+	var rebuilt := method in ["boolean_with", "bevel_edges", "plane_cut"]
 	var after_ids := before_ids
 	if method in ["subdivide_faces", "merge_faces", "dissolve_edges", "collapse_vertices", "weld_vertices", "connect_edges", "connect_vertices"]:
 		var alive := SlabTopology.all_ids(target, _selection.mode)
@@ -485,7 +486,11 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 				if not before_elements.has(id): after_ids.append(id)
 	if before_ids.size() > 1 and (method == "extrude_faces" or method == "inset_faces"):
 		after_ids = PackedInt64Array(target.call("get_last_edited_faces"))
-	_selection.set_ids(after_ids)
+	if rebuilt:
+		after_ids = PackedInt64Array()
+		_selection.clear_rebuilt_handles_for(target)
+	else:
+		_selection.set_ids(after_ids)
 	if _undo != null:
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
@@ -493,7 +498,10 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		if after_materials != before_materials:
 			_undo.add_do_property(target, "materials", after_materials)
 			_undo.add_undo_property(target, "materials", before_materials)
-		if after_ids != before_ids:
+		if rebuilt:
+			_undo.add_do_method(_selection, "restore_rebuilt_ids_for", target, _selection.mode, after_ids)
+			_undo.add_undo_method(_selection, "restore_rebuilt_ids_for", target, _selection.mode, before_ids)
+		elif after_ids != before_ids:
 			_undo.add_do_method(_selection, "restore_ids_for", target, _selection.mode, after_ids)
 			_undo.add_undo_method(_selection, "restore_ids_for", target, _selection.mode, before_ids)
 		_undo.commit_action(false)

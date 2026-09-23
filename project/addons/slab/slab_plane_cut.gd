@@ -88,6 +88,8 @@ func confirm() -> void:
 		return
 	var target := solid
 	var before := _before
+	var before_ids := PackedInt64Array(_selection.ids)
+	var before_mode: int = _selection.mode
 	var err: int = target.call("plane_cut", plane_origin(), _actions.plane_normal,
 			_actions.plane_keep_positive, _actions.plane_cap_material)
 	if err != OK:
@@ -99,10 +101,13 @@ func confirm() -> void:
 		undo.create_action("Slab Plane Cut", UndoRedo.MERGE_DISABLE, target)
 		undo.add_do_property(target, "data", after)
 		undo.add_undo_property(target, "data", before)
+		undo.add_do_method(_selection, "restore_rebuilt_ids_for", target, before_mode, PackedInt64Array())
+		undo.add_undo_method(_selection, "restore_rebuilt_ids_for", target, before_mode, before_ids)
 		undo.commit_action(false)
 	cancel()
 	_selection.solid = target
-	_selection.clear_ids()
+	if before != after:
+		_selection.clear_rebuilt_handles_for(target)
 	_report("Plane Cut applied. Undo restores the original solid.")
 
 func cancel() -> void:

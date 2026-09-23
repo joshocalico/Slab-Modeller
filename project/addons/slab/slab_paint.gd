@@ -524,6 +524,7 @@ func make_unique() -> int:
 	copy.resource_local_to_scene = true
 	copy.resource_path = ""
 	copy.set_meta(OWNED_META, true)
+	_reserve_unresolved_materials(solid, mats)
 	mats.append(copy)
 	var new_slot: int = mats.size() - 1
 	solid.set("materials", mats)
@@ -544,6 +545,23 @@ func make_unique() -> int:
 	_report("Unique material %d on the selected face. Pixel paint stays on this copy." % new_slot)
 	changed.emit()
 	return new_slot
+
+
+# Out-of-range slots render with the prototype material. Reserve a null slot
+# before appending so a new material cannot accidentally bind those faces.
+static func _reserve_unresolved_materials(solid: Node3D, mats: Array) -> void:
+	var unresolved := PackedInt64Array()
+	for face in solid.call("get_faces"):
+		var slot: int = solid.call("face_uv", face).get("slot", 0)
+		if slot >= mats.size():
+			unresolved.append(face)
+	if unresolved.is_empty():
+		return
+	var fallback: int = mats.find(null)
+	if fallback < 0:
+		fallback = mats.size()
+		mats.append(null)
+	solid.call("set_face_material", unresolved, fallback)
 
 
 func assign_active_to_selection() -> void:
@@ -1674,11 +1692,7 @@ func pick_material(mat: StandardMaterial3D) -> void:
 	var mats: Array = before_mats.duplicate()
 	var slot: int = mats.find(mat)
 	if slot < 0:
-		# Slot 0 is the implicit material of every newly-created face. Keep it
-		# empty when importing the first material so only the selected faces
-		# receive the resource.
-		if mats.is_empty():
-			mats.append(null)
+		_reserve_unresolved_materials(solid, mats)
 		mats.append(mat)
 		slot = mats.size() - 1
 	solid.set("materials", mats)

@@ -68,6 +68,7 @@ func _run() -> void:
 	await _wait_layout([panel, panel.find_child("PaintInspector", true, false), panel.find_child("PaintCanvas", true, false)])
 	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
 		"uv_entry_hides_native_gizmo_via_edit_lock")
+	_check_transform_gizmos_hidden(plugin, solid, "UV entry")
 	_check(panel.current_workspace() == panel.Workspace.UV, "uv_button_enters_uv_workspace")
 	var target_label: Label = panel.get("_paint_face")
 	_check(target_label.text.begins_with("%s · 1 face · " % solid.name), "paint_target_names_solid_and_face_count")
@@ -75,6 +76,8 @@ func _run() -> void:
 	_check(uv_workspace.button_pressed and uv_workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
 		"uv_workspace_remains_highlighted_while_hovered")
 	await _click(_button_named(panel, "Make Unique"))
+	await process_frame
+	_check_transform_gizmos_hidden(plugin, solid, "Make Unique")
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
@@ -302,6 +305,8 @@ func _run() -> void:
 	_check(save.visible and actions_row.get_global_rect().grow(1.0).encloses(save.get_global_rect()), "pixel_save_fits_complete_action_wrapper")
 	_check(help.visible and actions_row.get_global_rect().grow(1.0).encloses(help.get_global_rect()), "pixel_help_fits_complete_action_wrapper")
 	await _click(_button_named(panel, "Make Unique"))
+	await process_frame
+	_check_transform_gizmos_hidden(plugin, solid, "Make Unique")
 	var resize_material: StandardMaterial3D = paint.material()
 	var resize_before_data: PackedByteArray = solid.get("data")
 	var resize_before_size: Vector2i = paint.image().get_size()
@@ -707,6 +712,16 @@ func _click(button: Button) -> void:
 		button.pressed.disconnect(pressed)
 	if hits["n"] == 0 and not already_latched:
 		_fail("Viewport click did not fire pressed on %s; hover=%s rect=%s" % [button.text, hovered, button.get_global_rect()])
+
+
+func _check_transform_gizmos_hidden(plugin: Node, solid: Node3D, context: String) -> void:
+	var no_selected_subgizmos := true
+	for gizmo in solid.get_gizmos():
+		if not gizmo.get_subgizmo_selection().is_empty():
+			no_selected_subgizmos = false
+	_check(solid.get_meta("_edit_lock_", false) and no_selected_subgizmos
+		and plugin.get("_subgizmo_solid") == null,
+		"%s keeps native and Slab element transform gizmos hidden in UV/Paint" % context)
 
 
 func _check(ok: bool, label: String) -> void:
