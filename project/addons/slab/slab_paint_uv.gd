@@ -1,7 +1,7 @@
 @tool
 extends RefCounted
 
-# Matches src/kernel/emit.cpp apply_uv / project_uv / dominant_axis.
+# Effective UV corners come from the same native mapping used by the emitter.
 
 const AXIS_AUTO := 0
 const AXIS_X := 1
@@ -64,35 +64,43 @@ static func resolved_axis(solid: Node3D, face: int) -> int:
 
 
 static func point_uv(solid: Node3D, face: int, local_point: Vector3) -> Vector2:
-	var attrs: Dictionary = attrs_of(solid, face)
-	if bool(attrs.get("unwrapped", false)):
-		var u: Vector3 = attrs["u"]
-		var v: Vector3 = attrs["v"]
-		var origin: Vector2 = attrs["origin"]
-		var center: Vector3 = solid.face_centroid(face)
-		return apply_projected_uv(Vector2(local_point.dot(u), local_point.dot(v)) + origin,
-			Vector2(center.dot(u), center.dot(v)) + origin,
-			attrs.get("scale", Vector2.ONE), attrs.get("offset", Vector2.ZERO),
-			float(attrs.get("rotation", 0.0)))
-	var axis: int = resolved_axis(solid, face)
-	var centroid: Vector2 = project_uv(solid.face_centroid(face), axis)
-	return apply_uv(
-		local_point,
-		centroid,
-		attrs.get("scale", Vector2.ONE),
-		attrs.get("offset", Vector2.ZERO),
-		float(attrs.get("rotation", 0.0)),
-		axis
-	)
+	return solid.face_uv_at_point(face, local_point)
 
 
 static func face_uvs(solid: Node3D, face: int) -> PackedVector2Array:
-	var out := PackedVector2Array()
+	return attrs_of(solid, face).get("points", PackedVector2Array())
+
+
+static func island_faces(solid: Node3D, seeds: PackedInt64Array) -> PackedInt64Array:
+	var result := PackedInt64Array()
 	if solid == null:
-		return out
-	for corner in solid.face_corners(face):
-		out.append(point_uv(solid, face, corner))
-	return out
+		return result
+	var seams: PackedInt64Array = solid.get_uv_seams()
+	var visited := {}
+	var pending: Array[int] = []
+	for seed in seeds:
+		if solid.is_alive(seed):
+			pending.append(seed)
+	while not pending.is_empty():
+		var face: int = pending.pop_back()
+		if visited.has(face):
+			continue
+		visited[face] = true
+		result.append(face)
+		for edge in solid.face_edges(face):
+			if seams.has(edge):
+				continue
+			var neighbours: PackedInt64Array = solid.edge_faces(edge)
+			for other in neighbours:
+				if other == face or visited.has(other):
+					continue
+				var endpoints: PackedVector3Array = solid.edge_endpoints(edge)
+				var continuous := endpoints.size() == 2
+				for endpoint in endpoints:
+					continuous = continuous and point_uv(solid, face, endpoint).distance_to(point_uv(solid, other, endpoint)) <= 0.00001
+				if continuous:
+					pending.append(other)
+	return result
 
 
 static func wrap01(value: float) -> float:

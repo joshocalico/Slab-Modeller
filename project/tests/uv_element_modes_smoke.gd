@@ -51,21 +51,20 @@ func case_uv_selection_toggle_works() -> void:
 
 
 func case_uv_related_3d_faces_returns_correct_faces() -> void:
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	solid.make_box(Vector3(2, 2, 2))
+	var face: int = solid.get_faces()[0]
 	var selection := SlabSelection.new()
-	selection.set_uv_mode(SlabSelection.UVMode.UV_FACE)
-	selection.set_uv_selection(PackedInt64Array([10, 20, 30]))
-	var faces := selection.uv_related_3d_faces()
-	expect(faces == PackedInt64Array([10, 20, 30]), "UV face mode returns face IDs directly")
-	selection.set_uv_mode(SlabSelection.UVMode.UV_VERT)
-	var vert_id := (15 << 16) | 2
-	selection.set_uv_selection(PackedInt64Array([vert_id]))
-	faces = selection.uv_related_3d_faces()
-	expect(faces.size() == 1 and faces[0] == 15, "UV vert mode extracts face from encoded ID")
-	selection.set_uv_mode(SlabSelection.UVMode.UV_EDGE)
-	var edge_id := (25 << 16) | 1
-	selection.set_uv_selection(PackedInt64Array([edge_id]))
-	faces = selection.uv_related_3d_faces()
-	expect(faces.size() == 1 and faces[0] == 25, "UV edge mode extracts face from encoded ID")
+	selection.solid = solid
+	selection.set_uv_selection(PackedInt64Array([face]))
+	expect(selection.uv_related_3d_faces() == PackedInt64Array([face]), "UV faces resolve directly")
+	for mode in [SlabSelection.UVMode.UV_VERT, SlabSelection.UVMode.UV_EDGE]:
+		selection.set_uv_mode(mode)
+		selection.set_uv_selection(PackedInt64Array([solid.face_uv(face)["ids"][2]]))
+		expect(selection.uv_related_3d_faces() == PackedInt64Array([face]), "native corner resolves its current face")
+		selection.set_uv_selection(PackedInt64Array([-1]))
+		expect(selection.uv_related_3d_faces().is_empty(), "stale corner is omitted")
+	solid.free()
 
 
 func case_uv_mode_strip_creates_three_buttons() -> void:
@@ -134,14 +133,19 @@ func case_uv_mode_strip_visible_only_in_uv_workspace() -> void:
 
 
 func case_uv_pick_encoding_roundtrips() -> void:
-	var vert_id := SlabUVPick._encode_uv_vert(1234, 3)
-	var vert_decoded := SlabUVPick._decode_uv_vert(vert_id)
-	expect(vert_decoded["face"] == 1234, "vert decode extracts face")
-	expect(vert_decoded["corner"] == 3, "vert decode extracts corner")
-	var edge_id := SlabUVPick._encode_uv_edge(5678, 2)
-	var edge_decoded := SlabUVPick._decode_uv_edge(edge_id)
-	expect(edge_decoded["face"] == 5678, "edge decode extracts face")
-	expect(edge_decoded["edge_index"] == 2, "edge decode extracts edge_index")
+	var solid: Node3D = ClassDB.instantiate(SlabSelection.SOLID_CLASS)
+	solid.make_box(Vector3.ONE)
+	var face: int = solid.get_faces()[0]
+	var vert_id := SlabUVPick._encode_uv_vert(solid, face, 3)
+	var vert_decoded := SlabUVPick._decode_uv_vert(solid, vert_id)
+	expect(vert_decoded["face"] == face, "corner handle resolves exact face handle")
+	expect(vert_decoded["corner"] == 3, "corner handle resolves loop index")
+	var edge_id := SlabUVPick._encode_uv_edge(solid, face, 2)
+	var edge_decoded := SlabUVPick._decode_uv_edge(solid, edge_id)
+	expect(edge_decoded["face"] == face, "UV edge resolves owning face")
+	expect(edge_decoded["edge_index"] == 2, "UV edge resolves directed corner")
+	expect(SlabUVPick._decode_uv_vert(solid, -1).is_empty(), "stale corner handle is refused")
+	solid.free()
 
 
 func case_uv_pick_face_detects_point_in_polygon() -> void:

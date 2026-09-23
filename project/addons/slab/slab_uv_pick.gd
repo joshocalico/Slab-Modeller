@@ -41,7 +41,7 @@ static func _pick_uv_vert(solid: Node3D, faces: PackedInt64Array, canvas_pos: Ve
 					"face": face,
 					"corner": i,
 					"uv": uv,
-					"id": _encode_uv_vert(face, i),
+					"id": _encode_uv_vert(solid, face, i),
 				}
 		vert_index += uvs.size()
 	
@@ -71,7 +71,7 @@ static func _pick_uv_edge(solid: Node3D, faces: PackedInt64Array, canvas_pos: Ve
 					"edge_index": i,
 					"uv_a": uv_a,
 					"uv_b": uv_b,
-					"id": _encode_uv_edge(face, i),
+					"id": _encode_uv_edge(solid, face, i),
 				}
 	
 	return best
@@ -86,12 +86,11 @@ static func _pick_uv_face(solid: Node3D, faces: PackedInt64Array, canvas_pos: Ve
 		var canvas_poly := PackedVector2Array()
 		for uv in uvs:
 			canvas_poly.append(uv_to_canvas.call(uv))
-		if Geometry2D.is_point_in_polygon(canvas_pos, canvas_poly):
-			return {
-				"type": "face",
-				"face": face,
-				"id": face,
-			}
+		var triangles: PackedInt32Array = solid.face_uv(face)["triangles"]
+		for i in range(0, triangles.size(), 3):
+			var triangle := PackedVector2Array([canvas_poly[triangles[i]], canvas_poly[triangles[i + 1]], canvas_poly[triangles[i + 2]]])
+			if Geometry2D.is_point_in_polygon(canvas_pos, triangle):
+				return {"type": "face", "face": face, "id": face}
 	return {}
 
 
@@ -104,20 +103,20 @@ static func _point_to_segment_distance(point: Vector2, a: Vector2, b: Vector2) -
 	return point.distance_to(a.lerp(b, t))
 
 
-static func _encode_uv_vert(face: int, corner: int) -> int:
-	return (face << 16) | (corner & 0xFFFF)
+static func _encode_uv_vert(solid: Node3D, face: int, corner: int) -> int:
+	return solid.face_uv(face)["ids"][corner]
 
 
-static func _decode_uv_vert(id: int) -> Dictionary:
-	return {"face": id >> 16, "corner": id & 0xFFFF}
+static func _decode_uv_vert(solid: Node3D, id: int) -> Dictionary:
+	return solid.uv_corner(id)
 
 
-static func _encode_uv_edge(face: int, edge_index: int) -> int:
-	return (face << 16) | (edge_index & 0xFFFF)
+static func _encode_uv_edge(solid: Node3D, face: int, edge_index: int) -> int:
+	return solid.face_uv(face)["ids"][edge_index]
 
 
-static func _decode_uv_edge(id: int) -> Dictionary:
-	return {"face": id >> 16, "edge_index": id & 0xFFFF}
+static func _decode_uv_edge(solid: Node3D, id: int) -> Dictionary:
+	return solid.uv_corner(id)
 
 
 static func box_select_uv_elements(solid: Node3D, faces: PackedInt64Array, uv_mode: int,
@@ -146,7 +145,7 @@ static func _box_select_uv_verts(solid: Node3D, faces: PackedInt64Array, rect: R
 			var uv := uvs[i]
 			var canvas_pt: Vector2 = uv_to_canvas.call(uv)
 			if rect.has_point(canvas_pt):
-				result.append(_encode_uv_vert(face, i))
+				result.append(_encode_uv_vert(solid, face, i))
 	
 	return result
 
@@ -165,7 +164,7 @@ static func _box_select_uv_edges(solid: Node3D, faces: PackedInt64Array, rect: R
 			var canvas_a: Vector2 = uv_to_canvas.call(uv_a)
 			var canvas_b: Vector2 = uv_to_canvas.call(uv_b)
 			if rect.has_point(canvas_a) and rect.has_point(canvas_b):
-				result.append(_encode_uv_edge(face, i))
+				result.append(_encode_uv_edge(solid, face, i))
 	
 	return result
 
@@ -198,12 +197,16 @@ static func get_related_3d_faces(solid: Node3D, uv_mode: int, uv_selection: Pack
 	match uv_mode:
 		SlabSelection.UVMode.UV_VERT:
 			for id in uv_selection:
-				var decoded := _decode_uv_vert(id)
+				var decoded := _decode_uv_vert(solid, id)
+				if decoded.is_empty():
+					continue
 				if not faces.has(decoded["face"]):
 					faces.append(decoded["face"])
 		SlabSelection.UVMode.UV_EDGE:
 			for id in uv_selection:
-				var decoded := _decode_uv_edge(id)
+				var decoded := _decode_uv_edge(solid, id)
+				if decoded.is_empty():
+					continue
 				if not faces.has(decoded["face"]):
 					faces.append(decoded["face"])
 		SlabSelection.UVMode.UV_FACE:
