@@ -1,4 +1,5 @@
 #include "primitives.hpp"
+#include "../triangulate.hpp"
 
 #include <godot_cpp/core/math.hpp>
 
@@ -124,49 +125,16 @@ static bool _loop_planar_y(const IVec3 *p_loop, int p_count, int32_t &r_y) {
 	return true;
 }
 
-static bool _ring_frame(const IVec3 &p_t, IVec3 &r_u, IVec3 &r_v) {
-	const int32_t ax = p_t.x < 0 ? -p_t.x : p_t.x;
-	const int32_t ay = p_t.y < 0 ? -p_t.y : p_t.y;
-	const int32_t az = p_t.z < 0 ? -p_t.z : p_t.z;
-	if (ax == 0 && ay == 0 && az == 0) {
-		return false;
+// Minimal rotation between consecutive tangents preserves the profile frame.
+// The antiparallel case has no unique frame and is rejected by the caller.
+static godot::Vector3 _transport(const godot::Vector3 &p_u, const godot::Vector3 &p_from, const godot::Vector3 &p_to) {
+	const godot::Vector3 axis = p_from.cross(p_to);
+	const double sine = axis.length();
+	godot::Vector3 u = p_u;
+	if (sine > 1e-7) {
+		u = u.rotated(axis / sine, std::atan2(sine, double(p_from.dot(p_to))));
 	}
-	if (ax >= ay && ax >= az) {
-		r_u = IVec3{ 0, LATTICE, 0 };
-		r_v = IVec3{ 0, 0, LATTICE };
-	} else if (ay >= ax && ay >= az) {
-		r_u = IVec3{ LATTICE, 0, 0 };
-		r_v = IVec3{ 0, 0, LATTICE };
-	} else {
-		r_u = IVec3{ LATTICE, 0, 0 };
-		r_v = IVec3{ 0, LATTICE, 0 };
-	}
-	return true;
-}
-
-static IVec3 _ring_point(const IVec3 &p_origin, const IVec3 &p_u, const IVec3 &p_v, const IVec3 &p_prof) {
-	return IVec3{
-		int32_t(int64_t(p_origin.x) + (int64_t(p_prof.x) * p_u.x + int64_t(p_prof.y) * p_v.x) / LATTICE),
-		int32_t(int64_t(p_origin.y) + (int64_t(p_prof.x) * p_u.y + int64_t(p_prof.y) * p_v.y) / LATTICE),
-		int32_t(int64_t(p_origin.z) + (int64_t(p_prof.x) * p_u.z + int64_t(p_prof.y) * p_v.z) / LATTICE)
-	};
-}
-
-static bool _path_segments_cross(const IVec3 *p_path, int p_count) {
-	if (p_count < 4) {
-		return false;
-	}
-	for (int i = 0; i < p_count - 1; i++) {
-		for (int j = i + 2; j < p_count - 1; j++) {
-			if (i == 0 && j == p_count - 2) {
-				continue;
-			}
-			if (_segments_cross(p_path[i], p_path[i + 1], p_path[j], p_path[j + 1])) {
-				return true;
-			}
-		}
-	}
-	return false;
+	return (u - p_to * u.dot(p_to)).normalized();
 }
 
 static MeshFault _bad(MeshError p_code) {
@@ -374,85 +342,99 @@ MeshFault prism(MeshEdit &p_edit, const IVec3 *p_loop, int p_count, int32_t p_he
 }
 
 MeshFault sweep(MeshEdit &p_edit, const IVec3 *p_path, int p_path_count, const IVec3 *p_profile, int p_profile_count, bool p_closed) {
-	if (p_path == nullptr || p_path_count < 2) {
+	if (p_path == nullptr || p_profile == nullptr || p_profile_count < 3) {
 		return _bad(MeshError::LOOP_TOO_SHORT);
 	}
-	if (p_profile == nullptr || p_profile_count < 3) {
-		return _bad(MeshError::LOOP_TOO_SHORT);
+	// Accept the common closed-polyline representation with a repeated endpoint.
+	if (p_closed && p_path_count > 1 && p_path[0] == p_path[p_path_count - 1]) --p_path_count;
+	if (p_path_count < (p_closed ? 3 : 2)) return _bad(MeshError::LOOP_TOO_SHORT);
+	if (_loop_self_intersects(p_profile, p_profile_count)) return _bad(MeshError::DEGENERATE_FACE);
+	__int128 profile_area = 0;
+	for (int j = 0; j < p_profile_count; ++j) {
+		const IVec3 &a = p_profile[j], &b = p_profile[(j + 1) % p_profile_count];
+		if (a.z != 0 || a == b) return _bad(MeshError::DEGENERATE_FACE);
+		profile_area += __int128(a.x) * b.y - __int128(a.y) * b.x;
 	}
-	if (_loop_self_intersects(p_profile, p_profile_count)) {
-		return _bad(MeshError::DEGENERATE_FACE);
-	}
-	if (_path_segments_cross(p_path, p_path_count)) {
-		return _bad(MeshError::DEGENERATE_FACE);
+	if (profile_area == 0) return _bad(MeshError::DEGENERATE_FACE);
+	std::vector<godot::Vector3> points, directions, tangents, frames;
+	std::vector<double> distances(p_path_count, 0.0);
+	for (int i = 0; i < p_path_count; ++i) {
+		for (int j = 0; j < i; ++j) {
+			if (p_path[i] == p_path[j]) return _bad(MeshError::DEGENERATE_FACE);
+		}
+		points.push_back(dequantize(p_path[i]));
 	}
 	const int segments = p_closed ? p_path_count : p_path_count - 1;
-	for (int i = 0; i < segments; i++) {
-		const int src = i;
-		const int dst = p_closed ? (i + 1) % p_path_count : i + 1;
-		const IVec3 t{
-			p_path[dst].x - p_path[src].x,
-			p_path[dst].y - p_path[src].y,
-			p_path[dst].z - p_path[src].z
-		};
-		IVec3 u;
-		IVec3 v;
-		if (!_ring_frame(t, u, v)) {
-			return _bad(MeshError::DEGENERATE_FACE);
+	double total_length = 0.0;
+	for (int i = 0; i < segments; ++i) {
+		const godot::Vector3 delta = points[(i + 1) % p_path_count] - points[i];
+		directions.push_back(delta.normalized());
+		total_length += delta.length();
+		if (i + 1 < p_path_count) distances[i + 1] = total_length;
+	}
+	for (int i = 0; i < p_path_count; ++i) {
+		godot::Vector3 tangent;
+		if (!p_closed && i == 0) tangent = directions.front();
+		else if (!p_closed && i == p_path_count - 1) tangent = directions.back();
+		else tangent = directions[(i + segments - 1) % segments] + directions[i % segments];
+		if (tangent.length_squared() < 1e-10) return _bad(MeshError::DEGENERATE_FACE);
+		tangents.push_back(tangent.normalized());
+	}
+	const godot::Vector3 reference = std::abs(tangents[0].y) < 0.9 ? godot::Vector3(0, 1, 0) : godot::Vector3(1, 0, 0);
+	frames.push_back(reference.cross(tangents[0]).normalized());
+	for (int i = 1; i < p_path_count; ++i) {
+		if (tangents[i - 1].dot(tangents[i]) < -0.999999) return _bad(MeshError::DEGENERATE_FACE);
+		frames.push_back(_transport(frames.back(), tangents[i - 1], tangents[i]));
+	}
+	if (p_closed) {
+		if (tangents.back().dot(tangents.front()) < -0.999999) return _bad(MeshError::DEGENERATE_FACE);
+		const godot::Vector3 returned = _transport(frames.back(), tangents.back(), tangents.front());
+		const double correction = std::atan2(double(tangents[0].dot(returned.cross(frames[0]))), double(returned.dot(frames[0])));
+		// Spread holonomy over the entire loop, including the closing segment.
+		for (int i = 1; i < p_path_count; ++i) frames[i] = frames[i].rotated(tangents[i], correction * distances[i] / total_length);
+	}
+	std::vector<std::vector<IVec3>> rings(p_path_count);
+	for (int i = 0; i < p_path_count; ++i) {
+		const godot::Vector3 v = tangents[i].cross(frames[i]);
+		for (int j = 0; j < p_profile_count; ++j) {
+			const IVec3 &profile = p_profile[profile_area > 0 ? j : p_profile_count - 1 - j];
+			const godot::Vector3 position = points[i] + frames[i] * (double(profile.x) / LATTICE) + v * (double(profile.y) / LATTICE);
+			IVec3 quantized;
+			if (!quantize(position, quantized)) return _bad(MeshError::COORD_OUT_OF_RANGE);
+			rings[i].push_back(quantized);
 		}
 	}
-	IVec3 u0;
-	IVec3 v0;
-	{
-		const int dst0 = p_closed ? 1 % p_path_count : 1;
-		const IVec3 t0{
-			p_path[dst0].x - p_path[0].x,
-			p_path[dst0].y - p_path[0].y,
-			p_path[dst0].z - p_path[0].z
-		};
-		if (!_ring_frame(t0, u0, v0)) {
-			return _bad(MeshError::DEGENERATE_FACE);
+	std::vector<std::vector<IVec3>> loops;
+	for (int i = 0; i < segments; ++i) {
+		const int next = (i + 1) % p_path_count;
+		for (int j = 0; j < p_profile_count; ++j) {
+			const int k = (j + 1) % p_profile_count;
+			// Triangles remain planar after frame transport and lattice quantization.
+			loops.push_back({ rings[i][j], rings[i][k], rings[next][k] });
+			loops.push_back({ rings[i][j], rings[next][k], rings[next][j] });
 		}
 	}
-	std::vector<IVec3> ring(p_profile_count);
-	for (int i = 0; i < p_profile_count; i++) {
-		ring[i] = _ring_point(p_path[0], u0, v0, p_profile[i]);
-	}
-	FaceId cap = p_edit.make_lamina(ring.data(), p_profile_count);
-	if (!p_edit.last_fault().ok()) {
-		return p_edit.last_fault();
-	}
-	for (int s = 0; s < segments; s++) {
-		const int src = s;
-		const int dst = p_closed ? (s + 1) % p_path_count : s + 1;
-		const IVec3 t{
-			p_path[dst].x - p_path[src].x,
-			p_path[dst].y - p_path[src].y,
-			p_path[dst].z - p_path[src].z
-		};
-		IVec3 u;
-		IVec3 v;
-		if (!_ring_frame(t, u, v)) {
-			return _bad(MeshError::DEGENERATE_FACE);
-		}
-		cap = p_edit.lift_loop(cap);
-		if (!p_edit.last_fault().ok()) {
-			return p_edit.last_fault();
-		}
-		std::vector<VertexId> corners;
-		p_edit.scratch().face_corners(cap, corners);
-		if (int(corners.size()) != p_profile_count) {
-			return _bad(MeshError::DEGENERATE_FACE);
-		}
-		for (int i = 0; i < p_profile_count; i++) {
-			const IVec3 pos = _ring_point(p_path[dst], u, v, p_profile[i]);
-			p_edit.move_vertex(corners[i], pos);
-			if (!p_edit.last_fault().ok()) {
-				return p_edit.last_fault();
-			}
+	if (!p_closed) {
+		std::vector<IVec3> profile_loop;
+		for (int j = 0; j < p_profile_count; ++j) profile_loop.push_back(p_profile[profile_area > 0 ? j : p_profile_count - 1 - j]);
+		std::vector<int32_t> caps;
+		triangulate_loop(profile_loop, caps);
+		for (size_t i = 0; i + 2 < caps.size(); i += 3) {
+			loops.push_back({ rings.front()[caps[i]], rings.front()[caps[i + 1]], rings.front()[caps[i + 2]] });
+			loops.push_back({ rings.back()[caps[i]], rings.back()[caps[i + 2]], rings.back()[caps[i + 1]] });
 		}
 	}
-	return p_edit.last_fault();
+	// Assemble shares the closing ring's vertices and half-edges. The ordinary
+	// commit validator remains responsible for self-intersections and volume.
+	const MeshFault assembled = p_edit.assemble(loops);
+	if (!assembled.ok()) return assembled;
+	// General assembly can repair collapsed boundaries. A sweep must retain
+	// every authored ring/corner and triangle, or refuse the geometry.
+	if (p_edit.scratch().vertex_count() != p_path_count * p_profile_count ||
+			p_edit.scratch().face_count() != int(loops.size())) {
+		return _bad(MeshError::DEGENERATE_FACE);
+	}
+	return assembled;
 }
 
 } // namespace ops

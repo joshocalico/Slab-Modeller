@@ -1,6 +1,7 @@
 #include "harness.hpp"
 
 #include "kernel/mesh_edit.hpp"
+#include "kernel/serialize.hpp"
 #include "kernel/ops/primitives.hpp"
 
 #include <algorithm>
@@ -361,21 +362,82 @@ SLAB_TEST(primitive_counts_clamp_to_the_published_bounds) {
 	expect_eq(arch_max.scratch().face_count(), 2 * (ops::ARCH_SEGMENTS_MAX + 1) + 2, "arch max faces");
 }
 
-SLAB_TEST(closed_sweep_does_not_yet_commit) {
-	IVec3 path[4];
-	quantize(godot::Vector3(2, 0, 0), path[0]);
-	quantize(godot::Vector3(0, 0, 2), path[1]);
-	quantize(godot::Vector3(-2, 0, 0), path[2]);
-	quantize(godot::Vector3(0, 0, -2), path[3]);
-	const IVec3 profile[4] = {
-		IVec3{ 0, 0, 0 },
-		IVec3{ LATTICE / 2, 0, 0 },
-		IVec3{ LATTICE / 2, LATTICE / 2, 0 },
-		IVec3{ 0, LATTICE / 2, 0 },
-	};
+static const IVec3 sweep_profile[] = {
+	{ -LATTICE / 4, -LATTICE / 4, 0 }, { LATTICE / 4, -LATTICE / 4, 0 },
+	{ LATTICE / 4, LATTICE / 4, 0 }, { -LATTICE / 4, LATTICE / 4, 0 },
+};
+
+SLAB_TEST(closed_sweep_shares_seam_and_has_no_caps) {
+	const IVec3 path[] = { { 0, 0, 0 }, { 4 * LATTICE, 0, 0 }, { 4 * LATTICE, 0, 4 * LATTICE }, { 0, 0, 4 * LATTICE } };
 	MeshEdit edit = MeshEdit::empty();
-	expect(ops::sweep(edit, path, 4, profile, 4, true).ok(), "closed sweep op");
+	expect(ops::sweep(edit, path, 4, sweep_profile, 4, true).ok(), "closed sweep assembles");
 	Mesh mesh;
-	const MeshFault committed = std::move(edit).commit(mesh);
-	expect(!committed.ok(), "closed sweep does not yet produce a torus");
+	expect(std::move(edit).commit(mesh).ok(), "closed sweep commits under ordinary validator");
+	expect(validate(mesh).ok(), "closed sweep validates");
+	expect_eq(mesh.vertex_count(), 16, "four shared rings, no duplicate seam vertices");
+	expect_eq(mesh.face_count(), 32, "only triangulated cyclic walls, no end caps");
+	expect_eq(euler(mesh), 0, "closed tube has torus topology");
+	expect(mesh.signed_volume() > 0, "closed sweep has outward winding");
+	Mesh loaded;
+	expect(deserialize(serialize(mesh), loaded).ok(), "closed sweep remains editable after reload");
+	expect_eq(euler(loaded), 0, "reload preserves torus topology");
+}
+
+SLAB_TEST(closed_sweep_transports_frames_on_nonplanar_loop) {
+	std::vector<IVec3> path;
+	for (int i = 0; i < 12; ++i) {
+		const double angle = double(i) * Math_TAU / 12;
+		IVec3 p;
+		quantize(godot::Vector3(4 * std::cos(angle), 0.7 * std::sin(angle * 2) + 0.2 * std::cos(angle * 3), 4 * std::sin(angle)), p);
+		path.push_back(p);
+	}
+	for (int direction = 0; direction < 2; ++direction) {
+		MeshEdit edit = MeshEdit::empty();
+		expect(ops::sweep(edit, path.data(), int(path.size()), sweep_profile, 4, true).ok(), "nonplanar sweep assembles");
+		Mesh mesh;
+		expect(std::move(edit).commit(mesh).ok(), "nonplanar sweep commits");
+		expect(validate(mesh).ok(), "transported frames do not twist faces into intersections");
+		expect_eq(mesh.vertex_count(), 48, "one shared ring per nonplanar path point");
+		expect_eq(euler(mesh), 0, "nonplanar tube is manifold torus");
+		expect(mesh.signed_volume() > 1.0, "reversed path still winds outward");
+		std::reverse(path.begin(), path.end());
+	}
+}
+
+SLAB_TEST(sweep_handles_vertical_paths_and_repeated_closure_endpoint) {
+	const IVec3 vertical[] = { { 0, 0, 0 }, { 0, 4 * LATTICE, 0 }, { 3 * LATTICE, 6 * LATTICE, LATTICE } };
+	MeshEdit open = MeshEdit::empty();
+	expect(ops::sweep(open, vertical, 3, sweep_profile, 4, false).ok(), "vertical open sweep assembles");
+	Mesh mesh;
+	expect(std::move(open).commit(mesh).ok(), "vertical open sweep caps remain planar triangles");
+	expect_eq(euler(mesh), 2, "open sweep is capped sphere topology");
+	const IVec3 closed[] = { { 0, 0, 0 }, { 4 * LATTICE, 0, 0 }, { 4 * LATTICE, 0, 4 * LATTICE }, { 0, 0, 4 * LATTICE }, { 0, 0, 0 } };
+	MeshEdit edit = MeshEdit::empty();
+	expect(ops::sweep(edit, closed, 5, sweep_profile, 4, true).ok(), "repeated endpoint is accepted once");
+	expect(std::move(edit).commit(mesh).ok(), "repeated endpoint closes manifold");
+	expect_eq(mesh.vertex_count(), 16, "endpoint normalization creates no extra ring");
+}
+
+SLAB_TEST(sweep_rejects_invalid_loops_without_replacing_live_mesh) {
+	const std::vector<std::vector<IVec3>> invalid = {
+		{ {0,0,0}, {LATTICE,0,0} },
+		{ {0,0,0}, {LATTICE,0,0}, {LATTICE,0,0}, {0,0,LATTICE} },
+		{ {0,0,0}, {LATTICE,0,0}, {-LATTICE,0,0} },
+		// A ring wider than this path folds through its neighbours.
+		{ {0,0,0}, {LATTICE/8,0,0}, {LATTICE/8,0,LATTICE/8}, {0,0,LATTICE/8} },
+		// The closing segment crosses the middle segment, in XZ rather than XY.
+		{ {-2*LATTICE,0,-2*LATTICE}, {2*LATTICE,0,-2*LATTICE}, {-2*LATTICE,0,2*LATTICE}, {2*LATTICE,0,2*LATTICE} },
+	};
+	Mesh mesh;
+	MeshEdit seed = MeshEdit::empty();
+	expect(ops::box(seed, godot::Vector3(1,1,1)).ok(), "seed valid mesh");
+	expect(std::move(seed).commit(mesh).ok(), "seed committed");
+	const auto before = serialize(mesh);
+	for (const auto &path : invalid) {
+		MeshEdit edit = MeshEdit::empty();
+		MeshFault fault = ops::sweep(edit, path.data(), int(path.size()), sweep_profile, 4, true);
+		if (fault.ok()) fault = std::move(edit).commit(mesh);
+		expect(!fault.ok(), "invalid closed path refused");
+		expect(serialize(mesh) == before, "failed sweep leaves committed mesh unchanged");
+	}
 }
