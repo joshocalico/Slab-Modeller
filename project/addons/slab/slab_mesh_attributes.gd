@@ -18,7 +18,7 @@ static func flatten(mesh: Mesh) -> Dictionary:
 		attrs[key] = PackedByteArray()
 	attrs.blend_shapes = []
 	var shape_count: int = mesh.get_blend_shape_count() if mesh is ArrayMesh else 0
-	var normalized := mesh is ArrayMesh and mesh.blend_shape_mode == Mesh.BLEND_SHAPE_MODE_NORMALIZED
+	var normalized: bool = mesh is ArrayMesh and mesh.blend_shape_mode == Mesh.BLEND_SHAPE_MODE_NORMALIZED
 	for shape in shape_count:
 		attrs.blend_shapes.append({"name": str(mesh.get_blend_shape_name(shape)), "positions": PackedVector3Array(),
 			"normals": PackedVector3Array(), "tangents": PackedFloat32Array()})
