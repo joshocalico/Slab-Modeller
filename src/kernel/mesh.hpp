@@ -44,7 +44,15 @@ struct Vertex {
 	HalfEdgeIdx out;
 };
 
+struct CornerAttrs {
+	bool uv_explicit = false;
+	bool uv_pinned = false;
+	godot::Vector2 uv;
+};
+
 struct HalfEdge {
+	CornerAttrs corner;
+	bool hard = false;
 	bool uv_seam = false;
 	uint32_t gen = 0;
 	HalfEdgeIdx next;
@@ -101,6 +109,9 @@ public:
 	int vertex_count() const;
 
 	bool alive(FaceId p_id) const;
+	bool alive(CornerId p_id) const;
+	void face_corner_ids(FaceId p_id, std::vector<CornerId> &r_out) const;
+	bool corner_location(CornerId p_id, FaceId &r_face, uint32_t &r_index) const;
 	bool alive(EdgeId p_id) const;
 	bool alive(VertexId p_id) const;
 
@@ -108,6 +119,8 @@ public:
 	IVec3 position_i(VertexId p_id) const;
 	godot::Vector3 face_normal(FaceId p_id) const;
 	FaceAttrs attrs(FaceId p_id) const;
+	void face_corner_attrs(FaceId p_id, std::vector<CornerAttrs> &r_out) const;
+	bool edge_hard(EdgeId p_id) const;
 	void face_corners(FaceId p_id, std::vector<VertexId> &r_out) const;
 	void all_faces(std::vector<FaceId> &r_out) const;
 	void all_vertices(std::vector<VertexId> &r_out) const;

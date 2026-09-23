@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <map>
 #include <unordered_map>
 #include <vector>
@@ -412,12 +413,27 @@ VertexId MeshEdit::split_edge(EdgeId p_edge, IVec3 p_pos) {
 	ha2.twin = b;
 	ha2.face = ha.face;
 	ha2.uv_seam = ha.uv_seam;
+	ha2.hard = ha.hard;
 
 	hb2.origin = m;
 	hb2.next = hb.next;
 	hb2.twin = a;
 	hb2.face = hb.face;
 	hb2.uv_seam = hb.uv_seam;
+	hb2.hard = hb.hard;
+	const godot::Vector3 start = dequantize(work.vertices[v0.i].pos);
+	const godot::Vector3 delta = dequantize(work.vertices[v1.i].pos) - start;
+	const float t = float((dequantize(p_pos) - start).dot(delta) / delta.length_squared());
+	const CornerAttrs &an = work.half_edges[ha.next.i].corner;
+	const CornerAttrs &bn = work.half_edges[hb.next.i].corner;
+	if (ha.corner.uv_explicit && an.uv_explicit) {
+		ha2.corner.uv_explicit = true;
+		ha2.corner.uv = ha.corner.uv.lerp(an.uv, t);
+	}
+	if (hb.corner.uv_explicit && bn.uv_explicit) {
+		hb2.corner.uv_explicit = true;
+		hb2.corner.uv = hb.corner.uv.lerp(bn.uv, 1.0f - t);
+	}
 
 	ha.next = a2;
 	ha.twin = b2;
@@ -484,12 +500,14 @@ EdgeId MeshEdit::split_face(FaceId p_face, VertexId p_a, VertexId p_b) {
 	hc.next = loop[i];
 	hc.twin = cut_twin;
 	hc.face = kept;
+	hc.corner = work.half_edges[loop[j].i].corner;
 
 	HalfEdge &ht = work.half_edges[cut_twin.i];
 	ht.origin = work.half_edges[loop[i].i].origin;
 	ht.next = loop[j];
 	ht.twin = cut;
 	ht.face = split;
+	ht.corner = work.half_edges[loop[i].i].corner;
 
 	work.half_edges[loop[(j + n - 1) % n].i].next = cut;
 	work.half_edges[loop[(i + n - 1) % n].i].next = cut_twin;
@@ -869,14 +887,17 @@ MeshFault MeshEdit::flip_face(FaceId p_face) {
 	}
 	const int n = int(loop.size());
 	std::vector<VertexIdx> origins(n);
+	std::vector<CornerAttrs> corners(n);
 	for (int i = 0; i < n; i++) {
 		origins[i] = work.half_edges[loop[i].i].origin;
+		corners[i] = work.half_edges[loop[i].i].corner;
 	}
 	for (int i = 0; i < n; i++) {
 		const VertexIdx origin = origins[(i + 1) % n];
 		HalfEdge &he = work.half_edges[loop[i].i];
 		he.next = loop[(i + n - 1) % n];
 		he.origin = origin;
+		he.corner = corners[(i + 1) % n];
 		work.vertices[origin.i].out = loop[i];
 	}
 	return fault;
@@ -911,6 +932,22 @@ void MeshEdit::set_uv_seam(EdgeId p_edge, bool p_marked) {
 	work.half_edges[p_edge.slot].uv_seam = p_marked;
 	const HalfEdgeIdx twin = work.half_edges[p_edge.slot].twin;
 	if (twin.i != INVALID_IDX) work.half_edges[twin.i].uv_seam = p_marked;
+}
+
+void MeshEdit::set_hard_edge(EdgeId p_edge, bool p_hard) {
+	if (!work.alive(p_edge)) { fault.code = MeshError::STALE_HANDLE; return; }
+	work.half_edges[p_edge.slot].hard = p_hard;
+	work.half_edges[work.half_edges[p_edge.slot].twin.i].hard = p_hard;
+}
+
+void MeshEdit::set_corner_attrs(FaceId p_face, uint32_t p_corner, const CornerAttrs &p_attrs) {
+	std::vector<HalfEdgeIdx> loop;
+	if (!loop_of(p_face, loop)) return;
+	if (p_corner >= loop.size() || !std::isfinite(p_attrs.uv.x) || !std::isfinite(p_attrs.uv.y)) {
+		fault.code = MeshError::INVALID_SELECTION;
+		return;
+	}
+	work.half_edges[loop[p_corner].i].corner = p_attrs;
 }
 
 void MeshEdit::set_attrs(FaceId p_face, const FaceAttrs &p_attrs) {
@@ -968,6 +1005,8 @@ MeshFault MeshEdit::append(const Mesh &p_other, bool p_flip) {
 		dst.origin = VertexIdx{ vmap[src.origin.i] };
 		dst.face = FaceIdx{ fmap[src.face.i] };
 		dst.uv_seam = src.uv_seam;
+		dst.hard = src.hard;
+		dst.corner = src.corner;
 	}
 	for (const auto &kv : vmap) {
 		const uint32_t out = p_other.vertices[kv.first].out.i;

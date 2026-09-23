@@ -9,7 +9,7 @@ namespace slab {
 namespace {
 
 constexpr uint32_t MAGIC = 0x31424C53u;
-constexpr uint32_t VERSION = 4;
+constexpr uint32_t VERSION = 5;
 constexpr uint32_t VERSION_SLOT_U8 = 1;
 
 MeshFault fault(MeshError p_code, uint32_t p_slot = INVALID_IDX) {
@@ -164,6 +164,11 @@ std::vector<uint8_t> serialize(const Mesh &p_mesh) {
 		write_f32(out, f.attrs.uv_origin.y);
 	}
 	for (const Face &f : p_mesh.faces) write_u32(out, f.attrs.uv_texture_resolution);
+	for (const HalfEdge &he : p_mesh.half_edges) {
+		write_u8(out, (he.corner.uv_explicit ? 1 : 0) | (he.corner.uv_pinned ? 2 : 0) | (he.hard ? 4 : 0));
+		write_f32(out, he.corner.uv.x);
+		write_f32(out, he.corner.uv.y);
+	}
 	return out;
 }
 
@@ -177,7 +182,7 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 
 	const uint32_t magic = r.u32();
 	const uint32_t version = r.u32();
-	if (!r.ok || magic != MAGIC || (version != VERSION && version != 3 && version != 2 && version != VERSION_SLOT_U8)) {
+	if (!r.ok || magic != MAGIC || (version != VERSION && version != 4 && version != 3 && version != 2 && version != VERSION_SLOT_U8)) {
 		return fault(MeshError::CORRUPT_DATA);
 	}
 
@@ -288,6 +293,22 @@ MeshFault deserialize(const std::vector<uint8_t> &p_bytes, Mesh &r_out) {
 	}
 	if (version >= 4) {
 		for (Face &f : tmp.faces) f.attrs.uv_texture_resolution = r.u32();
+	}
+	if (version >= 5) {
+		for (HalfEdge &he : tmp.half_edges) {
+			const uint8_t flags = r.u8();
+			he.corner.uv_explicit = (flags & 1) != 0;
+			he.corner.uv_pinned = (flags & 2) != 0;
+			he.hard = (flags & 4) != 0;
+			he.corner.uv = godot::Vector2(r.f32(), 0);
+			he.corner.uv.y = r.f32();
+			if (flags > 7 || !std::isfinite(he.corner.uv.x) || !std::isfinite(he.corner.uv.y))
+				return fault(MeshError::CORRUPT_DATA);
+		}
+		for (const HalfEdge &he : tmp.half_edges) {
+			if (he.twin.i != INVALID_IDX && he.hard != tmp.half_edges[he.twin.i].hard)
+				return fault(MeshError::CORRUPT_DATA);
+		}
 	}
 	if (!r.ok || r.p != r.end) {
 		return fault(MeshError::CORRUPT_DATA);

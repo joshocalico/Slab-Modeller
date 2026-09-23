@@ -1,6 +1,7 @@
 #include "slab_solid.hpp"
 
 #include "kernel/emit.hpp"
+#include "kernel/triangulate.hpp"
 #include "kernel/handles.hpp"
 #include "kernel/ops/bevel.hpp"
 #include "kernel/ops/boolean.hpp"
@@ -95,6 +96,13 @@ void SlabSolid::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("flip_faces", "faces"), &SlabSolid::flip_faces);
 	ClassDB::bind_method(D_METHOD("subdivide_faces", "faces"), &SlabSolid::subdivide_faces);
 	ClassDB::bind_method(D_METHOD("merge_faces", "faces"), &SlabSolid::merge_faces);
+	ClassDB::bind_method(D_METHOD("uv_corner", "corner"), &SlabSolid::uv_corner);
+	ClassDB::bind_method(D_METHOD("face_uv_at_point", "face", "point"), &SlabSolid::face_uv_at_point);
+	ClassDB::bind_method(D_METHOD("set_face_uv_points", "face", "points"), &SlabSolid::set_face_uv_points);
+	ClassDB::bind_method(D_METHOD("pin_uv_corners", "face", "corners", "pinned"), &SlabSolid::pin_uv_corners);
+	ClassDB::bind_method(D_METHOD("set_face_smooth", "faces", "smooth"), &SlabSolid::set_face_smooth);
+	ClassDB::bind_method(D_METHOD("mark_hard_edges", "edges", "hard"), &SlabSolid::mark_hard_edges);
+	ClassDB::bind_method(D_METHOD("get_hard_edges"), &SlabSolid::get_hard_edges);
 	ClassDB::bind_method(D_METHOD("set_face_uv", "faces", "scale", "offset", "rotation"), &SlabSolid::set_face_uv);
 	ClassDB::bind_method(D_METHOD("mark_uv_seams", "edges", "marked"), &SlabSolid::mark_uv_seams);
 	ClassDB::bind_method(D_METHOD("unwrap_uv", "faces", "pixels_per_meter", "texture_resolution"), &SlabSolid::unwrap_uv);
@@ -379,7 +387,54 @@ Dictionary SlabSolid::face_uv(int64_t p_face) const {
 	out["v"] = attrs.uv_v;
 	out["origin"] = attrs.uv_origin;
 	out["slot"] = int(attrs.material_slot);
+	std::vector<Vector2> points;
+	slab::face_uv_points(live_mesh, id, points);
+	PackedVector2Array uv_points;
+	for (const Vector2 &point : points) uv_points.push_back(point);
+	out["points"] = uv_points;
+	std::vector<slab::VertexId> vertices;
+	live_mesh.face_corners(id, vertices);
+	std::vector<slab::IVec3> loop;
+	for (const slab::VertexId vertex : vertices) loop.push_back(live_mesh.position_i(vertex));
+	std::vector<int32_t> tris;
+	slab::triangulate_loop(loop, tris);
+	PackedInt32Array triangles;
+	for (const int32_t index : tris) triangles.push_back(index);
+	out["triangles"] = triangles;
+	std::vector<slab::CornerId> corner_ids;
+	live_mesh.face_corner_ids(id, corner_ids);
+	PackedInt64Array ids;
+	for (const slab::CornerId corner : corner_ids) ids.push_back(slab::pack(corner));
+	out["ids"] = ids;
+	std::vector<slab::CornerAttrs> corners;
+	live_mesh.face_corner_attrs(id, corners);
+	PackedByteArray pins;
+	bool explicit_uv = false;
+	for (const slab::CornerAttrs &corner : corners) {
+		pins.push_back(corner.uv_pinned ? 1 : 0);
+		explicit_uv |= corner.uv_explicit;
+	}
+	out["pins"] = pins;
+	out["explicit"] = explicit_uv;
+	out["smooth"] = attrs.smooth;
 	return out;
+}
+
+Dictionary SlabSolid::uv_corner(int64_t p_corner) const {
+	Dictionary out;
+	slab::FaceId face;
+	uint32_t index = 0;
+	if (!live_mesh.corner_location(slab::unpack_corner(p_corner), face, index)) return out;
+	out["face"] = slab::pack(face);
+	out["corner"] = int(index);
+	out["edge_index"] = int(index);
+	return out;
+}
+
+Vector2 SlabSolid::face_uv_at_point(int64_t p_face, const Vector3 &p_point) const {
+	Vector2 uv;
+	slab::face_uv_at_point(live_mesh, slab::unpack_face(p_face), p_point, uv);
+	return uv;
 }
 
 PackedInt64Array SlabSolid::get_uv_seams() const {
@@ -627,6 +682,70 @@ int SlabSolid::set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_sca
 		return int(edit.last_fault().code);
 	}
 	return _commit(std::move(edit));
+}
+
+int SlabSolid::set_face_uv_points(int64_t p_face, const PackedVector2Array &p_points) {
+	const slab::FaceId face = slab::unpack_face(p_face);
+	if (!live_mesh.alive(face)) return int(slab::MeshError::STALE_HANDLE);
+	std::vector<slab::CornerAttrs> corners;
+	live_mesh.face_corner_attrs(face, corners);
+	if (corners.size() != size_t(p_points.size())) return int(slab::MeshError::INVALID_SELECTION);
+	slab::MeshEdit edit(live_mesh);
+	for (size_t i = 0; i < corners.size(); ++i) {
+		corners[i].uv = p_points[int64_t(i)];
+		corners[i].uv_explicit = true;
+		edit.set_corner_attrs(face, uint32_t(i), corners[i]);
+		if (!edit.last_fault().ok()) return int(edit.last_fault().code);
+	}
+	slab::FaceAttrs attrs = live_mesh.attrs(face);
+	attrs.uv_scale = Vector2(1, 1);
+	attrs.uv_offset = Vector2();
+	attrs.uv_rotation = 0;
+	edit.set_attrs(face, attrs);
+	return _commit(std::move(edit));
+}
+
+int SlabSolid::pin_uv_corners(int64_t p_face, const PackedInt32Array &p_corners, bool p_pinned) {
+	const slab::FaceId face = slab::unpack_face(p_face);
+	if (!live_mesh.alive(face)) return int(slab::MeshError::STALE_HANDLE);
+	std::vector<slab::CornerAttrs> corners;
+	live_mesh.face_corner_attrs(face, corners);
+	slab::MeshEdit edit(live_mesh);
+	for (int i = 0; i < p_corners.size(); ++i) {
+		const int corner = p_corners[i];
+		if (corner < 0 || size_t(corner) >= corners.size()) return int(slab::MeshError::INVALID_SELECTION);
+		corners[corner].uv_pinned = p_pinned;
+		edit.set_corner_attrs(face, uint32_t(corner), corners[corner]);
+	}
+	return _commit(std::move(edit));
+}
+
+int SlabSolid::set_face_smooth(const PackedInt64Array &p_faces, bool p_smooth) {
+	std::vector<slab::FaceId> faces;
+	if (!_face_ids(p_faces, faces)) return int(slab::MeshError::STALE_HANDLE);
+	slab::MeshEdit edit(live_mesh);
+	for (slab::FaceId face : faces) {
+		slab::FaceAttrs attrs = live_mesh.attrs(face);
+		attrs.smooth = p_smooth;
+		edit.set_attrs(face, attrs);
+	}
+	return _commit(std::move(edit));
+}
+
+int SlabSolid::mark_hard_edges(const PackedInt64Array &p_edges, bool p_hard) {
+	std::vector<slab::EdgeId> edges;
+	if (!_edge_ids(p_edges, edges)) return int(slab::MeshError::STALE_HANDLE);
+	slab::MeshEdit edit(live_mesh);
+	for (slab::EdgeId edge : edges) edit.set_hard_edge(edge, p_hard);
+	return _commit(std::move(edit));
+}
+
+PackedInt64Array SlabSolid::get_hard_edges() const {
+	std::vector<slab::EdgeId> edges;
+	live_mesh.all_edges(edges);
+	PackedInt64Array result;
+	for (slab::EdgeId edge : edges) if (live_mesh.edge_hard(edge)) result.push_back(slab::pack(edge));
+	return result;
 }
 
 int SlabSolid::mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked) {
@@ -1379,6 +1498,7 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 			PackedVector3Array verts;
 			PackedVector3Array normals;
 			PackedVector2Array uvs;
+			PackedFloat32Array tangents;
 			PackedInt32Array indices;
 			std::map<int32_t, int32_t> remap;
 		};
@@ -1400,6 +1520,7 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 					bucket.verts.append(emitted.verts[size_t(src)]);
 					bucket.normals.append(emitted.normals[size_t(src)]);
 					bucket.uvs.append(emitted.uvs[size_t(src)]);
+					for (size_t component = 0; component < 4; ++component) bucket.tangents.append(emitted.tangents[size_t(src) * 4 + component]);
 				}
 				bucket.indices.append(bucket.remap[src]);
 			}
@@ -1411,6 +1532,7 @@ Ref<ArrayMesh> SlabSolid::_build_mesh_from(const slab::Mesh &p_mesh, std::vector
 			arrays[Mesh::ARRAY_VERTEX] = bucket.verts;
 			arrays[Mesh::ARRAY_NORMAL] = bucket.normals;
 			arrays[Mesh::ARRAY_TEX_UV] = bucket.uvs;
+			arrays[Mesh::ARRAY_TANGENT] = bucket.tangents;
 			arrays[Mesh::ARRAY_INDEX] = bucket.indices;
 			array_mesh->add_surface_from_arrays(Mesh::PRIMITIVE_TRIANGLES, arrays);
 			r_surface_slots.push_back(slot);

@@ -17,6 +17,8 @@ public:
 	void move_vertex(VertexId p_v, IVec3 p_pos);
 	void set_attrs(FaceId p_face, const FaceAttrs &p_attrs);
 	void set_uv_seam(EdgeId p_edge, bool p_marked);
+	void set_hard_edge(EdgeId p_edge, bool p_hard);
+	void set_corner_attrs(FaceId p_face, uint32_t p_corner, const CornerAttrs &p_attrs);
 
 	VertexId split_edge(EdgeId p_edge, IVec3 p_pos);
 	EdgeId split_face(FaceId p_face, VertexId p_a, VertexId p_b);

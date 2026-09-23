@@ -66,6 +66,8 @@ public:
 	PackedInt64Array edge_faces(int64_t p_edge) const;
 	PackedInt64Array edge_vertices(int64_t p_edge) const;
 	Dictionary face_uv(int64_t p_face) const;
+	Dictionary uv_corner(int64_t p_corner) const;
+	Vector2 face_uv_at_point(int64_t p_face, const Vector3 &p_point) const;
 	PackedInt64Array get_uv_seams() const;
 	int face_count() const;
 	int edge_count() const;
@@ -100,6 +102,11 @@ public:
 	int subdivide_faces(const PackedInt64Array &p_faces);
 	int merge_faces(const PackedInt64Array &p_faces);
 	int set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation);
+	int set_face_uv_points(int64_t p_face, const PackedVector2Array &p_points);
+	int pin_uv_corners(int64_t p_face, const PackedInt32Array &p_corners, bool p_pinned);
+	int set_face_smooth(const PackedInt64Array &p_faces, bool p_smooth);
+	int mark_hard_edges(const PackedInt64Array &p_edges, bool p_hard);
+	PackedInt64Array get_hard_edges() const;
 	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
 	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
 	Dictionary pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution, int p_source_texture_resolution = 0);
