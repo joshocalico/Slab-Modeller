@@ -10,7 +10,7 @@ Slab is a Godot 4.7 editor plugin for modelling closed solids, editing UVs, and 
 
 ## How to use it
 
-For a prebuilt download, extract `slab-addon.zip` from a [GitHub release](https://github.com/joshocalico/slab-modeller/releases) into your Godot project's root. It contains `addons/slab/`, including Windows x64, Linux x64, and macOS Intel/Apple Silicon libraries. Restart Godot, then enable **Slab** in **Project Settings → Plugins**. Prebuilt downloads appear after the release workflow completes and the draft release is published.
+For a prebuilt installation, follow [Install Slab](website/app/guide/install/page.mdx) to download `slab-addon.zip`, extract it beside `project.godot`, restart Godot, and enable Slab under **Project Settings → Plugins**. The ZIP includes editor and export libraries for Windows x64, Linux x64, and macOS Intel/Apple Silicon. Until a release is published, download the `slab-addon` artifact from a successful **Build drop-in addon** run in [GitHub Actions](https://github.com/joshocalico/slab-modeller/actions).
 
 For a source checkout, [build the extension](#build) before opening `project/` in Godot 4.7. The Slab bottom panel contains the modelling tools. The full manual is the Next.js app in `website/`:
 
