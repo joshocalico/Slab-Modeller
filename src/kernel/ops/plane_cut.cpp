@@ -1,6 +1,7 @@
 #include "plane_cut.hpp"
 
 #include "boolean.hpp"
+#include "../rebuild_attributes.hpp"
 
 #include <algorithm>
 #include <map>
@@ -198,6 +199,7 @@ MeshFault plane_cut(MeshEdit &p_edit, const IVec3 &p_origin, const IVec3 &p_norm
 	if (!any_removed) return p_edit.last_fault();
 	if (!any_kept || !any_strictly_kept) return bad(MeshError::RESULT_EMPTY);
 
+	const Mesh original = p_edit.scratch();
 	std::vector<SourceFace> sources;
 	std::vector<FaceId> source_ids;
 	p_edit.scratch().all_faces(source_ids);
@@ -225,6 +227,7 @@ MeshFault plane_cut(MeshEdit &p_edit, const IVec3 &p_origin, const IVec3 &p_norm
 		if (std::move(direct).commit(direct_mesh).ok()) {
 			p_edit.replace_with(direct_mesh);
 			restore_attributes(p_edit, sources, p_cap_attrs);
+			if (has_authored_attributes(original)) transfer_rebuilt_attributes(p_edit, {&original}, false);
 			return p_edit.last_fault();
 		}
 	}
@@ -256,6 +259,7 @@ MeshFault plane_cut(MeshEdit &p_edit, const IVec3 &p_origin, const IVec3 &p_norm
 	if (!result.ok()) return result;
 
 	restore_attributes(p_edit, sources, p_cap_attrs);
+	if (has_authored_attributes(original)) transfer_rebuilt_attributes(p_edit, {&original}, false);
 	return p_edit.last_fault();
 }
 

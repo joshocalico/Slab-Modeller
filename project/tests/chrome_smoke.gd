@@ -863,6 +863,27 @@ func case_plugin_forwards_input_without_a_selection() -> void:
 		"shortcut scope does not treat the shared main-screen container as the active screen")
 
 
+func case_sweep_path_handles_take_priority_over_solid_picking() -> void:
+	var sweep: Node3D = SlabPlugin.SlabSweepScript.new()
+	var solid: Node3D = ClassDB.instantiate("SlabSolid")
+	var ordinary := Node3D.new()
+	expect(not SlabPlugin.selection_uses_native_path_handles([]),
+		"empty selection retains Slab viewport picking")
+	expect(not SlabPlugin.selection_uses_native_path_handles([solid]),
+		"solid selection retains Slab modelling gestures")
+	expect(not SlabPlugin.selection_uses_native_path_handles([ordinary]),
+		"ordinary nodes do not activate sweep input routing")
+	expect(SlabPlugin.selection_uses_native_path_handles([sweep]),
+		"selected sweep leaves point dragging and Escape to its native gizmo")
+	expect(SlabPlugin.selection_uses_native_path_handles([solid, sweep]),
+		"mixed selection keeps native handles instead of editing only its solid subset")
+	expect(SlabPlugin.selection_uses_native_path_handles([sweep, solid]),
+		"native handle routing does not depend on selection order")
+	sweep.free()
+	solid.free()
+	ordinary.free()
+
+
 func case_shortcut_gate_queries_the_viewport_and_stays_in_3d() -> void:
 	var line := LineEdit.new()
 	root.add_child(line)

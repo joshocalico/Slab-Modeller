@@ -1,12 +1,15 @@
 @tool
 extends RefCounted
 
+const GltfExchange := preload("res://addons/slab/slab_gltf_exchange.gd")
 const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 
 
 static func load_from_file(path: String) -> Dictionary:
 	var ext: String = path.get_extension().to_lower()
 	match ext:
+		"glb", "gltf":
+			return GltfExchange.load_scene(path)
 		"obj":
 			return _load_obj(path)
 		"stl":
@@ -415,3 +418,11 @@ static func _fill_missing_normals(vertices: PackedVector3Array, indices: PackedI
 				computed = _compute_normals(vertices, indices)
 			normals[i] = computed[i]
 	return normals
+
+
+# Generated glTF scenes own descendants internally. Reassign every descendant
+# after insertion so the edited scene serializes the whole hierarchy on save.
+static func set_scene_owner(imported: Node, scene_root: Node) -> void:
+	imported.owner = scene_root
+	for child in imported.get_children():
+		set_scene_owner(child, scene_root)

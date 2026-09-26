@@ -26,13 +26,13 @@ The clip shows **Import Mesh…**, the External badge, topology staying off, and
 1. Keep the External mesh selected in Object mode (one External only).
 2. Click **Promote to Slab Solid**. It sits with Import and Export.
 
-On success the badge clears and topology modes unlock. The solid retains the mesh's supported UVs, material slots, active material overrides, transform, visibility, and child nodes. Undo restores the External mesh and its children.
+On success the badge clears and topology modes unlock. The solid retains the mesh's UVs, secondary UVs, vertex colors, skin weights, blend shapes, material slots, active material overrides, transform, visibility, and child nodes. Undo restores the External mesh and its children.
 
 ## Refuse
 
 Promote does not repair the mesh. If the soup is empty, open, or non-manifold, the External mesh stays as it is. Status names the reason, for example `Could not promote: mesh is open. External mesh unchanged.` There is no partial convert.
 
-Promote also refuses data it cannot preserve, including blend shapes, skin weights, secondary UVs, vertex colors, and material overlays. A direct child named `Mesh` or `__body` conflicts with the generated solid children and also prevents conversion.
+Promote refuses malformed attribute arrays and material overlays. A direct child named `Mesh` or `__body` conflicts with the generated solid children and also prevents conversion.
 
 Fix the mesh in the source file, or keep it as External and export it as a triangle mesh.
 
@@ -41,3 +41,14 @@ See [Closed solids](/guide/explanation/closed-solids) for why Slab refuses an op
 ## Import an OBJ with materials
 
 Keep the OBJ, its MTL library, and its albedo textures together. Import reads material groups, diffuse color, transparency, and plain albedo texture paths. A missing MTL library, undefined material, missing texture, or unsupported texture option is refused with a reason. STL imports geometry without materials.
+
+
+## Import a glTF scene
+
+1. Open the destination Godot scene.
+2. Click **Import Mesh…** and choose a `.glb` or `.gltf` file.
+3. Expand the imported hierarchy in the scene tree.
+4. Select a mesh within that hierarchy before using **Promote to Slab Solid**.
+5. Save the scene.
+
+Keep a `.gltf` file beside its referenced buffers and textures before import. The imported hierarchy retains materials, skeleton bindings, and blend shapes. Undo removes the whole import; Redo restores it.

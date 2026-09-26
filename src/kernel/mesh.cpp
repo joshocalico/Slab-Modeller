@@ -89,6 +89,36 @@ int Mesh::edge_count() const {
 	return n;
 }
 
+bool Mesh::alive(CornerId p_id) const {
+	return p_id.gen != 0 && _he_live(p_id.slot) && half_edges[p_id.slot].gen == p_id.gen
+		&& _face_live(half_edges[p_id.slot].face.i);
+}
+
+void Mesh::face_corner_ids(FaceId p_id, std::vector<CornerId> &r_out) const {
+	r_out.clear();
+	if (!alive(p_id)) return;
+	const uint32_t start = faces[p_id.slot].he.i;
+	uint32_t he = start;
+	do {
+		if (!_he_live(he)) { r_out.clear(); return; }
+		r_out.push_back({he, half_edges[he].gen});
+		he = half_edges[he].next.i;
+	} while (he != start && r_out.size() <= half_edges.size());
+}
+
+bool Mesh::corner_location(CornerId p_id, FaceId &r_face, uint32_t &r_index) const {
+	if (!alive(p_id)) return false;
+	const uint32_t face = half_edges[p_id.slot].face.i;
+	r_face = {face, faces[face].gen};
+	std::vector<CornerId> corners;
+	face_corner_ids(r_face, corners);
+	for (size_t i = 0; i < corners.size(); ++i) if (corners[i].slot == p_id.slot) {
+		r_index = uint32_t(i);
+		return true;
+	}
+	return false;
+}
+
 bool Mesh::alive(FaceId p_id) const {
 	return p_id.gen != 0 && p_id.slot < faces.size() && faces[p_id.slot].gen == p_id.gen && _face_live(p_id.slot);
 }
@@ -138,6 +168,22 @@ FaceAttrs Mesh::attrs(FaceId p_id) const {
 		return FaceAttrs{};
 	}
 	return faces[p_id.slot].attrs;
+}
+
+void Mesh::face_corner_attrs(FaceId p_id, std::vector<CornerAttrs> &r_out) const {
+	r_out.clear();
+	if (!alive(p_id)) return;
+	const uint32_t start = faces[p_id.slot].he.i;
+	uint32_t he = start;
+	do {
+		if (!_he_live(he)) { r_out.clear(); return; }
+		r_out.push_back(half_edges[he].corner);
+		he = half_edges[he].next.i;
+	} while (he != start && r_out.size() <= half_edges.size());
+}
+
+bool Mesh::edge_hard(EdgeId p_id) const {
+	return alive(p_id) && half_edges[p_id.slot].hard;
 }
 
 godot::Vector3 Mesh::face_normal(FaceId p_id) const {

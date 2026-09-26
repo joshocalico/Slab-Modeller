@@ -39,6 +39,7 @@ func _boot() -> void:
 	_check_wrap_outline_tiles()
 	_check_unique_paint_undo_save()
 	_check_unique_copies_full_material_and_needs_a_face()
+	_check_unique_preserves_unassigned_faces()
 	_check_undo_after_switching_slots()
 	_check_engine_undo_switch_save_escape()
 	_check_dark_texture_preserved()
@@ -740,6 +741,66 @@ func _check_unique_copies_full_material_and_needs_a_face() -> void:
 	_expect(not paint.begin_stroke() or paint.is_owned(paint.material()), "pixel paint stays on an owned copy")
 	paint.exit()
 	solid.free()
+
+
+func _check_unique_preserves_unassigned_faces() -> void:
+	for unresolved_slot in [0, 65535]:
+		var solid: Node3D = ClassDB.instantiate("SlabSolid")
+		root.add_child(solid)
+		solid.call("make_box", Vector3(2, 2, 2))
+		var orange := Color(0.9, 0.35, 0.08)
+		solid.set("prototype_color", orange)
+		var faces: PackedInt64Array = solid.call("get_faces")
+		solid.call("set_face_material", faces, unresolved_slot)
+		var before: PackedByteArray = solid.get("data")
+		var selection := SlabSelection.new()
+		selection.set_objects([solid])
+		selection.mode = SlabSelection.Mode.FACE
+		selection.set_ids(PackedInt64Array([faces[0]]))
+		var actions := SlabActions.new(selection)
+		var undo := _new_test_undo()
+		var paint := SlabPaint.new()
+		paint.bind(selection, actions, undo)
+		paint.enter()
+		paint.tool = SlabPaint.Tool.PIXEL
+		for repeat in 2:
+			var unique: int = paint.make_unique()
+			var mats: Array = solid.get("materials")
+			_expect(unique == repeat + 1 and mats.size() == repeat + 2,
+				"Make Unique reserves one fallback without allocating sparse material slots")
+			_expect(int(solid.call("face_uv", faces[0]).slot) == unique,
+				"Make Unique changes the selected face binding")
+			for face in faces:
+				if face == faces[0]:
+					continue
+				var slot: int = solid.call("face_uv", face).slot
+				_expect(slot != unique and mats[slot] == null,
+					"unselected face keeps prototype fallback after repeated Make Unique")
+			var bindings: Array = solid.call("get_mesh_materials")
+			var mesh: ArrayMesh = solid.call("build_mesh")
+			var prototype_indices := 0
+			for surface in bindings.size():
+				if bindings[surface] is StandardMaterial3D and bindings[surface].albedo_color.is_equal_approx(orange):
+					prototype_indices += mesh.surface_get_array_index_len(surface)
+			_expect(prototype_indices == 30, "all five unselected faces still render in prototype orange")
+		undo.undo()
+		undo.undo()
+		_expect(solid.get("data") == before and (solid.get("materials") as Array).is_empty(),
+			"Make Unique Undo restores exact unresolved slots and empty materials")
+		var chosen := StandardMaterial3D.new()
+		chosen.albedo_color = Color.BLUE
+		paint.pick_material(chosen)
+		var picked_mats: Array = solid.get("materials")
+		_expect(picked_mats.size() == 2 and picked_mats[0] == null and picked_mats[1] == chosen,
+			"Pick Material reserves one fallback for unresolved slots")
+		for face in faces:
+			_expect(int(solid.call("face_uv", face).slot) == (1 if face == faces[0] else 0),
+				"Pick Material changes only the selected face appearance")
+		undo.undo()
+		_expect(solid.get("data") == before and (solid.get("materials") as Array).is_empty(),
+			"Pick Material Undo restores exact unresolved slots and empty materials")
+		paint.exit()
+		solid.free()
 
 
 func _check_undo_after_switching_slots() -> void:

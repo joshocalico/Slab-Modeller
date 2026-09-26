@@ -4,6 +4,7 @@ extends Control
 const SlabPaintUv := preload("res://addons/slab/slab_paint_uv.gd")
 const SlabMetrics := preload("res://addons/slab/slab_metrics.gd")
 const SlabUVPick := preload("res://addons/slab/slab_uv_pick.gd")
+const SlabUVEdit := preload("res://addons/slab/slab_uv_edit.gd")
 const SlabSelection := preload("res://addons/slab/slab_selection.gd")
 
 signal painted_pixel(pixel: Vector2)
@@ -20,10 +21,14 @@ const UV_SCALE_MIN := 1.0e-9
 const UV_SCALE_MAX := 1.0e12
 const UV_MODIFIER_DRAG_PIXELS := 180.0
 
+var uv_edit := SlabUVEdit.new()
+var _uv_undo: Object
 var _paint: RefCounted
 var _metrics: RefCounted
 var _selection: RefCounted
 var _brush := Vector2(-1, -1)
+var _mask_source: Image
+var _mask_shade: ImageTexture
 var _uv_element_mode: bool = false
 var _dragging := false
 var _panning := false
@@ -43,7 +48,10 @@ var show_pixel_uv: bool = false:
 		queue_redraw()
 
 
-func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted = null) -> void:
+func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted = null, undo: Object = null) -> void:
+	_uv_undo = undo
+	if not uv_edit.changed.is_connected(queue_redraw):
+		uv_edit.changed.connect(queue_redraw)
 	_paint = paint
 	_metrics = metrics if metrics != null else SlabMetrics.at_scale(1.0)
 	_selection = selection
@@ -54,6 +62,8 @@ func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted 
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	custom_minimum_size = Vector2(_metrics.px(160.0), _metrics.px(100.0))
 	focus_mode = Control.FOCUS_CLICK
+	if not mouse_exited.is_connected(_mouse_left_canvas):
+		mouse_exited.connect(_mouse_left_canvas)
 	if _paint != null and _paint.has_signal("image_changed"):
 		if not _paint.image_changed.is_connected(queue_redraw):
 			_paint.image_changed.connect(queue_redraw)
@@ -68,6 +78,22 @@ func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted 
 			_selection.uv_selection_changed.connect(queue_redraw)
 
 
+func _process(delta: float) -> void:
+	# One clock services canvas and viewport strokes while the Paint workspace is visible.
+	if _paint != null and _paint.active and _paint.is_pixel() and is_visible_in_tree():
+		if _panning:
+			_paint.suspend_airbrush()
+		else:
+			_paint.tick_airbrush(delta)
+
+
+func _mouse_left_canvas() -> void:
+	_brush = Vector2(-1, -1)
+	if _dragging and _paint != null and _paint.is_pixel():
+		_paint.suspend_airbrush()
+	queue_redraw()
+
+
 func bind_selection(selection: RefCounted) -> void:
 	_selection = selection
 	if _selection != null and _selection.has_signal("uv_mode_changed"):
@@ -79,6 +105,8 @@ func bind_selection(selection: RefCounted) -> void:
 
 
 func set_uv_element_mode(enabled: bool) -> void:
+	if _uv_element_mode != enabled:
+		cancel()
 	_uv_element_mode = enabled
 	queue_redraw()
 
@@ -88,7 +116,7 @@ func is_uv_element_mode() -> bool:
 
 
 func _paint_changed() -> void:
-	if not _paint.stroke_active and not _paint.uv_drag_active:
+	if not _paint.stroke_active and not _paint.uv_drag_active and not uv_edit.active:
 		_dragging = false
 	var signature := _mapping_signature()
 	if signature != _uv_signature:
@@ -191,16 +219,23 @@ func _gui_input(event: InputEvent) -> void:
 		if _dragging and _paint.is_pixel():
 			if hits_image(event.position):
 				painted_pixel.emit(_canvas_to_pixel(event.position))
+			else:
+				_paint.suspend_airbrush()
 			accept_event()
 		elif _dragging and not _paint.is_pixel():
 			if hits_image(event.position):
 				var mode: int = _paint.uv_mode_for(event)
+				if uv_edit.active:
+					mode = _paint.UV_ROTATE if event.ctrl_pressed or event.meta_pressed else (_paint.UV_SCALE if event.alt_pressed else _paint.UV_MOVE)
 				# Move follows UV coordinates. Modifier sensitivity uses logical screen
 				# distance so fitting or zooming the canvas cannot change it.
 				var delta: Vector2 = _canvas_to_uv(event.position) - _uv_from
 				if mode != _paint.UV_MOVE:
 					delta = (event.position - _uv_drag_from) / _metrics.px(UV_MODIFIER_DRAG_PIXELS)
-				uv_dragged.emit(delta, mode)
+				if uv_edit.active:
+					uv_edit.drag(delta, mode)
+				else:
+					uv_dragged.emit(delta, mode)
 			accept_event()
 		return
 	if not (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT):
@@ -213,7 +248,21 @@ func _gui_input(event: InputEvent) -> void:
 			var hit := _pick_uv_at(event.position)
 			if not hit.is_empty():
 				var additive: bool = event.shift_pressed
-				uv_element_picked.emit(int(hit.get("id", 0)), additive)
+				var id: int = hit.get("id", 0)
+				if additive or not _selection.get_uv_selection().has(id):
+					uv_element_picked.emit(id, additive)
+				if not additive:
+					_uv_from = _canvas_to_uv(event.position)
+					_uv_drag_from = event.position
+					_dragging = uv_edit.begin(_selection, _uv_undo)
+			accept_event()
+			return
+		if _paint.is_pixel() and (event.alt_pressed or _paint.clone_source_pending or _paint.brush_mode == _paint.BrushMode.EYEDROPPER):
+			var pixel := _canvas_to_pixel(event.position)
+			if (event.alt_pressed or _paint.clone_source_pending) and _paint.brush_mode == _paint.BrushMode.CLONE:
+				_paint.set_clone_source(pixel)
+			else:
+				_paint.sample_pixel(pixel)
 			accept_event()
 			return
 		_dragging = true
@@ -233,11 +282,15 @@ func _gui_input(event: InputEvent) -> void:
 		if was_dragging and _paint.is_pixel():
 			stroke_ended.emit()
 		elif was_dragging:
-			_paint.end_uv_drag()
+			if uv_edit.active:
+				uv_edit.finish()
+			else:
+				_paint.end_uv_drag()
 		accept_event()
 
 
 func cancel() -> void:
+	uv_edit.cancel()
 	if _dragging:
 		_dragging = false
 		stroke_cancelled.emit()
@@ -258,6 +311,19 @@ func _draw() -> void:
 	var tex: Texture2D = _paint.texture() if _paint != null else null
 	if tex != null:
 		draw_texture_rect(tex, fitted, false)
+	if _paint != null:
+		var mask: Image = _paint.mask_image()
+		if mask != _mask_source:
+			_mask_source = mask
+			_mask_shade = null
+			if mask != null:
+				var shade := Image.create(mask.get_width(), mask.get_height(), false, Image.FORMAT_RGBA8)
+				for y in mask.get_height():
+					for x in mask.get_width():
+						shade.set_pixel(x, y, Color(0.02, 0.04, 0.08, 0.6 * (1.0 - mask.get_pixel(x, y).r)))
+				_mask_shade = ImageTexture.create_from_image(shade)
+		if _mask_shade != null:
+			draw_texture_rect(_mask_shade, fitted, false)
 	var uvs: PackedVector2Array = _paint.selected_uvs() if _paint != null else PackedVector2Array()
 	if show_pixel_uv and uvs.size() >= 2:
 		var color := Color(0.95, 0.82, 0.28)
@@ -272,7 +338,10 @@ func _draw() -> void:
 			pts.append(pts[0])
 			draw_polyline(pts, color, 2.0, true)
 	if _brush.x >= 0.0 and _paint != null and _paint.is_pixel():
-		draw_arc(_brush, _paint.brush_radius * pixel_scale(), 0.0, TAU, 32, Color(1, 1, 1, 0.85), 1.5)
+		var ring := Color(1, 0.45, 0.3, 0.9) if _paint.brush_mode == _paint.BrushMode.ERASE else Color(1, 1, 1, 0.85)
+		draw_arc(_brush, _paint.brush_radius * pixel_scale(), 0.0, TAU, 32, ring, 1.5)
+		if _paint.brush_hardness > 0.0 and _paint.brush_hardness < 1.0:
+			draw_arc(_brush, _paint.brush_radius * _paint.brush_hardness * pixel_scale(), 0.0, TAU, 32, Color(ring, 0.45), 1.0)
 
 
 func _draw_uv_workspace() -> void:
@@ -421,6 +490,12 @@ func _draw_uv_element_selection() -> void:
 	if solid == null or faces.is_empty():
 		return
 	
+	for face in faces:
+		var info: Dictionary = solid.face_uv(face)
+		for i in info.get("points", []).size():
+			if info["pins"][i] != 0:
+				var point := _uv_to_canvas(info["points"][i])
+				draw_rect(Rect2(point - Vector2(4, 4), Vector2(8, 8)), Color(1, .55, .2), false, 2.0)
 	var uv_mode: int = _selection.uv_mode
 	var uv_selection: PackedInt64Array = _selection.get_uv_selection()
 	var highlight_color := Color(0.2, 0.85, 0.95, 0.9)
@@ -429,7 +504,9 @@ func _draw_uv_element_selection() -> void:
 	match uv_mode:
 		SlabSelection.UVMode.UV_VERT:
 			for id in uv_selection:
-				var decoded := SlabUVPick._decode_uv_vert(id)
+				var decoded := SlabUVPick._decode_uv_vert(solid, id)
+				if decoded.is_empty():
+					continue
 				var face: int = decoded["face"]
 				var corner: int = decoded["corner"]
 				var uvs := SlabPaintUv.face_uvs(solid, face)
@@ -451,7 +528,9 @@ func _draw_uv_element_selection() -> void:
 					var canvas_b := _uv_to_canvas(uvs[(i + 1) % uvs.size()])
 					draw_line(canvas_a, canvas_b, Color(0.5, 0.5, 0.5, 0.5), 1.0)
 			for id in uv_selection:
-				var decoded := SlabUVPick._decode_uv_edge(id)
+				var decoded := SlabUVPick._decode_uv_edge(solid, id)
+				if decoded.is_empty():
+					continue
 				var face: int = decoded["face"]
 				var edge_index: int = decoded["edge_index"]
 				var uvs := SlabPaintUv.face_uvs(solid, face)
@@ -468,7 +547,9 @@ func _draw_uv_element_selection() -> void:
 				for uv in uvs:
 					canvas_poly.append(_uv_to_canvas(uv))
 				var fill_color := Color(highlight_color.r, highlight_color.g, highlight_color.b, 0.25)
-				draw_colored_polygon(canvas_poly, fill_color)
+				var triangles: PackedInt32Array = solid.face_uv(id)["triangles"]
+				for i in range(0, triangles.size(), 3):
+					draw_colored_polygon(PackedVector2Array([canvas_poly[triangles[i]], canvas_poly[triangles[i + 1]], canvas_poly[triangles[i + 2]]]), fill_color)
 				canvas_poly.append(canvas_poly[0])
 				draw_polyline(canvas_poly, highlight_color, 2.5, true)
 

@@ -15,6 +15,7 @@ const SlabExportMesh := preload("res://addons/slab/slab_export_mesh.gd")
 const SlabExportObj := preload("res://addons/slab/slab_export_obj.gd")
 const SlabExportStl := preload("res://addons/slab/slab_export_stl.gd")
 const SlabExportFbx := preload("res://addons/slab/slab_export_fbx.gd")
+const SlabGltfExchange := preload("res://addons/slab/slab_gltf_exchange.gd")
 const SlabImportMesh := preload("res://addons/slab/slab_import_mesh.gd")
 const SlabExternalMesh := preload("res://addons/slab/slab_external_mesh.gd")
 const SolidGizmo := preload("res://addons/slab/gizmos/slab_solid_gizmo.gd")
@@ -156,7 +157,18 @@ func _handles(object: Object) -> bool:
 	return SlabSelection.editor_owning_solid(object) != null or SlabExternalMesh.is_external_mesh(object)
 
 
+static func selection_uses_native_path_handles(nodes: Array) -> bool:
+	for node in nodes:
+		if node is SlabSweep:
+			return true
+	return false
+
+
 func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
+	# Sweep points are Godot gizmo handles. The solid picker runs before Godot
+	# and would select geometry behind a handle if it received this gesture.
+	if _host != null and selection_uses_native_path_handles(_host.selected_nodes()):
+		return AFTER_GUI_INPUT_PASS
 	var views: Array = []
 	for index in 4:
 		views.append(EditorInterface.get_editor_viewport_3d(index))
@@ -188,6 +200,8 @@ func _forward_3d_gui_input(viewport_camera: Camera3D, event: InputEvent) -> int:
 
 
 func _shortcut_input(event: InputEvent) -> void:
+	if _host != null and selection_uses_native_path_handles(_host.selected_nodes()):
+		return
 	if _session == null:
 		return
 	var host_viewport := get_viewport()
@@ -434,6 +448,10 @@ func _handle_label_style() -> StyleBoxFlat:
 
 
 func _sync_subgizmo(override_solid: Node3D = null) -> void:
+	# Topology/material updates must not recreate element transforms over Paint.
+	if _paint != null and _paint.active:
+		_clear_subgizmo()
+		return
 	var solid: Node3D = null
 	if override_solid != null:
 		solid = override_solid
@@ -480,7 +498,9 @@ func _id_tokens(ids: PackedInt64Array) -> PackedStringArray:
 func _add_gizmos() -> void:
 	_solid_gizmo = SolidGizmo.new()
 	_solid_gizmo.setup(_selection, get_undo_redo(), _paint)
-	_gizmos = [_solid_gizmo, SocketGizmo.new(), SweepGizmo.new()]
+	var sweep_gizmo := SweepGizmo.new()
+	sweep_gizmo.setup(get_undo_redo())
+	_gizmos = [_solid_gizmo, SocketGizmo.new(), sweep_gizmo]
 	for gizmo in _gizmos:
 		add_node_3d_gizmo_plugin(gizmo)
 
@@ -547,12 +567,14 @@ func _on_export_requested(solids: Array) -> void:
 		_export_dialog.file_selected.connect(_on_export_file_selected)
 		EditorInterface.get_base_control().add_child(_export_dialog)
 	_export_dialog.clear_filters()
-	_export_dialog.add_filter("*.obj", "Wavefront OBJ")
+	_export_dialog.add_filter("*.glb", "glTF Binary (materials, UV2, skin and blend shapes)")
+	_export_dialog.add_filter("*.gltf", "glTF + external assets")
+	_export_dialog.add_filter("*.obj", "Wavefront OBJ (albedo and UVs)")
 	_export_dialog.add_filter("*.stl", "STL (geometry only)")
 	_export_dialog.add_filter("*.fbx", "FBX (mesh, UVs, material names)")
 	var default_name: String = _export_solids[0].name if _export_solids.size() == 1 else "export"
 	default_name = default_name.replace(" ", "_").to_lower()
-	_export_dialog.current_file = default_name + ".obj"
+	_export_dialog.current_file = default_name + ".glb"
 	_export_dialog.popup_centered_ratio(0.6)
 
 
@@ -560,13 +582,24 @@ func _on_export_file_selected(path: String) -> void:
 	if _export_solids.is_empty():
 		_actions.reported.emit("No solids to export.")
 		return
+	var ext: String = path.get_extension().to_lower()
+	if ext not in ["glb", "gltf", "obj", "stl", "fbx"]:
+		_actions.reported.emit("Choose a .glb, .gltf, .obj, .stl or .fbx filename.")
+		return
+	if ext in ["glb", "gltf"]:
+		var result := SlabGltfExchange.write(path, _export_solids)
+		if result.error != OK:
+			_actions.reported.emit("Export failed: " + str(result.get("message", "Could not write glTF.")))
+		else:
+			_report_exported(path)
+		_export_solids.clear()
+		return
 	var export_mesh := SlabExportMesh.new()
 	var err: int = export_mesh.bake(_export_solids)
 	if err != OK:
 		_actions.reported.emit("Export failed: could not bake mesh data.")
 		_export_solids.clear()
 		return
-	var ext: String = path.get_extension().to_lower()
 	match ext:
 		"stl":
 			err = SlabExportStl.write(path, export_mesh)
@@ -581,9 +614,13 @@ func _on_export_file_selected(path: String) -> void:
 			_actions.reported.emit("Export failed: could not write the file or its material/texture dependencies.")
 		_export_solids.clear()
 		return
+	_report_exported(path)
+	_export_solids.clear()
+
+
+func _report_exported(path: String) -> void:
 	var count: int = _export_solids.size()
 	_actions.reported.emit("Exported %d %s → %s" % [count, "solid" if count == 1 else "solids", path])
-	_export_solids.clear()
 
 
 func _on_import_requested() -> void:
@@ -595,6 +632,7 @@ func _on_import_requested() -> void:
 		_import_dialog.file_selected.connect(_on_import_file_selected)
 		EditorInterface.get_base_control().add_child(_import_dialog)
 	_import_dialog.clear_filters()
+	_import_dialog.add_filter("*.glb,*.gltf", "glTF scene (materials, UV2, skin and blend shapes)")
 	_import_dialog.add_filter("*.obj", "Wavefront OBJ")
 	_import_dialog.add_filter("*.stl", "STL")
 	_import_dialog.popup_centered_ratio(0.6)
@@ -617,13 +655,17 @@ func _on_import_file_selected(path: String) -> void:
 	var parent: Node = _import_parent(root)
 	get_undo_redo().create_action("Slab Import Mesh", UndoRedo.MERGE_DISABLE, root)
 	get_undo_redo().add_do_method(parent, "add_child", external_mesh, true)
-	get_undo_redo().add_do_method(external_mesh, "set_owner", root)
+	get_undo_redo().add_do_method(self, "_own_import", external_mesh, root)
 	get_undo_redo().add_do_reference(external_mesh)
 	get_undo_redo().add_undo_method(parent, "remove_child", external_mesh)
 	get_undo_redo().commit_action()
 	EditorInterface.get_selection().clear()
 	EditorInterface.get_selection().add_node(external_mesh)
 	_actions.reported.emit(result.get("status", "Imported mesh."))
+
+
+func _own_import(imported: Node, scene_root: Node) -> void:
+	SlabImportMesh.set_scene_owner(imported, scene_root)
 
 
 func _import_parent(root: Node) -> Node:

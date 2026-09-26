@@ -11,7 +11,7 @@ namespace slab::ops {
 namespace {
 
 struct SourceFace { FaceId id; FaceAttrs attrs; std::vector<VertexId> corners; };
-struct BoundaryEdge { VertexId a; VertexId b; FaceAttrs attrs; };
+struct BoundaryEdge { VertexId a; VertexId b; FaceAttrs attrs; CornerAttrs corner_a; CornerAttrs corner_b; };
 struct Region {
 	std::vector<SourceFace> faces;
 	std::vector<BoundaryEdge> boundary;
@@ -52,7 +52,12 @@ MeshFault inspect(const Mesh &p_mesh, const std::vector<FaceId> &p_faces, Region
 		VertexId ea, eb; p_mesh.edge_vertices(edge, ea, eb);
 		for (size_t i = 0; source && i < source->corners.size(); i++) {
 			const VertexId a = source->corners[i], b = source->corners[(i + 1) % source->corners.size()];
-			if (pair_key(a.slot, b.slot) == pair_key(ea.slot, eb.slot)) { r_region.boundary.push_back({ a, b, source->attrs }); break; }
+			if (pair_key(a.slot, b.slot) == pair_key(ea.slot, eb.slot)) {
+				std::vector<CornerAttrs> corners;
+				p_mesh.face_corner_attrs(owner, corners);
+				r_region.boundary.push_back({ a, b, source->attrs, corners[i], corners[(i+1)%corners.size()] });
+				break;
+			}
 		}
 	}
 	std::unordered_set<uint32_t> reached;
@@ -125,6 +130,7 @@ MeshFault rebuild(MeshEdit &p_edit, const Region &p_region, const std::unordered
 	std::vector<FaceId> all; source.all_faces(all);
 	std::vector<std::vector<IVec3>> loops;
 	std::vector<FaceAttrs> attrs;
+	std::vector<std::vector<CornerAttrs>> corner_attrs;
 	for (const FaceId face : all) {
 		std::vector<VertexId> corners; source.face_corners(face, corners);
 		std::vector<IVec3> loop;
@@ -133,18 +139,30 @@ MeshFault rebuild(MeshEdit &p_edit, const Region &p_region, const std::unordered
 			loop.push_back(p_region.selected.count(face.slot) && moved != p_moved.end() ? moved->second : source.position_i(vertex));
 		}
 		loops.push_back(loop); attrs.push_back(source.attrs(face));
+		corner_attrs.emplace_back();
+		source.face_corner_attrs(face, corner_attrs.back());
 	}
 	for (const BoundaryEdge &edge : p_region.boundary) {
 		const auto a = p_moved.find(edge.a.slot), b = p_moved.find(edge.b.slot);
 		if (a == p_moved.end() || b == p_moved.end()) return bad(MeshError::INVALID_SELECTION);
 		loops.push_back({ a->second, source.position_i(edge.a), source.position_i(edge.b), b->second });
 		attrs.push_back(edge.attrs);
+		CornerAttrs ca, cb;
+		ca.surface = edge.corner_a.surface;
+		cb.surface = edge.corner_b.surface;
+		ca.surface.flags &= ~(SurfaceAttrs::NORMAL | SurfaceAttrs::TANGENT);
+		cb.surface.flags &= ~(SurfaceAttrs::NORMAL | SurfaceAttrs::TANGENT);
+		corner_attrs.push_back({ca, ca, cb, cb});
 	}
 	MeshEdit assembled = MeshEdit::empty();
 	const MeshFault made = assembled.assemble(loops);
 	if (!made.ok() || assembled.scratch().face_count() != int(loops.size())) return made.ok() ? bad(MeshError::DEGENERATE_FACE) : made;
 	std::vector<FaceId> faces; assembled.scratch().all_faces(faces);
-	for (size_t i = 0; i < faces.size(); i++) assembled.set_attrs(faces[i], attrs[i]);
+	for (size_t i = 0; i < faces.size(); i++) {
+		assembled.set_attrs(faces[i], attrs[i]);
+		for (uint32_t k = 0; k < corner_attrs[i].size(); ++k)
+			assembled.set_corner_attrs(faces[i], k, corner_attrs[i][k]);
+	}
 	if (!assembled.last_fault().ok()) return assembled.last_fault();
 	return p_edit.replace_with(assembled.scratch());
 }

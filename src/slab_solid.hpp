@@ -10,6 +10,7 @@
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/static_body3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
+#include <godot_cpp/classes/skin.hpp>
 #include <godot_cpp/variant/aabb.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
@@ -47,6 +48,8 @@ public:
 
 	void set_materials(const TypedArray<Material> &p_materials);
 	TypedArray<Material> get_materials() const;
+	void set_deformation(const Dictionary &p_deformation);
+	Dictionary get_deformation() const;
 
 	void set_collision_enabled(bool p_enabled);
 	bool is_collision_enabled() const;
@@ -66,6 +69,8 @@ public:
 	PackedInt64Array edge_faces(int64_t p_edge) const;
 	PackedInt64Array edge_vertices(int64_t p_edge) const;
 	Dictionary face_uv(int64_t p_face) const;
+	Dictionary uv_corner(int64_t p_corner) const;
+	Vector2 face_uv_at_point(int64_t p_face, const Vector3 &p_point) const;
 	PackedInt64Array get_uv_seams() const;
 	int face_count() const;
 	int edge_count() const;
@@ -86,7 +91,8 @@ public:
 	int make_box(const Vector3 &p_size);
 	int make_plane(const Vector2 &p_size);
 	Dictionary import_from_mesh(const PackedVector3Array &p_vertices, const PackedInt32Array &p_indices,
-			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array());
+			const PackedVector2Array &p_uvs = PackedVector2Array(), const PackedInt32Array &p_material_slots = PackedInt32Array(),
+			const Dictionary &p_attributes = Dictionary());
 	int make_stair(const Vector3 &p_size, int p_steps);
 	int make_cylinder(float p_radius, float p_height, int p_sides);
 	int make_arch(float p_span, float p_depth, int p_segments, float p_thickness, double p_arc);
@@ -100,9 +106,15 @@ public:
 	int subdivide_faces(const PackedInt64Array &p_faces);
 	int merge_faces(const PackedInt64Array &p_faces);
 	int set_face_uv(const PackedInt64Array &p_faces, const Vector2 &p_scale, const Vector2 &p_offset, float p_rotation);
+	int set_face_uv_points(int64_t p_face, const PackedVector2Array &p_points);
+	int pin_uv_corners(int64_t p_face, const PackedInt32Array &p_corners, bool p_pinned);
+	int set_face_smooth(const PackedInt64Array &p_faces, bool p_smooth);
+	int mark_hard_edges(const PackedInt64Array &p_edges, bool p_hard);
+	PackedInt64Array get_hard_edges() const;
 	int mark_uv_seams(const PackedInt64Array &p_edges, bool p_marked);
 	Dictionary unwrap_uv(const PackedInt64Array &p_faces, float p_pixels_per_meter, int p_texture_resolution);
 	Dictionary pack_uv(const PackedInt64Array &p_faces, int p_texture_resolution, int p_source_texture_resolution = 0);
+	Dictionary reset_uv_projection(const PackedInt64Array &p_faces, int p_axis = 0);
 	int set_face_material(const PackedInt64Array &p_faces, int p_slot);
 
 	int bevel_edges(const PackedInt64Array &p_edges, float p_amount, int p_segments = 1);
@@ -133,6 +145,7 @@ private:
 	Color prototype_color = Color(0.62f, 0.64f, 0.68f);
 	Ref<StandardMaterial3D> prototype_material;
 	TypedArray<Material> materials;
+	Dictionary deformation;
 	bool collision_enabled = true;
 	PackedInt64Array last_edited_faces;
 	Dictionary edit_diagnostic;

@@ -150,7 +150,7 @@ func _check_face_bevel_perimeter() -> void:
 	check(solid.get("data") != before, "Face→Bevel Apply changes geometry")
 	check(int(solid.call("face_count")) > before_faces, "Face→Bevel adds faces for the rounded perimeter")
 	check(selection.mode == Selection.Mode.FACE, "Face→Bevel Apply stays in Face mode")
-	check(selection.ids.size() == 1 and selection.ids[0] == top, "Face→Bevel Apply preserves face selection")
+	check(selection.ids.is_empty(), "Face→Bevel Apply clears handles that the rebuilt mesh may reuse")
 
 	var beveled: PackedByteArray = solid.get("data")
 	undo.undo()
@@ -161,6 +161,7 @@ func _check_face_bevel_perimeter() -> void:
 	undo.redo()
 	check(solid.get("data") == beveled, "Face→Bevel redo restores beveled geometry")
 	check(selection.mode == Selection.Mode.FACE, "Face→Bevel redo stays in Face mode")
+	check(selection.ids.is_empty(), "Face→Bevel redo clears rebuilt handles")
 	solid.free()
 
 	var solid2: Node3D = ClassDB.instantiate("SlabSolid")

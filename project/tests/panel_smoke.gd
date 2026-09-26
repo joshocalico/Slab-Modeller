@@ -11,12 +11,14 @@ const REQUIRED_KEYS: PackedStringArray = [
 const FIELD_KEYS: PackedStringArray = ["key", "label", "min", "max", "step", "value", "tooltip"]
 
 const DEFAULTS: Dictionary = {
+	&"sweep_closed": 0.0,
 	&"size_x": 2.0, &"size_y": 2.0, &"size_z": 2.0,
 	&"stair_steps": 8.0, &"cylinder_sides": 16.0, &"arch_segments": 8.0,
 	&"arch_thickness": 0.25, &"arch_arc": 180.0,
 }
 
 const RANGES: Dictionary = {
+	&"sweep_closed": [0.0, 1.0],
 	&"stair_steps": [1.0, 32.0], &"cylinder_sides": [3.0, 32.0], &"arch_segments": [4.0, 32.0],
 	&"arch_arc": [15.0, 360.0], &"arch_thickness": [0.05, 8.0],
 	&"size_x": [0.05, 64.0], &"size_y": [0.05, 64.0], &"size_z": [0.05, 64.0],
@@ -29,7 +31,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
 		"Object": [
 			"boolean_union", "boolean_subtract", "boolean_intersect", "plane_cut", "array", "mirror_x", "mirror_y", "mirror_z",
-			"center_pivot", "snap_to_grid", "export_solids", "import_mesh",
+			"center_pivot", "snap_to_grid", "export_solids", "import_mesh", "uv_auto_unwrap",
 		],
 	},
 	SlabSelection.Mode.VERTEX: {
@@ -37,13 +39,14 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.EDGE: {
-		"Edge": ["bevel_edges", "connect_edges", "insert_loop", "dissolve_edges", "mark_uv_seam", "clear_uv_seam", "select_loop", "select_ring"],
+		"Edge": ["bevel_edges", "connect_edges", "insert_loop", "dissolve_edges", "mark_uv_seam", "hard_edges", "soft_edges", "clear_uv_seam", "select_loop", "select_ring"],
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
+		"Object": ["uv_auto_unwrap"],
 		"Edge": ["bevel_edges"],
 		"Face": [
-			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "align_face",
+			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "shade_smooth", "shade_flat", "align_face",
 		],
 		"Selection": SELECTION_IDS,
 	},

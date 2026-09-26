@@ -37,6 +37,7 @@ var _scene_root_getter: Callable
 var _status: Label
 var _selection_context: Label
 var _last_report := ""
+var _construction_panel: VBoxContainer
 var _command_column: VBoxContainer
 var _settings: VBoxContainer
 var _settings_column: VBoxContainer
@@ -64,6 +65,7 @@ var _uv_toggle: Button
 var _paint_toggle: Button
 var _paint_canvas: Control
 var _paint_brush: Control
+var _paint_channel_section: Control
 var _paint_face: Label
 var _paint_mat: Label
 var _paint_dirty: Label
@@ -111,7 +113,24 @@ var _overlay_opacity: SpinBox
 var _flatten_button: Button
 var _fill_layer_button: Button
 var _channel_label: Label
-var _channel_picker: HBoxContainer
+var _channel_picker: HFlowContainer
+var _layer_rename: LineEdit
+var _layer_raise: Button
+var _layer_lower: Button
+var _brush_value_row: Control
+var _brush_value: SpinBox
+var _brush_mode_picker: OptionButton
+var _clone_source_button: Button
+var _brush_flow_row: Control
+var _brush_spacing_row: Control
+var _fill_tolerance_row: Control
+var _gradient_color_row: Control
+var _gradient_color: ColorPickerButton
+var _stamp_row: Control
+var _stamp_shape_picker: OptionButton
+var _stamp_dialog: FileDialog
+var _paint_auto_unwrap: Button
+var _paint_mask_picker: OptionButton
 var _layer_list: VBoxContainer
 var _add_layer_button: Button
 var _delete_layer_button: Button
@@ -463,7 +482,7 @@ func bind_paint(paint: RefCounted) -> void:
 		if not _paint.layers_changed.is_connected(_refresh_layer_list):
 			_paint.layers_changed.connect(_refresh_layer_list)
 	if _paint_canvas != null:
-		_paint_canvas.setup(_paint, _metrics, _selection)
+		_paint_canvas.setup(_paint, _metrics, _selection, _actions._undo)
 		_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_on_paint_changed()
 
@@ -482,11 +501,7 @@ func _sync_channel_picker() -> void:
 		var btn: Button = _channel_picker.get_child(i) as Button
 		if btn == null:
 			continue
-		var expected_pressed: bool = false
-		match i:
-			0: expected_pressed = current_ch == SlabPaint.Channel.ALBEDO
-			1: expected_pressed = current_ch == SlabPaint.Channel.ROUGHNESS
-			2: expected_pressed = current_ch == SlabPaint.Channel.EMISSION
+		var expected_pressed: bool = int(btn.get_meta("channel")) == current_ch
 		if btn.button_pressed != expected_pressed:
 			btn.set_pressed_no_signal(expected_pressed)
 	if _channel_label != null:
@@ -502,11 +517,26 @@ func _refresh_layer_list() -> void:
 	if _paint == null:
 		return
 	var layers: Array[Dictionary] = _paint.all_layers_info()
-	for layer_info: Dictionary in layers:
+	for i in range(layers.size() - 1, -1, -1):
+		var layer_info: Dictionary = layers[i]
 		var row := _create_layer_row(layer_info)
 		_layer_list.add_child(row)
 	if _delete_layer_button != null:
 		_delete_layer_button.disabled = layers.size() <= 1
+	if _layer_rename != null and not _layer_rename.has_focus():
+		_layer_rename.text = layers[_paint.active_layer_index()].name if not layers.is_empty() else ""
+	if _layer_raise != null:
+		_layer_raise.disabled = layers.is_empty() or _paint.active_layer_index() == layers.size() - 1
+		_layer_lower.disabled = layers.is_empty() or _paint.active_layer_index() == 0
+
+
+func _commit_layer_name() -> void:
+	if _paint == null or _layer_rename == null:
+		return
+	var value := _layer_rename.text.strip_edges()
+	if not value.is_empty():
+		_paint.set_layer_name(_paint.active_layer_index(), value)
+	_layer_rename.text = _paint.layer_info(_paint.active_layer_index()).name
 
 
 func _create_layer_row(info: Dictionary) -> Control:
@@ -556,6 +586,7 @@ func bind_undo(undo: Object) -> void:
 		if _undo_hook.version_changed.is_connected(_refresh_soon):
 			_undo_hook.version_changed.disconnect(_refresh_soon)
 	_undo_hook = undo
+	if _construction_panel != null: _construction_panel.bind_undo(undo)
 	if _undo_hook != null and _undo_hook.has_signal("version_changed"):
 		_undo_hook.version_changed.connect(_refresh_soon)
 
@@ -576,6 +607,7 @@ func _font(px: int) -> int:
 
 
 func refresh() -> void:
+	if _construction_panel != null: _construction_panel.refresh()
 	_sync_model_chrome()
 	var mode: int = _selection.mode
 	var sections: Array[Dictionary] = _actions.command_sections_for(mode)
@@ -970,6 +1002,18 @@ func _section_toggle(heading: String, flow: Control) -> Button:
 
 func _shape_spin(field: Dictionary) -> Control:
 	var key: StringName = field["key"]
+	if key == &"sweep_closed":
+		var toggle := CheckBox.new()
+		toggle.name = String(key)
+		toggle.text = field["label"]
+		toggle.tooltip_text = field["tooltip"]
+		toggle.button_pressed = _actions.shapes.int_of(key) != 0
+		toggle.toggled.connect(func(enabled: bool) -> void:
+			_actions.shapes.set_value(key, 1.0 if enabled else 0.0)
+			_actions.create_settings_changed.emit()
+			_refresh_buttons()
+		)
+		return toggle
 	return _spin(field["label"], field["min"], field["max"], field["step"], field["value"], func(v: float) -> void:
 		if is_equal_approx(_actions.shapes.value_of(key), v):
 			return
@@ -1279,7 +1323,14 @@ func _command_scroll() -> Control:
 	_command_column.name = "Commands"
 	_command_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_command_column.add_theme_constant_override("separation", 8)
-	scroll.add_child(_command_column)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_child(_command_column)
+	_construction_panel = preload("res://addons/slab/slab_construction_panel.gd").new()
+	_construction_panel.setup(_selection, _actions, _scene_root_getter, _metrics)
+	_construction_panel.reported.connect(_on_reported)
+	content.add_child(_construction_panel)
+	scroll.add_child(content)
 	return scroll
 
 
@@ -1367,6 +1418,8 @@ func _paint_block() -> Control:
 	inspector.custom_minimum_size.x = _scaled(UV_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	inspector.add_theme_constant_override("separation", 4)
 	inspector_scroll.add_child(inspector)
+	_paint_channel_section = _paint_channel_controls()
+	inspector.add_child(_paint_channel_section)
 	inspector.add_child(_paint_action_row())
 	_paint_palette = ScrollContainer.new()
 	_paint_palette.name = "PaintPalette"
@@ -1398,7 +1451,7 @@ func _paint_block() -> Control:
 	row.clip_contents = true
 	row.add_theme_constant_override("separation", 8)
 	_paint_canvas = SlabPaintCanvas.new()
-	_paint_canvas.setup(_paint, _metrics, _selection)
+	_paint_canvas.setup(_paint, _metrics, _selection, _actions._undo)
 	_paint_canvas.custom_minimum_size.y = _scaled(PAINT_CANVAS_MIN_HEIGHT)
 	_paint_canvas.stroke_started.connect(func() -> void:
 		if _paint:
@@ -1501,6 +1554,16 @@ func _build_uv_mode_strip() -> Control:
 	_uv_place_button.pressed.connect(_set_uv_placement.bind(true))
 	tools.add_child(_uv_place_button)
 	tools.add_child(strip)
+	var operations := MenuButton.new()
+	operations.name = "UVTools"
+	operations.text = "Tools"
+	operations.add_theme_font_size_override("font_size", _font(13))
+	operations.tooltip_text = "Pins, relaxation, stitching and island alignment."
+	var popup := operations.get_popup()
+	for label in ["Pin", "Unpin", "Relax", "Stitch", "Align left", "Align horizontal centers", "Align right", "Align top", "Align vertical centers", "Align bottom", "Reset projection"]:
+		popup.add_item(label)
+	popup.id_pressed.connect(_on_uv_tool)
+	tools.add_child(operations)
 	for button in strip.get_children():
 		if button is Button:
 			button.pressed.connect(_set_uv_placement.bind(false))
@@ -1653,6 +1716,15 @@ func _paint_mapping_section() -> Control:
 	_paint_pack = pack
 	pack.name = "PaintPack"
 	mapping_actions.add_child(pack)
+	_paint_auto_unwrap = _named_action("Auto Unwrap Object", "AutoUnwrap", "Unwrap and pack every face of this solid. Existing seams and pins remain constraints.", func() -> void:
+		_commit_paint_mapping_inputs()
+		_actions.run("uv_auto_unwrap")
+		if _paint != null:
+			_paint.refresh_uv_mapping()
+			_paint_canvas.frame_uv.call_deferred()
+	)
+	_paint_auto_unwrap.name = "PaintAutoUnwrap"
+	mapping_actions.add_child(_paint_auto_unwrap)
 	section.add_child(mapping_actions)
 	return section
 
@@ -1774,7 +1846,7 @@ func _apply_picker_fonts(node: Node) -> void:
 		_apply_picker_fonts(child)
 
 
-func _brush_column() -> Control:
+func _paint_channel_controls() -> Control:
 	var col := VBoxContainer.new()
 	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
 	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
@@ -1786,14 +1858,16 @@ func _brush_column() -> Control:
 	channel_section.add_theme_color_override("font_color", ACCENT)
 	col.add_child(channel_section)
 	
-	_channel_picker = HBoxContainer.new()
+	_channel_picker = HFlowContainer.new()
 	_channel_picker.name = "ChannelPicker"
-	_channel_picker.add_theme_constant_override("separation", 2)
+	_channel_picker.add_theme_constant_override("h_separation", 2)
+	_channel_picker.add_theme_constant_override("v_separation", 2)
 	var channel_group := ButtonGroup.new()
-	for ch_entry in [[SlabPaint.Channel.ALBEDO, "Albedo"], [SlabPaint.Channel.ROUGHNESS, "Roughness"], [SlabPaint.Channel.EMISSION, "Emission"]]:
+	for ch_entry in [[SlabPaint.Channel.ALBEDO, "Albedo"], [SlabPaint.Channel.ROUGHNESS, "Roughness"], [SlabPaint.Channel.EMISSION, "Emission"], [SlabPaint.Channel.METALLIC, "Metallic"], [SlabPaint.Channel.NORMAL, "Normal"], [SlabPaint.Channel.HEIGHT, "Height"]]:
 		var ch_btn := Button.new()
 		ch_btn.name = "Channel%s" % ch_entry[1]
 		ch_btn.text = ch_entry[1]
+		ch_btn.set_meta("channel", ch_entry[0])
 		ch_btn.toggle_mode = true
 		ch_btn.button_group = channel_group
 		ch_btn.button_pressed = ch_entry[0] == SlabPaint.Channel.ALBEDO
@@ -1817,8 +1891,14 @@ func _brush_column() -> Control:
 	_channel_label.visible = false
 	col.add_child(_channel_label)
 	
-	col.add_child(HSeparator.new())
-	
+	return col
+
+
+func _brush_column() -> Control:
+	var col := VBoxContainer.new()
+	col.custom_minimum_size.x = _scaled(PAINT_DOCK_MIN_WIDTH - PAINT_DOCK_GUTTER)
+	col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	col.add_theme_constant_override("separation", 2)
 	var layer_header := HBoxContainer.new()
 	layer_header.add_theme_constant_override("separation", 4)
 	var layer_label := Label.new()
@@ -1857,6 +1937,34 @@ func _brush_column() -> Control:
 	_layer_list.name = "LayerList"
 	_layer_list.add_theme_constant_override("separation", 2)
 	col.add_child(_layer_list)
+	_layer_rename = LineEdit.new()
+	_layer_rename.name = "LayerRename"
+	_layer_rename.add_theme_font_size_override("font_size", _font(13))
+	_layer_rename.placeholder_text = "Layer name"
+	_layer_rename.accessibility_name = "Active layer name"
+	_layer_rename.text_submitted.connect(func(_text: String) -> void: _commit_layer_name())
+	_layer_rename.focus_exited.connect(_commit_layer_name)
+	col.add_child(_layer_rename)
+	var order := HBoxContainer.new()
+	col.add_child(order)
+	_layer_raise = Button.new()
+	_layer_raise.name = "LayerUp"
+	_layer_raise.add_theme_font_size_override("font_size", _font(13))
+	_layer_raise.text = "Raise"
+	_layer_raise.tooltip_text = "Move the selected layer above the next layer."
+	_layer_raise.pressed.connect(func() -> void:
+		if _paint: _paint.move_layer(_paint.active_layer_index(), _paint.active_layer_index() + 1)
+	)
+	order.add_child(_layer_raise)
+	_layer_lower = Button.new()
+	_layer_lower.name = "LayerDown"
+	_layer_lower.add_theme_font_size_override("font_size", _font(13))
+	_layer_lower.text = "Lower"
+	_layer_lower.tooltip_text = "Move the selected layer below the previous layer."
+	_layer_lower.pressed.connect(func() -> void:
+		if _paint: _paint.move_layer(_paint.active_layer_index(), _paint.active_layer_index() - 1)
+	)
+	order.add_child(_layer_lower)
 	
 	var overlay_opacity_row := _compact_spin("Opacity", 0.0, 1.0, 0.05, 1.0, func(v: float) -> void:
 		if _paint:
@@ -1874,7 +1982,7 @@ func _brush_column() -> Control:
 	_fill_layer_button.name = "PaintFillLayer"
 	_fill_layer_button.text = "Fill Layer"
 	_fill_layer_button.accessibility_name = "Fill active paint layer"
-	_fill_layer_button.tooltip_text = "Replace the active layer with Brush Color and Opacity. Other layers stay unchanged."
+	_fill_layer_button.tooltip_text = "Fill or erase the active layer inside the paint mask. Other layers and pixels outside the mask stay unchanged."
 	_fill_layer_button.add_theme_font_size_override("font_size", _font(15))
 	_fill_layer_button.custom_minimum_size.y = _scaled(BUTTON_HEIGHT)
 	_fill_layer_button.pressed.connect(func() -> void:
@@ -1896,6 +2004,45 @@ func _brush_column() -> Control:
 	brush.add_theme_font_size_override("font_size", _font(13))
 	brush.add_theme_color_override("font_color", ACCENT)
 	col.add_child(brush)
+	_brush_mode_picker = OptionButton.new()
+	var mode_picker := _brush_mode_picker
+	mode_picker.name = "BrushMode"
+	mode_picker.add_theme_font_size_override("font_size", _font(13))
+	for brush_name in ["Paint", "Erase", "Airbrush", "Blur", "Smudge", "Clone", "Stamp", "Fill", "Gradient", "Eyedropper"]:
+		mode_picker.add_item(brush_name)
+	mode_picker.tooltip_text = "Choose a texture brush. Alt-click samples color, or sets the Clone source."
+	mode_picker.item_selected.connect(func(index: int) -> void:
+		if _paint:
+			_paint.brush_mode = index
+			_paint_canvas.queue_redraw()
+			_refresh_brush_controls()
+			_refresh_paint_chrome()
+	)
+	col.add_child(mode_picker)
+	_clone_source_button = Button.new()
+	_clone_source_button.name = "PickCloneSource"
+	_clone_source_button.text = "Pick source"
+	_clone_source_button.add_theme_font_size_override("font_size", _font(13))
+	_clone_source_button.tooltip_text = "Click here, then click the image or model to choose where Clone copies from."
+	_clone_source_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.request_clone_source()
+			_refresh_brush_controls()
+			_refresh_paint_chrome()
+	)
+	col.add_child(_clone_source_button)
+	_paint_mask_picker = OptionButton.new()
+	var scope_picker := _paint_mask_picker
+	scope_picker.name = "PaintMask"
+	scope_picker.add_theme_font_size_override("font_size", _font(13))
+	scope_picker.add_item("Whole texture", SlabPaint.MaskMode.TEXTURE)
+	scope_picker.add_item("Selected faces", SlabPaint.MaskMode.FACES)
+	scope_picker.add_item("Selected UV islands", SlabPaint.MaskMode.ISLANDS)
+	scope_picker.tooltip_text = "Restrict brush, eraser and Fill Layer to the selected faces or their connected UV islands. Overlapping UVs share pixels."
+	scope_picker.item_selected.connect(func(index: int) -> void:
+		if _paint: _paint.mask_mode = index
+	)
+	col.add_child(scope_picker)
 	_brush_color = ColorPickerButton.new()
 	_brush_color.name = "BrushColor"
 	_brush_color.color = Color(0.86, 0.18, 0.16)
@@ -1907,6 +2054,16 @@ func _brush_column() -> Control:
 			_paint.brush_color = c
 	)
 	col.add_child(_brush_color)
+	_brush_value_row = _compact_spin("Value", 0.0, 1.0, 0.01, 1.0, func(value: float) -> void:
+		if _paint: _paint.brush_color = Color(value, value, value)
+	, "Grayscale value for Roughness, Metallic and Height. Height white is the highest surface.", &"brush_value")
+	_brush_value = _brush_value_row.find_children("*", "SpinBox", true, false)[0] as SpinBox
+	col.add_child(_brush_value_row)
+	col.add_child(_compact_spin("Hardness", 0.0, 1.0, 0.05, 0.0, func(value: float) -> void:
+		if _paint:
+			_paint.brush_hardness = value
+			_paint_canvas.queue_redraw()
+	, "0 gives a soft brush; 1 paints the whole brush circle at full opacity.", &"brush_hardness"))
 	col.add_child(_compact_spin("Radius", 1.0, 64.0, 1.0, 8.0, func(v: float) -> void:
 		if _paint:
 			_paint.brush_radius = v
@@ -1916,6 +2073,58 @@ func _brush_column() -> Control:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
 	
+
+	_brush_flow_row = _compact_spin("Flow", 0.01, 1.0, 0.01, 0.2, func(value: float) -> void:
+		if _paint: _paint.brush_flow = value
+	, "Paint deposited by each airbrush dab.", &"brush_flow")
+	col.add_child(_brush_flow_row)
+	_brush_spacing_row = _compact_spin("Spacing", 0.05, 2.0, 0.05, 0.25, func(value: float) -> void:
+		if _paint: _paint.brush_spacing = value
+	, "Distance between brush stamps as a fraction of brush diameter.", &"brush_spacing")
+	col.add_child(_brush_spacing_row)
+	_fill_tolerance_row = _compact_spin("Tolerance", 0.0, 1.0, 0.01, 0.05, func(value: float) -> void:
+		if _paint: _paint.fill_tolerance = value
+	, "Color difference allowed when filling connected pixels.", &"fill_tolerance")
+	col.add_child(_fill_tolerance_row)
+	_gradient_color_row = HBoxContainer.new()
+	var gradient_label := Label.new()
+	gradient_label.text = "End color"
+	gradient_label.add_theme_font_size_override("font_size", _font(13))
+	_gradient_color_row.add_child(gradient_label)
+	_gradient_color = ColorPickerButton.new()
+	_gradient_color.name = "GradientColor"
+	_gradient_color.add_theme_font_size_override("font_size", _font(13))
+	_gradient_color.color = Color.WHITE
+	_gradient_color.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gradient_color.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	_gradient_color.color_changed.connect(func(value: Color) -> void:
+		if _paint: _paint.gradient_color = value
+	)
+	_gradient_color_row.add_child(_gradient_color)
+	col.add_child(_gradient_color_row)
+	_stamp_row = HFlowContainer.new()
+	_stamp_shape_picker = OptionButton.new()
+	_stamp_shape_picker.name = "StampShape"
+	_stamp_shape_picker.add_theme_font_size_override("font_size", _font(13))
+	for shape_name in ["Round", "Square", "Star"]:
+		_stamp_shape_picker.add_item(shape_name)
+	_stamp_shape_picker.item_selected.connect(func(index: int) -> void:
+		if _paint and index < 3:
+			_paint.cancel_stroke()
+			_paint.stamp_image = null
+			_paint.stamp_shape = index
+			_refresh_brush_controls()
+	)
+	_stamp_row.add_child(_stamp_shape_picker)
+	var load_stamp := Button.new()
+	load_stamp.name = "LoadStamp"
+	load_stamp.text = "Load Stamp…"
+	load_stamp.add_theme_font_size_override("font_size", _font(13))
+	load_stamp.tooltip_text = "Load a PNG brush stamp. Transparent pixels leave the layer unchanged."
+	load_stamp.pressed.connect(_choose_stamp)
+	_stamp_row.add_child(load_stamp)
+	col.add_child(_stamp_row)
+
 	var overlay := CheckBox.new()
 	overlay.name = "PaintUvOverlay"
 	overlay.text = "Show UV"
@@ -2042,6 +2251,9 @@ func _enter_workspace(ws: int) -> void:
 	if _paint == null:
 		return
 	_workspace = ws
+	# UV and Paint have different fields; enter at their primary controls.
+	if _paint_inspector != null:
+		_paint_inspector.scroll_vertical = 0
 	if ws == Workspace.UV:
 		_paint.tool = SlabPaint.Tool.MATERIAL_UV
 	else:
@@ -2105,6 +2317,15 @@ func _on_paint_changed() -> void:
 		_status.max_lines_visible = 1 if on else -1
 	if _brush_color != null and _paint != null:
 		_brush_color.color = _paint.brush_color
+		_brush_mode_picker.select(_paint.brush_mode)
+		_paint_mask_picker.select(_paint.mask_mode)
+		var scalar: bool = _paint.channel in [SlabPaint.Channel.ROUGHNESS, SlabPaint.Channel.METALLIC, SlabPaint.Channel.HEIGHT]
+		_brush_color.visible = not scalar
+		_brush_color.tooltip_text = "Tangent-space normal. Red and green encode direction; (0.5, 0.5, 1) is neutral." if _paint.channel == SlabPaint.Channel.NORMAL else "Brush color"
+		if _brush_value_row != null:
+			_brush_value_row.visible = scalar
+			_brush_value.set_value_no_signal(_paint.brush_color.r)
+	_refresh_brush_controls()
 	update_minimum_size()
 	_refresh_paint_chrome()
 
@@ -2178,6 +2399,8 @@ func _refresh_paint_chrome() -> void:
 		_paint_fit_uv.visible = is_uv_workspace
 	if _paint_uv_controls != null:
 		_paint_uv_controls.visible = is_uv_workspace
+	if _paint_channel_section != null:
+		_paint_channel_section.visible = is_paint_workspace
 	if _paint_brush != null:
 		_paint_brush.visible = is_paint_workspace
 	_apply_paint_left_dock_width(is_paint_workspace)
@@ -2194,6 +2417,11 @@ func _refresh_paint_chrome() -> void:
 		_paint_unwrap.visible = is_uv_workspace
 	if _paint_pack != null:
 		_paint_pack.visible = is_uv_workspace
+	if _paint_auto_unwrap != null:
+		_paint_auto_unwrap.visible = is_uv_workspace
+		var reason: String = _actions.disabled_reason(_actions.find("uv_auto_unwrap"))
+		_paint_auto_unwrap.disabled = not reason.is_empty()
+		_paint_auto_unwrap.tooltip_text = reason if not reason.is_empty() else "Unwrap and pack every face of this solid, respecting seams and pins."
 	var pixel_has_artwork := false
 	if is_paint_workspace and _paint != null:
 		var pixel_material: Variant = _paint.material()
@@ -2264,6 +2492,54 @@ func _paint_mapping_summary() -> String:
 	return "Mixed mapping"
 
 
+func _refresh_brush_controls() -> void:
+	if _paint == null or _brush_flow_row == null:
+		return
+	var mode: int = _paint.brush_mode
+	_clone_source_button.visible = mode == SlabPaint.BrushMode.CLONE
+	_clone_source_button.text = "Click a source…" if _paint.clone_source_pending else "Pick source"
+	_brush_flow_row.visible = mode == SlabPaint.BrushMode.AIRBRUSH
+	_brush_spacing_row.visible = mode in [SlabPaint.BrushMode.PAINT, SlabPaint.BrushMode.ERASE, SlabPaint.BrushMode.CLONE, SlabPaint.BrushMode.STAMP]
+	_fill_tolerance_row.visible = mode == SlabPaint.BrushMode.FILL
+	_gradient_color_row.visible = mode == SlabPaint.BrushMode.GRADIENT
+	_stamp_row.visible = mode == SlabPaint.BrushMode.STAMP
+	_gradient_color.color = _paint.gradient_color
+	_set_spin(&"brush_flow", _paint.brush_flow)
+	_set_spin(&"brush_spacing", _paint.brush_spacing)
+	_set_spin(&"fill_tolerance", _paint.fill_tolerance)
+	if _paint.stamp_image != null:
+		if _stamp_shape_picker.item_count == 3:
+			_stamp_shape_picker.add_item("Custom PNG")
+		_stamp_shape_picker.select(3)
+	else:
+		if _stamp_shape_picker.item_count > 3:
+			_stamp_shape_picker.remove_item(3)
+		_stamp_shape_picker.select(_paint.stamp_shape)
+
+
+func _choose_stamp() -> void:
+	if _paint == null:
+		return
+	_paint.cancel_stroke()
+	if _stamp_dialog == null:
+		_stamp_dialog = FileDialog.new()
+		_stamp_dialog.title = "Load brush stamp"
+		_stamp_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_stamp_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		_stamp_dialog.use_native_dialog = true
+		_stamp_dialog.add_filter("*.png", "PNG brush stamp")
+		_stamp_dialog.file_selected.connect(func(path: String) -> void:
+			var image := Image.load_from_file(path)
+			if image == null or image.is_empty() or not _paint.set_stamp_image(image):
+				_actions.reported.emit("Could not load that PNG brush stamp.")
+			else:
+				_refresh_brush_controls()
+				_actions.reported.emit("Loaded brush stamp: " + path.get_file())
+		)
+		add_child(_stamp_dialog)
+	_stamp_dialog.popup_centered_ratio(0.6)
+
+
 func _pixel_help_text() -> String:
 	if _selection == null or _selection.objects.size() != 1 or _selection.ids.is_empty():
 		return "Select a face in Face mode to paint."
@@ -2273,7 +2549,18 @@ func _pixel_help_text() -> String:
 		return "Make Unique creates an image for these faces." if _paint.can_make_unique() else "Select faces that share one material."
 	if not _paint.is_owned(_paint.material()):
 		return "Make Unique before painting this shared texture."
-	return "Paint on the image or model. Save Paint, then save the scene."
+	var tool_help := "Drag on the image or model. Alt-click samples color."
+	match _paint.brush_mode:
+		SlabPaint.BrushMode.ERASE: tool_help = "Drag to erase the active layer and reveal layers below."
+		SlabPaint.BrushMode.AIRBRUSH: tool_help = "Hold to build up color. Flow controls each dab."
+		SlabPaint.BrushMode.BLUR: tool_help = "Drag to soften visible pixels onto the active layer."
+		SlabPaint.BrushMode.SMUDGE: tool_help = "Drag to pull color along the stroke."
+		SlabPaint.BrushMode.CLONE: tool_help = "Click the source on the image or model." if _paint.clone_source_pending else "Pick source or Alt-click a source, then drag to clone."
+		SlabPaint.BrushMode.STAMP: tool_help = "Click or drag to stamp. Load a PNG or choose a shape."
+		SlabPaint.BrushMode.FILL: tool_help = "Click to fill a connected color region within the mask."
+		SlabPaint.BrushMode.GRADIENT: tool_help = "Drag from Brush Color to End color. Escape cancels."
+		SlabPaint.BrushMode.EYEDROPPER: tool_help = "Click to sample this channel's visible color."
+	return tool_help + " Save Paint, then save the scene."
 
 
 static func paint_target_text(selection: Variant) -> String:
@@ -2585,4 +2872,24 @@ func _on_uv_element_picked(element_id: int, additive: bool) -> void:
 func _uv_mode_hint() -> String:
 	if _uv_placement:
 		return SlabPaint.uv_canvas_hint()
-	return "Click selects UV elements. Shift-click adds or removes. Choose Place to edit face mapping."
+	return "Drag UV elements. Shift-click adds or removes. Alt-drag scales; Cmd/Ctrl-drag rotates. Tools has pins, relax and stitch."
+
+
+func _on_uv_tool(id: int) -> void:
+	_paint_canvas.cancel()
+	var editor := preload("res://addons/slab/slab_uv_edit.gd")
+	var message := ""
+	match id:
+		0, 1:
+			message = editor.pin(_selection, _actions._undo, id == 0)
+		2:
+			message = editor.relax(_selection, _actions._undo)
+		3:
+			message = editor.stitch(_selection, _actions._undo)
+		10:
+			message = editor.reset_projection(_selection, _actions._undo)
+		_:
+			message = editor.align(_selection, _actions._undo, 0 if id < 7 else 1, (id - 4) % 3 - 1)
+	if not message.is_empty():
+		_on_reported(message)
+	_paint_canvas.queue_redraw()

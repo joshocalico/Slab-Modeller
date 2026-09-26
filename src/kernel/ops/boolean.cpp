@@ -1,4 +1,5 @@
 #include "boolean.hpp"
+#include "../rebuild_attributes.hpp"
 
 #include <godot_cpp/core/math.hpp>
 
@@ -605,6 +606,8 @@ void _dissolve_coplanar(MeshEdit &p_edit) {
 }
 
 MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
+	const Mesh source = p_edit.scratch();
+	const bool authored = has_authored_attributes(source) || has_authored_attributes(p_other);
 	std::vector<Plane> planes_a;
 	std::vector<Plane> planes_b;
 	_planes_of(p_edit.scratch(), planes_a);
@@ -649,7 +652,10 @@ MeshFault _clip(MeshEdit &p_edit, const Mesh &p_other, int p_mode) {
 	// n-gons: a vertex can be locally collinear on every incident face and
 	// still sit at the meeting of distinct edges. Sliding it along one edge
 	// takes the others off-plane (workshop window SELF_INTERSECTION).
-	_dissolve_coplanar(p_edit);
+	// Authored boundaries carry UV seams, material assignments and discontinuous
+	// deformation. They cannot be dissolved merely because they are coplanar.
+	if (authored) transfer_rebuilt_attributes(p_edit, {&source, &p_other});
+	else _dissolve_coplanar(p_edit);
 	return p_edit.last_fault();
 }
 

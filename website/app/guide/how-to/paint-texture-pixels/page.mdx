@@ -4,9 +4,20 @@ export const metadata = { title: "Paint texture pixels" };
 
 # Paint texture pixels
 
-Paint a face material's Albedo, Roughness, or Emission texture in the **Paint** workspace.
+Paint a face material's Albedo, Roughness, Emission, Metallic, Normal, or Height texture in the **Paint** workspace.
 
 <video controls preload="metadata" width="100%" src="/videos/v1/v1-05-surface-paint.mp4"></video>
+
+## Prepare a whole object
+
+1. Select one `SlabSolid` in Object mode.
+2. Click **Auto Unwrap Object** to create its packed atlas.
+3. Click **Paint**.
+4. Click **Make Unique** to prepare the editable image.
+
+Opening Paint from Object mode selects every face of the solid. If the faces use different materials, assign a common material before Make Unique. To paint only particular faces, select them in Face mode before opening Paint; that explicit selection stays intact.
+
+For density, atlas size, and pin conflicts, follow [Unwrap UVs](/guide/how-to/unwrap-uvs).
 
 ## Prepare one face
 
@@ -25,8 +36,8 @@ For a material with no texture, **Make Unique** creates a square image at **New 
 
 ## Paint and save
 
-1. Click **Paint** and choose **Albedo**, **Roughness**, or **Emission**.
-2. Set **Color**, **Radius**, and **Opacity** in the left dock (Flatten sits above the brush fields). The dock stays beside the canvas.
+1. Click **Paint** and choose the material channel to paint.
+2. Set **Color** or **Value**, **Radius**, **Opacity**, and **Hardness** in the left dock (Flatten sits above the brush fields). The dock stays beside the canvas.
 3. Drag on the canvas, or drag over a front-facing face in the 3D view.
 4. Click **Save Paint**.
 5. Save the scene.
@@ -43,13 +54,74 @@ Turn on **Show UV** to see the selected faces' outlines over the image. If the h
 
 UV and Paint temporarily lock the target's transform gizmo while keeping it selected. Leaving the workspace restores its previous lock state. Saving while the workspace is open preserves that original state.
 
-**Save Paint** writes the current channel's composite image, then flattens its visible layers and reports the image path. If writing the image fails, the editable layers stay intact. Albedo uses `res://slab_paint/<solid>_m<slot>.png`. Roughness and Emission add `_roughness` and `_emission` before `.png`. Save each channel you paint, then save the scene to keep the material, editable layers, and mapping changes.
+**Save Paint** writes the current channel's composite image, then flattens its visible layers and reports the image path. If writing the image fails, the editable layers stay intact. Albedo uses `res://slab_paint/<solid>_m<slot>.png`. Other channels add their lowercase name, such as `_metallic`, `_normal`, or `_height`, before `.png`. Save each channel you paint, then save the scene to keep the material, editable layers, and mapping changes.
 
-Use **Fill Layer** to replace the active layer with the Brush Color and Opacity in one undoable action. For an opaque black fill, use black with full color alpha, Brush Opacity 1, and layer Opacity 1.
+Choose **Whole texture**, **Selected faces**, or **Selected UV islands** to limit the brush and **Fill Layer**. For an island mask, select UV elements in **UV** before returning to **Paint**.
 
-Use **Layers +** to add a layer. Click a layer row to select it, use the eye control to hide or show it, and set its layer Opacity. **Flatten** combines visible layers into the current channel's base image. Hidden layers stay editable after Flatten and after a scene save and reload.
+Choose **Erase** to remove pixels from the active layer and reveal the layers below. Set **Hardness** to 1 for a solid brush edge or lower it for a softer edge.
+
+Use **Fill Layer** to replace the masked area with the Brush Color and Opacity in one undoable action. In **Erase** mode, Fill clears that area of the active layer. For an opaque black fill, use black with full color alpha, Brush Opacity 1, and layer Opacity 1.
+
+Use **Layers +** to add a layer. Click a layer row to select it, use the eye control to hide or show it, and set its layer Opacity. To rename the active layer, edit **Layer name** and press Enter. Use **Raise** or **Lower** to change its order. **Flatten** combines visible layers into the current channel's base image. Hidden layers stay editable after Flatten and after a scene save and reload.
 
 Undo and redo restore the edited material and channel even when you have switched to another target. Escape cancels an active stroke. With no stroke or UV drag active, Escape closes the active workspace.
+
+## Choose a texture brush
+
+Choose a tool from the **Brush** menu. Use **Whole texture**, **Selected faces**, or **Selected UV islands** to constrain its result. Blur, Smudge, and Clone read the visible composite and write onto the active layer, leaving lower layers editable.
+
+### Draw, erase, or build up color
+
+Choose **Paint** and drag to draw with the current color. Choose **Erase** to remove active-layer pixels and reveal the layers below. Adjust **Spacing** to change the distance between dabs as a fraction of the brush diameter.
+
+Choose **Airbrush** and hold the pointer still to build up color. Reduce **Flow** for a lighter deposit per dab. Move outside the image to pause the spray, or release to finish the stroke.
+
+### Soften or pull existing color
+
+Choose **Blur** and drag across a sharp color boundary to soften it. Choose **Smudge** and drag from a colored area toward its neighbor to pull the color along the stroke. Adjust **Radius** and **Opacity** to control the affected area and strength.
+
+### Clone a painted detail
+
+1. Choose **Clone**.
+2. Click **Pick source**, then click the source point on the image or model.
+3. Drag at the destination to copy pixels with that source offset.
+4. To use a different material or channel, select a new source there.
+
+For a shortcut, Alt-click the source point instead of using **Pick source**.
+
+### Stamp a shape or PNG
+
+1. Choose **Stamp**.
+2. Choose **Round**, **Square**, or **Star**, or click **Load Stamp…** to select a PNG.
+3. Set **Radius**, **Opacity**, and **Spacing**.
+4. Click for one impression, or drag for repeated impressions.
+
+Use a PNG with transparency to leave the surrounding pixels unchanged.
+
+### Fill a connected region
+
+1. Choose **Fill**.
+2. Set the color and **Tolerance**.
+3. Click inside the region to fill.
+
+Raise **Tolerance** to include more similar colors. The fill stops at color boundaries and the active paint mask. Use **Fill Layer** instead when the whole masked area should receive one color, regardless of connectivity.
+
+### Draw a gradient
+
+1. Choose **Gradient**.
+2. Set the starting Brush Color and **End color**.
+3. Drag from the starting point toward the end point.
+4. Release to apply the gradient, or press Escape to cancel.
+
+### Sample an existing color
+
+Choose **Eyedropper** and click the image or model to sample the current channel's visible color. To sample while another brush is active, Alt-click. In Clone mode, Alt-click sets the clone source instead. Sampling does not add an Undo action.
+
+## Paint surface properties
+
+Choose **Roughness**, **Metallic**, or **Height** and set **Value** for grayscale paint. Use white for high roughness or metallic strength. Height uses the material's heightmap settings; it changes the rendered surface appearance, not the solid's geometry or collision.
+
+For **Normal**, start with the neutral color `(0.5, 0.5, 1.0)`. Change red and green to paint tangent-space surface directions. Adjust the material's normal strength in Godot's Inspector.
 
 ## Adjust texture placement
 
@@ -59,7 +131,9 @@ Choose **Place** above the canvas to edit the mapping of the selected 3D faces. 
 
 Horizontal Shift-drag changes Repeat U; vertical Shift-drag changes Repeat V. Drag diagonally to change both. Rotation uses horizontal motion. Scale and rotation respond to screen distance independently of canvas zoom.
 
-To inspect UV elements, choose **UV Vert**, **UV Edge**, or **UV Face**, then click an element on the canvas. Shift-click toggles elements in that UV selection. Choose **Place** again to edit the face mapping. The numeric Placement fields also edit the faces selected in the 3D view.
+To edit individual UV elements, choose **UV Vert**, **UV Edge**, or **UV Face**, then select elements on the canvas. Shift-click adds or removes an element. Drag to move the selection, Alt-drag to scale it, or Cmd-drag on macOS to rotate it. Use Ctrl-drag to rotate on other systems. Release to commit one undoable change, or press Escape to cancel.
+
+Choose **Place** again to edit the whole face mapping. The numeric Placement fields also edit the faces selected in the 3D view. For pins, Relax, Stitch, and island alignment, follow [Unwrap UVs](/guide/how-to/unwrap-uvs).
 
 The canvas background previews the Brush. The outlines and UV edits belong to the selected faces. If the canvas caption says **Assign to apply to selection**, click **Assign** to put that material on the faces before adjusting its placement.
 

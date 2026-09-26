@@ -68,6 +68,7 @@ func _run() -> void:
 	await _wait_layout([panel, panel.find_child("PaintInspector", true, false), panel.find_child("PaintCanvas", true, false)])
 	_check(solid.has_meta("_edit_lock_") and solid.get_meta("_edit_lock_") == true,
 		"uv_entry_hides_native_gizmo_via_edit_lock")
+	_check_transform_gizmos_hidden(plugin, solid, "UV entry")
 	_check(panel.current_workspace() == panel.Workspace.UV, "uv_button_enters_uv_workspace")
 	var target_label: Label = panel.get("_paint_face")
 	_check(target_label.text.begins_with("%s · 1 face · " % solid.name), "paint_target_names_solid_and_face_count")
@@ -75,6 +76,8 @@ func _run() -> void:
 	_check(uv_workspace.button_pressed and uv_workspace.get_theme_stylebox("hover_pressed").bg_color == panel.ACCENT,
 		"uv_workspace_remains_highlighted_while_hovered")
 	await _click(_button_named(panel, "Make Unique"))
+	await process_frame
+	_check_transform_gizmos_hidden(plugin, solid, "Make Unique")
 	_check(_button_named(panel, "Assign").is_visible_in_tree(), "assign_is_visible")
 	var picker: Control = panel.find_child("PaintMaterialPicker", true, false)
 	var picker_wrap: Control = panel.find_child("PaintMaterialPickerWrap", true, false)
@@ -302,6 +305,8 @@ func _run() -> void:
 	_check(save.visible and actions_row.get_global_rect().grow(1.0).encloses(save.get_global_rect()), "pixel_save_fits_complete_action_wrapper")
 	_check(help.visible and actions_row.get_global_rect().grow(1.0).encloses(help.get_global_rect()), "pixel_help_fits_complete_action_wrapper")
 	await _click(_button_named(panel, "Make Unique"))
+	await process_frame
+	_check_transform_gizmos_hidden(plugin, solid, "Make Unique")
 	var resize_material: StandardMaterial3D = paint.material()
 	var resize_before_data: PackedByteArray = solid.get("data")
 	var resize_before_size: Vector2i = paint.image().get_size()
@@ -709,6 +714,16 @@ func _click(button: Button) -> void:
 		_fail("Viewport click did not fire pressed on %s; hover=%s rect=%s" % [button.text, hovered, button.get_global_rect()])
 
 
+func _check_transform_gizmos_hidden(plugin: Node, solid: Node3D, context: String) -> void:
+	var no_selected_subgizmos := true
+	for gizmo in solid.get_gizmos():
+		if not gizmo.get_subgizmo_selection().is_empty():
+			no_selected_subgizmos = false
+	_check(solid.get_meta("_edit_lock_", false) and no_selected_subgizmos
+		and plugin.get("_subgizmo_solid") == null,
+		"%s keeps native and Slab element transform gizmos hidden in UV/Paint" % context)
+
+
 func _check(ok: bool, label: String) -> void:
 	if not ok:
 		failures += 1
@@ -774,11 +789,10 @@ func _width_matrix(panel: Control, editor: Object) -> void:
 		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-uv-%s" % logical_size.x}, "after")
 		await _click(_button_named(panel, "Paint"))
 		var channels: Control = panel.find_child("ChannelPicker", true, false)
-		await _click(panel.find_child("ChannelAlbedo", true, false))
 		await _wait_layout([inspector, channels, canvas])
 		_check(inspector.get_global_rect().grow(1.0).encloses(channels.get_global_rect())
 			and not inspector.get_global_rect().intersects(canvas.get_global_rect()),
-			"%s Paint channel buttons fit their dock without covering canvas" % logical_size.x)
+			"%s Paint opens with all six channel buttons visible without covering canvas" % logical_size.x)
 		await _capture(editor, {"capture_prefix": "/tmp/slab-paint-pixel-%s" % logical_size.x}, "after")
 
 
@@ -787,6 +801,39 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 	await _click(panel.find_child("AddLayer", true, false))
 	_check(paint.layer_count() == before_count + 1 and paint.active_layer_index() == before_count,
 		"Add Layer button selects its new layer")
+	var name_input: LineEdit = panel.find_child("LayerRename", true, false)
+	var scroll := name_input.get_parent()
+	while scroll != null:
+		if scroll is ScrollContainer:
+			scroll.ensure_control_visible(name_input)
+			await process_frame
+		scroll = scroll.get_parent()
+	await _wait_layout([name_input])
+	await _click_at(name_input, name_input.get_global_rect().get_center())
+	_check(name_input.has_focus(), "layer name field receives real keyboard focus")
+	name_input.select_all()
+	for character in "Editor renamed layer":
+		var key := InputEventKey.new()
+		key.unicode = character.unicode_at(0)
+		key.pressed = true
+		panel.get_viewport().push_input(key, true)
+		key = key.duplicate()
+		key.pressed = false
+		panel.get_viewport().push_input(key, true)
+	var submit := InputEventKey.new()
+	submit.keycode = KEY_ENTER
+	submit.pressed = true
+	panel.get_viewport().push_input(submit, true)
+	submit = submit.duplicate()
+	submit.pressed = false
+	panel.get_viewport().push_input(submit, true)
+	_check(paint.layer_info(paint.active_layer_index()).name == "Editor renamed layer",
+		"layer name typing commits through its real LineEdit")
+	await _click(panel.find_child("LayerDown", true, false))
+	_check(paint.active_layer_index() == before_count - 1 and paint.layer_info(paint.active_layer_index()).name == "Editor renamed layer",
+		"Lower button moves and retains the active layer")
+	await _click(panel.find_child("LayerUp", true, false))
+	_check(paint.active_layer_index() == before_count, "Raise button returns the layer above its neighbour")
 	await _click(panel.find_child("DeleteLayer", true, false))
 	_check(paint.layer_count() == before_count, "Delete Layer button removes the selected layer")
 	await _history_shortcut(panel, false)
@@ -796,7 +843,7 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 	var saved_name := solid.name
 	solid.name = "PaintEditorSmoke_%s" % Time.get_ticks_msec()
 	var paths: Array[String] = []
-	for channel_button in ["ChannelAlbedo", "ChannelRoughness"]:
+	for channel_button in ["ChannelAlbedo", "ChannelRoughness", "ChannelEmission", "ChannelMetallic", "ChannelNormal", "ChannelHeight"]:
 		await _click(panel.find_child(channel_button, true, false))
 		await _wait_layout([canvas])
 		await _click_at(canvas, canvas.global_position + canvas.image_rect().get_center())
@@ -813,5 +860,8 @@ func _layer_and_channel_controls(panel: Control, canvas: Control, paint: RefCoun
 		_check(saved != null and saved.save_png_to_buffer() == expected,
 			"%s Save Paint button writes exact displayed pixels" % channel_button)
 		paths.append(path)
-	_check(paths[0] != paths[1], "Albedo and Roughness Save buttons target different PNGs")
+	var unique_paths: Dictionary = {}
+	for path in paths:
+		unique_paths[path] = true
+	_check(unique_paths.size() == 6, "all six channel Save buttons target independent PNGs")
 	solid.name = saved_name

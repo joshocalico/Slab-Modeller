@@ -315,6 +315,10 @@ func command_sections_for(mode: int) -> Array[Dictionary]:
 
 static func section_of(row: Dictionary) -> String:
 	var id: String = str(row.get("id", ""))
+	# Whole-object atlas preparation also belongs in the modelling commands.
+	# SECTION_UV is rendered only by the dedicated UV workspace.
+	if id == "uv_auto_unwrap":
+		return "Object"
 	if id.begins_with("uv_") or id == "set_face_material":
 		return SECTION_UV
 	if id == "import_mesh":
@@ -360,6 +364,10 @@ func disabled_reason(row: Dictionary) -> String:
 		return ""
 	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):
 		return PROMOTE_FIRST_TOOLTIP
+	if str(row.get("id", "")) == "uv_auto_unwrap":
+		if _selection.objects.size() != 1 or not is_instance_valid(_selection.solid):
+			return "Auto Unwrap needs exactly one selected solid."
+		return ""
 	var exact: int = row.get("exact_count", 0)
 	if exact > 0 and _selection.count() != exact:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
@@ -462,6 +470,7 @@ func _apply(row: Dictionary, plan: Dictionary) -> void:
 
 func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -> void:
 	var before: PackedByteArray = target.get("data")
+	var before_materials: Array = target.get("materials").duplicate()
 	var before_ids := PackedInt64Array(_selection.ids)
 	var before_elements := SlabTopology.all_ids(target, _selection.mode) if method in ["subdivide_faces", "merge_faces", "connect_edges"] else PackedInt64Array()
 	var err: int = target.callv(method, args)
@@ -469,9 +478,11 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 		_report("%s failed. %s" % [row["label"], describe_error(err, row["id"])])
 		return
 	var after: PackedByteArray = target.get("data")
-	if after == before:
+	var after_materials: Array = target.get("materials").duplicate()
+	if after == before and after_materials == before_materials:
 		_report("%s did not change the solid." % row["label"])
 		return
+	var rebuilt := method in ["boolean_with", "bevel_edges", "plane_cut"]
 	var after_ids := before_ids
 	if method in ["subdivide_faces", "merge_faces", "dissolve_edges", "collapse_vertices", "weld_vertices", "connect_edges", "connect_vertices"]:
 		var alive := SlabTopology.all_ids(target, _selection.mode)
@@ -483,12 +494,22 @@ func _edit_solid(row: Dictionary, target: Node3D, method: String, args: Array) -
 				if not before_elements.has(id): after_ids.append(id)
 	if before_ids.size() > 1 and (method == "extrude_faces" or method == "inset_faces"):
 		after_ids = PackedInt64Array(target.call("get_last_edited_faces"))
-	_selection.set_ids(after_ids)
+	if rebuilt:
+		after_ids = PackedInt64Array()
+		_selection.clear_rebuilt_handles_for(target)
+	else:
+		_selection.set_ids(after_ids)
 	if _undo != null:
 		_undo.create_action("Slab %s" % row["label"], UndoRedo.MERGE_DISABLE, target)
 		_undo.add_do_property(target, "data", after)
 		_undo.add_undo_property(target, "data", before)
-		if after_ids != before_ids:
+		if after_materials != before_materials:
+			_undo.add_do_property(target, "materials", after_materials)
+			_undo.add_undo_property(target, "materials", before_materials)
+		if rebuilt:
+			_undo.add_do_method(_selection, "restore_rebuilt_ids_for", target, _selection.mode, after_ids)
+			_undo.add_undo_method(_selection, "restore_rebuilt_ids_for", target, _selection.mode, before_ids)
+		elif after_ids != before_ids:
 			_undo.add_do_method(_selection, "restore_ids_for", target, _selection.mode, after_ids)
 			_undo.add_undo_method(_selection, "restore_ids_for", target, _selection.mode, before_ids)
 		_undo.commit_action(false)
@@ -585,8 +606,16 @@ func _ids_op(method: String) -> Dictionary:
 	return { "method": method, "args": [_selection.ids] }
 
 
+func _shading_op(method: String, enabled: bool) -> Dictionary:
+	return { "method": method, "args": [_selection.ids, enabled] }
+
+
 func _seam_op(marked: bool) -> Dictionary:
 	return { "method": "mark_uv_seams", "args": [_selection.ids, marked] }
+
+
+func _auto_unwrap_op() -> Dictionary:
+	return { "run": _auto_unwrap_target }
 
 
 func _unwrap_op() -> Dictionary:
@@ -710,6 +739,13 @@ func _loop_op() -> Dictionary:
 
 
 func _boolean_op(mode: int) -> Dictionary:
+	var receiver: Dictionary = _selection.solid.get("deformation")
+	var operand: Dictionary = _selection.objects[1].get("deformation")
+	if receiver.get("skin") != null or operand.get("skin") != null:
+		return {"status": "Boolean cannot combine skinned solids yet. Bone bindings would need remapping."}
+	var operand_shapes: PackedStringArray = operand.get("blend_names", PackedStringArray())
+	if not operand_shapes.is_empty() and operand_shapes != receiver.get("blend_names", PackedStringArray()):
+		return {"status": "Boolean needs matching blend shape names on the receiving solid and operand."}
 	return { "method": "boolean_with", "args": [_selection.objects[1], mode] }
 
 
@@ -754,45 +790,7 @@ func _promote_op() -> Dictionary:
 
 
 func _flatten_mesh(mesh: Mesh) -> Dictionary:
-	var vertices := PackedVector3Array()
-	var indices := PackedInt32Array()
-	var uvs := PackedVector2Array()
-	var slots := PackedInt32Array()
-	var has_uvs := false
-	if mesh == null:
-		return {"vertices": vertices, "indices": indices, "uvs": uvs, "slots": slots}
-	if mesh is ArrayMesh and mesh.get_blend_shape_count() > 0:
-		return {"error": "blend shapes are not supported"}
-	for surface_idx in mesh.get_surface_count():
-		if mesh is ArrayMesh and mesh.surface_get_primitive_type(surface_idx) != Mesh.PRIMITIVE_TRIANGLES:
-			return {"error": "only triangle surfaces are supported"}
-		var arrays: Array = mesh.surface_get_arrays(surface_idx)
-		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-		var tex: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
-		if not tex.is_empty() and tex.size() != verts.size():
-			return {"error": "UV data is malformed"}
-		for unsupported in [Mesh.ARRAY_BONES, Mesh.ARRAY_WEIGHTS, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_COLOR]:
-			if arrays[unsupported] != null and not arrays[unsupported].is_empty():
-				return {"error": "skin, secondary UV, or vertex color data is not supported"}
-		if (idx.size() if not idx.is_empty() else verts.size()) % 3 != 0:
-			return {"error": "triangle indices are malformed"}
-		var base: int = vertices.size()
-		vertices.append_array(verts)
-		has_uvs = has_uvs or not tex.is_empty()
-		for i in verts.size():
-			uvs.append(tex[i] if not tex.is_empty() else Vector2.ZERO)
-		if idx.is_empty():
-			for i in verts.size():
-				indices.append(base + i)
-		else:
-			for i in idx:
-				if i < 0 or i >= verts.size():
-					return {"error": "triangle indices are malformed"}
-				indices.append(base + i)
-		for i in (idx.size() if not idx.is_empty() else verts.size()) / 3:
-			slots.append(surface_idx)
-	return {"vertices": vertices, "indices": indices, "uvs": uvs if has_uvs else PackedVector2Array(), "slots": slots}
+	return preload("res://addons/slab/slab_mesh_attributes.gd").flatten(mesh)
 
 
 func _editor_scene_root() -> Node:
@@ -886,7 +884,7 @@ func _run_promote() -> Dictionary:
 	if solid == null:
 		return { "status": "SlabSolid is not built yet." }
 
-	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"])
+	var imported: Dictionary = solid.call("import_from_mesh", vertices, indices, arrays["uvs"], arrays["slots"], arrays["attributes"])
 	var err: int = int(imported.get("error", ERR_INVALID_DATA))
 	if err != OK:
 		var reason: String = str(imported.get("refuse_reason", "non-manifold"))
@@ -895,6 +893,7 @@ func _run_promote() -> Dictionary:
 		solid.free()
 		return { "status": "Could not promote: mesh is %s. External mesh unchanged." % reason }
 
+	solid.set("deformation", preload("res://addons/slab/slab_mesh_attributes.gd").envelope(external))
 	solid.name = external.name
 	solid.top_level = external.top_level
 	solid.transform = external.transform
@@ -996,9 +995,53 @@ func _pick_ring(target: Node3D) -> String:
 	return _selection.describe()
 
 
+func _auto_unwrap_target(target: Node3D) -> String:
+	if not target.is_class("SlabSolid"):
+		return PROMOTE_FIRST_TOOLTIP
+	var faces := PackedInt64Array(target.call("get_faces"))
+	if faces.is_empty():
+		return "Auto Unwrap needs a solid with faces. The solid was unchanged."
+	var before: PackedByteArray = target.get("data")
+	var handles := {"mode": _selection.mode, "ids": PackedInt64Array(_selection.ids),
+		"uv_mode": _selection.uv_mode, "uv_ids": PackedInt64Array(_selection.get_uv_selection())}
+	# Native unwrap already packs the unfolded islands into the requested atlas.
+	# A second Pack would add another transaction without improving this result.
+	var result: Dictionary = target.call("unwrap_uv", faces, uv_pixels_per_meter, uv_texture_resolution)
+	if bool(result.get("pinned_conflict", false)):
+		return "Auto Unwrap: " + str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
+	if bool(result.get("atlas_overflow", false)):
+		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
+		return "Auto Unwrap atlas is too small. Lower Pixels / metre or raise Texture px to at least %d. The solid was unchanged." % suggested
+	var error: int = int(result.get("error", ERR_INVALID_SELECTION))
+	if error != OK:
+		return "Auto Unwrap failed. %s" % describe_error(error, "uv_auto_unwrap")
+	var after: PackedByteArray = target.get("data")
+	uv_scale = Vector2.ONE
+	uv_offset = Vector2.ZERO
+	uv_rotation_degrees = 0.0
+	if _undo != null and after != before:
+		_undo.create_action("Slab Auto Unwrap", UndoRedo.MERGE_DISABLE, target)
+		_undo.add_do_method(self, "_restore_auto_unwrap", target, after, handles)
+		_undo.add_undo_method(self, "_restore_auto_unwrap", target, before, handles)
+		_undo.commit_action(false)
+	return "Auto Unwrapped %d faces into %d packed island(s), ready to paint. Preserved marked seams and pins." % [faces.size(), int(result.get("islands", 0))]
+
+
+func _restore_auto_unwrap(target: Node3D, data: PackedByteArray, handles: Dictionary) -> void:
+	target.set("data", data)
+	# History for a previous object must not steal the current selection.
+	if _selection.solid != target or _selection.mode != handles.mode:
+		return
+	_selection.set_ids(handles.ids)
+	_selection.set_uv_mode(handles.uv_mode)
+	_selection.set_uv_selection(handles.uv_ids)
+
+
 func _unwrap_target(target: Node3D) -> String:
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("unwrap_uv", _selection.ids, uv_pixels_per_meter, uv_texture_resolution)
+	if bool(result.get("pinned_conflict", false)):
+		return str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
 	if bool(result.get("atlas_overflow", false)):
 		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
 		return "Unwrap atlas is too small. Lower Pixels / metre or raise Texture px to at least %d. The solid was unchanged." % suggested
@@ -1021,10 +1064,12 @@ func _unwrap_target(target: Node3D) -> String:
 func _pack_target(target: Node3D) -> String:
 	for face in _selection.ids:
 		var attrs: Dictionary = target.call("face_uv", face)
-		if not bool(attrs.get("unwrapped", false)):
+		if not bool(attrs.get("unwrapped", false)) and not bool(attrs.get("explicit", false)):
 			return "Pack needs unwrapped islands. Unwrap first. The solid was unchanged."
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("pack_uv", _selection.ids, uv_texture_resolution, 0)
+	if bool(result.get("pinned_conflict", false)):
+		return str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
 	if bool(result.get("atlas_overflow", false)):
 		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
 		return "Pack refused: islands exceed atlas. Increase Texture px to at least %d, or scale down Placement. The solid was unchanged." % suggested
@@ -1080,7 +1125,7 @@ func _build() -> Array[Dictionary]:
 		_row("center_pivot", "Center Pivot", "EditorPivot", object, 1, "Moves the origin to the middle of the solid.", 0, _solid_op.bind("center_pivot")),
 		_row("snap_to_grid", "Snap To Grid", "SnapGrid", object, 1, "Rounds every vertex onto the grid step.", 0, _solid_op.bind("snap_to_grid")),
 		_row("export_solids", "Export...", "Save", object, 1, "Export the selected solid(s) to a mesh file. Does not change the scene.", 0, _export_op),
-		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh file (OBJ/STL). Non-manifold and open meshes are allowed.", 0, _import_op),
+		_row("import_mesh", "Import Mesh...", "ArrayMesh", object, 0, "Import an external mesh or scene (GLB/glTF, OBJ, STL). Non-manifold and open meshes are allowed.", 0, _import_op),
 		_row("promote_to_solid", PROMOTE_LABEL, "QuadMesh", object, 1, "Convert a closed External mesh into an editable Slab solid. Open, empty, or non-manifold meshes are refused.", 0, _promote_op),
 
 		_row("weld_vertices", "Weld", "Snap", vertex, 2, "Merges vertices closer than the amount field.", KEY_J, _positive_amount_op.bind("weld_vertices")),
@@ -1092,6 +1137,8 @@ func _build() -> Array[Dictionary]:
 		_row("insert_loop", "Loop Cut", "AnimationTrackGroup", edge, 0, "Preview loop cuts, then slide or type a percentage. Wheel changes the cut count. Enter confirms; Escape cancels.", KEY_L, _loop_op),
 		_row("dissolve_edges", "Dissolve", "Remove", edge, 1, "Removes coplanar internal edges and merges their adjacent faces.", KEY_X, _ids_op.bind("dissolve_edges")),
 		_row("mark_uv_seam", "Mark Seam", "MaterialPreviewCube", edge, 1, "Marks selected edges as UV island boundaries.", 0, _seam_op.bind(true)),
+		_row("hard_edges", "Hard Edge", "CurveLinear", edge, 1, "Split shading normals across the selected edges. UV seams are unchanged.", 0, _shading_op.bind("mark_hard_edges", true)),
+		_row("soft_edges", "Soft Edge", "CurveIn", edge, 1, "Remove hard boundaries from the selected edges. Adjacent faces must also use smooth shading to blend their normals.", 0, _shading_op.bind("mark_hard_edges", false)),
 		_row("clear_uv_seam", "Clear Seam", "Save", edge, 1, "Removes UV seam marks from selected edges.", 0, _seam_op.bind(false)),
 
 		_row("extrude_faces", "Extrude", "ToolMove", face, 1, "Pulls one face along its normal, or a connected face region in one shared direction. Positive is outward. Negative is inward.", KEY_E, _operation_op.bind(0)),
@@ -1100,6 +1147,8 @@ func _build() -> Array[Dictionary]:
 		_row("merge_faces", "Merge", "GroupViewport", face, 2, "Joins one connected coplanar face region into a single face.", KEY_M, _ids_op.bind("merge_faces")),
 		_row("select_coplanar", "Select Coplanar", "PlaneMesh", face, 1, "Selects every connected face on the same plane as the current face selection.", 0, _select_op.bind(_pick_coplanar)),
 		_row("select_boundary", "Select Boundary", "Path3D", face, 1, "Switches to Edge mode and selects the perimeter edges of the selected faces.", 0, _select_op.bind(_select_face_boundary)),
+		_row("shade_smooth", "Shade Smooth", "CSGSphere3D", face, 1, "Blend normals across selected smooth faces, stopping at hard edges and flat neighbours. Geometry and UVs stay unchanged.", 0, _shading_op.bind("set_face_smooth", true)),
+		_row("shade_flat", "Shade Flat", "BoxMesh", face, 1, "Use each selected face's own normal. Geometry, UVs and hard-edge marks stay unchanged.", 0, _shading_op.bind("set_face_smooth", false)),
 		_row("align_face", "Align Face", "SnapGrid", face, 1, "Moves the solid so the selected face centre and normal align to a face you click on another solid.", 0, _align_face_op),
 		_row("set_face_material", "Set Material", "StandardMaterial3D", face, 1, "Assigns the active material to the faces.", 0, _material_op),
 		_row("uv_apply", "Apply UV", "ImageTexture", face, 1, "Writes the UV scale, offset and rotation fields.", 0, _uv_op),
@@ -1107,6 +1156,7 @@ func _build() -> Array[Dictionary]:
 		_row("uv_scale_down", "Repeat ÷2", "ZoomLess", face, 1, "Halves the UV scale and applies it.", 0, _uv_scaled.bind(0.5)),
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
+		_row("uv_auto_unwrap", "Auto Unwrap Object", "AutoUnwrap", [SlabSelection.Mode.OBJECT, SlabSelection.Mode.FACE], 0, "Unwraps and packs every face of the selected solid into a paint-ready atlas, respecting seams and pins.", 0, _auto_unwrap_op),
 		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),
 		_row("uv_pack", "Pack", "GridLayout", face, 1, "Repack islands without re-unwrapping.", 0, _pack_op),
 

@@ -118,19 +118,14 @@ func uv_selection_count() -> int:
 
 func uv_related_3d_faces() -> PackedInt64Array:
 	var faces := PackedInt64Array()
-	match uv_mode:
-		UVMode.UV_VERT:
-			for id in uv_selected_verts:
-				var face := id >> 16
-				if not faces.has(face):
-					faces.append(face)
-		UVMode.UV_EDGE:
-			for id in uv_selected_edges:
-				var face := id >> 16
-				if not faces.has(face):
-					faces.append(face)
-		UVMode.UV_FACE:
-			faces = uv_selected_faces
+	if not is_instance_valid(solid):
+		return faces
+	if uv_mode == UVMode.UV_FACE:
+		return uv_selected_faces
+	for id in get_uv_selection():
+		var corner: Dictionary = solid.uv_corner(id)
+		if not corner.is_empty() and not faces.has(corner["face"]):
+			faces.append(corner["face"])
 	return faces
 
 
@@ -502,6 +497,27 @@ func set_ids(value: PackedInt64Array) -> void:
 	if face_isolated:
 		_refresh_face_isolation_mask()
 	changed.emit()
+
+
+func clear_rebuilt_handles_for(target: Node3D) -> void:
+	# Rebuilt meshes can reuse numeric handles for different elements. An empty
+	# 3D selection does not imply that the UV or hover selection is empty.
+	if hover_solid == target:
+		set_hover(null, 0)
+	if solid != target:
+		return
+	if face_isolated:
+		exit_face_isolation()
+	set_ids(PackedInt64Array())
+	clear_uv_selection()
+
+
+func restore_rebuilt_ids_for(target: Node3D, target_mode: int, value: PackedInt64Array) -> void:
+	if solid != target:
+		return
+	clear_rebuilt_handles_for(target)
+	if mode == target_mode:
+		set_ids(value)
 
 
 func restore_ids_for(target: Node3D, target_mode: int, value: PackedInt64Array) -> void:

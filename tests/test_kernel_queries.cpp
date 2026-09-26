@@ -255,7 +255,9 @@ SLAB_TEST(serialize_round_trips_ids_and_attrs) {
 	expect(before_emit.uvs == after_emit.uvs, "rendered UVs survive serialization exactly");
 	std::vector<uint8_t> legacy_v3 = bytes;
 	legacy_v3[4] = 3;
-	legacy_v3.resize(legacy_v3.size() - size_t(mesh.face_count() * 4));
+	// Version 5 adds nine bytes per half-edge after the v4 resolution tail.
+	legacy_v3.resize(legacy_v3.size() - size_t(mesh.edge_count() * 2 * 9)
+			- size_t(mesh.face_count() * 4));
 	Mesh loaded_v3;
 	expect(deserialize(legacy_v3, loaded_v3).ok(), "actual v3 layout without resolution tail loads");
 	expect_eq(loaded_v3.attrs(top).uv_texture_resolution, 0, "legacy atlas resolution is unknown");

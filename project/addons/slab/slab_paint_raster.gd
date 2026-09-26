@@ -13,34 +13,49 @@ static func clone_rgba(image: Image) -> Image:
 	return copy
 
 
-static func stamp(image: Image, center: Vector2, radius: float, color: Color, opacity: float) -> void:
+static func stamp(image: Image, center: Vector2, radius: float, color: Color, opacity: float, hardness: float = 0.0, erase: bool = false, mask: Image = null) -> bool:
 	if image == null or image.is_empty() or radius <= 0.0 or opacity <= 0.0:
-		return
-	if image.is_compressed():
-		image.decompress()
-	if image.get_format() != Image.FORMAT_RGBA8:
-		image.convert(Image.FORMAT_RGBA8)
-	var w: int = image.get_width()
-	var h: int = image.get_height()
-	var r: float = maxf(0.5, radius)
-	var r2: float = r * r
-	var min_x: int = int(floor(center.x - r - 1.0))
-	var max_x: int = int(ceil(center.x + r + 1.0))
-	var min_y: int = int(floor(center.y - r - 1.0))
-	var max_y: int = int(ceil(center.y + r + 1.0))
-	for y in range(min_y, max_y + 1):
-		for x in range(min_x, max_x + 1):
-			var dx: float = float(x) + 0.5 - center.x
-			var dy: float = float(y) + 0.5 - center.y
-			var d2: float = dx * dx + dy * dy
-			if d2 > r2:
+		return false
+	var w := image.get_width()
+	var h := image.get_height()
+	var r := maxf(0.5, radius)
+	hardness = clampf(hardness, 0.0, 1.0)
+	var coverage: Dictionary = {}
+	for y in range(int(floor(center.y - r)), int(ceil(center.y + r)) + 1):
+		for x in range(int(floor(center.x - r)), int(ceil(center.x + r)) + 1):
+			var distance := Vector2(float(x) + 0.5, float(y) + 0.5).distance_to(center) / r
+			if distance > 1.0:
 				continue
-			var falloff: float = 1.0 - sqrt(d2) / r
-			var a: float = clampf(opacity * falloff, 0.0, 1.0)
-			var px: int = posmod(x, w)
-			var py: int = posmod(y, h)
-			var dst: Color = image.get_pixel(px, py)
-			image.set_pixel(px, py, dst.lerp(color, a))
+			var px := posmod(x, w)
+			var py := posmod(y, h)
+			if mask != null and mask.get_pixel(px, py).r < 0.5:
+				continue
+			var falloff := 1.0 if distance <= hardness else (1.0 - distance) / (1.0 - hardness)
+			var key := py * w + px
+			# A large wrapped brush may visit a texel repeatedly. Apply its strongest coverage once.
+			coverage[key] = maxf(float(coverage.get(key, 0.0)), falloff)
+	var changed := false
+	for key: int in coverage:
+		var px := key % w
+		var py := key / w
+		var dst := image.get_pixel(px, py)
+		var weight := clampf(opacity * float(coverage[key]), 0.0, 1.0)
+		var result := dst
+		if erase:
+			result.a *= 1.0 - weight
+			if result.a <= 0.0:
+				result = Color.TRANSPARENT
+		else:
+			var alpha := color.a * weight
+			var combined := alpha + dst.a * (1.0 - alpha)
+			if combined > 0.0:
+				result = Color((color.r * alpha + dst.r * dst.a * (1.0 - alpha)) / combined,
+					(color.g * alpha + dst.g * dst.a * (1.0 - alpha)) / combined,
+					(color.b * alpha + dst.b * dst.a * (1.0 - alpha)) / combined, combined)
+		if result != dst:
+			image.set_pixel(px, py, result)
+			changed = true
+	return changed
 
 
 static func interpolate(from: Vector2, to: Vector2, spacing: float) -> PackedVector2Array:
@@ -56,7 +71,9 @@ static func interpolate(from: Vector2, to: Vector2, spacing: float) -> PackedVec
 	return out
 
 
-static func stroke(image: Image, from: Vector2, to: Vector2, radius: float, color: Color, opacity: float) -> void:
+static func stroke(image: Image, from: Vector2, to: Vector2, radius: float, color: Color, opacity: float, hardness: float = 0.0, erase: bool = false, mask: Image = null) -> bool:
+	var changed := false
 	var spacing: float = maxf(0.5, radius * 0.45)
 	for dab in interpolate(from, to, spacing):
-		stamp(image, dab, radius, color, opacity)
+		changed = stamp(image, dab, radius, color, opacity, hardness, erase, mask) or changed
+	return changed
