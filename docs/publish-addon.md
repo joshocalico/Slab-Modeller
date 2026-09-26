@@ -1,10 +1,10 @@
 # Publish an addon build
 
-Use the **Build drop-in addon** GitHub Actions workflow to produce an installable addon for Godot 4.7. The workflow runs on branch pushes, pull requests, `v*` tags, and manual dispatches.
+Use the **Build drop-in addon** GitHub Actions workflow to produce an installable addon for Godot 4.7. The workflow runs on pushes to `main`, pull requests targeting `main`, `v*` tags, and manual dispatches. Download builds from `main` for the current integrated addon.
 
 ## Download a development build
 
-1. Push the implementation and workflow to GitHub.
+1. Push the implementation to `main`, or select **Run workflow** on `main`.
 2. Open **Actions → Build drop-in addon** and select the successful run for that commit.
 3. Download the **slab-addon** artifact and extract the artifact wrapper.
 4. Extract the enclosed `slab-addon.zip` into your Godot project root.

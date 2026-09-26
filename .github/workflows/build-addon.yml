@@ -2,9 +2,10 @@ name: Build drop-in addon
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
     tags: ['v*']
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
