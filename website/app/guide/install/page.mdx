@@ -2,79 +2,95 @@ export const metadata = { title: "Install Slab" };
 
 # Install Slab
 
-Slab is currently installed from a source checkout. There is no public repository URL or packaged addon in this guide. Ask the project owner for a complete checkout, then build the GDExtension for your computer.
+Install the prebuilt addon ZIP into a Godot 4.7 project. You do not need Python, SCons, or a C++ compiler to use the download.
 
-## What you need
+## Download the addon
 
-- Godot 4.7 to open the bundled project. The extension declares Godot 4.5 as its compatibility minimum.
-- Git to initialize the `godot-cpp` submodule.
-- Python 3 and SCons. The SCons project recommends `python -m pip install scons`. Confirm the installation with `scons --version`.
-- A C++ compiler for your operating system.
+Open [Slab releases](https://github.com/joshocalico/slab-modeller/releases) and download **slab-addon.zip** from the release assets. The GitHub **Source code** downloads do not contain compiled libraries.
 
-Slab's verified development path is macOS with Xcode or the Xcode Command Line Tools. Godot documents the same compiler, Python, and SCons setup for [building C++ projects on macOS](https://docs.godotengine.org/en/stable/engine_details/development/compiling/compiling_for_macos.html).
+If no release is published, or you want a development build:
 
-The extension descriptor also declares Windows x86-64 and Linux x86-64 libraries, but this guide has not verified those Slab builds. Godot documents Visual Studio 2019 or later and MinGW-w64 as Windows compiler choices, and GCC or Clang as Linux choices. Follow Godot's [Windows](https://docs.godotengine.org/en/4.7/engine_details/development/compiling/compiling_for_windows.html) or [Linux](https://docs.godotengine.org/en/4.7/engine_details/development/compiling/compiling_for_linuxbsd.html) toolchain setup before trying Slab on those systems.
+1. Sign in to GitHub and open [Slab's Actions runs](https://github.com/joshocalico/slab-modeller/actions).
+2. Select a successful **Build drop-in addon** run. Development builds are currently on the `codex/extended-tools` branch.
+3. Under **Artifacts**, download **slab-addon**.
+4. Extract that download to find **slab-addon.zip** and **SHA256SUMS**. The enclosed `slab-addon.zip` is the installable addon.
 
-The official [godot-cpp build guide](https://docs.godotengine.org/en/4.7/tutorials/scripting/cpp/build_system/scons.html) explains why each platform needs its own compiled library and how Godot chooses that library from a `.gdextension` file.
+Actions artifacts expire after 30 days. If a download has expired, choose a newer successful run. Release assets are the preferred download once a release is published.
 
-## Build the extension
+The same addon ZIP includes libraries for Windows x64, Linux x64, and macOS Intel and Apple Silicon. Both editor/debug and release/export libraries are included. Android, iOS, Web, and Windows/Linux ARM builds are not included.
 
-From the Slab repository root:
+## Add Slab to your project
 
-```bash
-git submodule update --init --recursive
-scons target=template_debug
-```
+1. Save your work and close the target project in Godot.
+2. Extract **slab-addon.zip** into the project root, beside `project.godot`.
+3. Check that the files have this layout:
 
-The first command fills `godot-cpp/`. The build uses the repository's `SConstruct` and writes the debug library under `project/addons/slab/bin/`.
+   ```text
+   your-project/
+     project.godot
+     addons/
+       slab/
+         plugin.cfg
+         slab.gdextension
+         bin/
+         ...
+   ```
 
-On the verified macOS path, the library is:
+4. Open the project in Godot 4.7 and wait for importing to finish.
+5. Open **Project → Project Settings → Plugins** and enable **Slab**.
+6. Open or create a 3D scene with a `Node3D` root. Click the **Slab** bottom panel.
+7. In Object mode, choose **Box**, click **Create**, then click in the 3D view to place it.
 
-```text
-project/addons/slab/bin/libslab.macos.template_debug.framework/
-```
+The box should appear in the scene and remain editable through Slab. Continue with [Block out a room](/guide/tutorials/block-out-a-room).
 
-The `project/addons/slab/slab.gdextension` file declares the library paths that Godot loads. Do not rename the built library or move it outside `addons/slab/bin/`.
+Copy the complete `addons/slab/` directory. Keep the scripts, icons, extension descriptor, and `bin/` libraries together. The addon ZIP does not include the demo scenes or demo materials from the source project.
 
-## Run the developer checks
+## Update an existing installation
 
-If you are changing Slab itself, run:
+1. Save and back up your project, then close Godot.
+2. Replace `addons/slab/` with the directory from the new addon ZIP. Keep your scenes and painted textures outside the addon directory.
+3. Reopen the project, wait for importing, and confirm that Slab is enabled under **Plugins**.
 
-```bash
-scripts/slab-verify
-```
+Do not mix scripts from one build with libraries from another.
 
-This Bash script rebuilds the extension and kernel test, runs the kernel suite, loads the extension, and exercises the plugin and demos. It is the repository's developer gate, not a required second installation step. The script has been verified on macOS. Windows and Linux use the same SCons build, but the complete verifier has not been confirmed on those platforms.
+## Build from source instead
 
-## Open the bundled project
+Use this path if you are developing Slab or need to compile a library yourself.
 
-1. Open `project/` in Godot 4.7.
-2. Confirm **Project → Project Settings → Plugins** lists Slab as enabled.
-3. Open `demo/demo.tscn` if the 3D view is empty.
+1. Install Git, Python 3, SCons, and a C++ compiler. On macOS, install the Xcode Command Line Tools. On Linux, use GCC or Clang. On Windows, use a MinGW-w64 shell with GCC and SCons; Slab's exact geometry predicates require `__int128`, which MSVC does not support.
+2. Clone the [Slab repository](https://github.com/joshocalico/slab-modeller) with its submodule:
 
-The **Slab** bottom panel should appear. The 3D editor menu should show Object, Vertex, Edge, and Face mode buttons.
+   ```bash
+   git clone --recurse-submodules https://github.com/joshocalico/slab-modeller.git
+   cd slab-modeller
+   ```
 
-## Add Slab to an existing project
+3. Build the editor and export libraries. On macOS or Linux, run:
 
-1. Build Slab for the operating system that runs the target Godot project.
-2. Copy the complete `project/addons/slab/` directory from the Slab checkout into `<your-project>/addons/slab/`.
-3. Confirm that the copied `addons/slab/bin/` contains the library for that operating system and build target.
-4. Open the target project in Godot.
-5. Open **Project → Project Settings → Plugins**, then enable **Slab**.
+   ```bash
+   scons target=template_debug -j4
+   scons target=template_release -j4
+   ```
 
-Copy the complete addon directory. The GDScript editor tools, `plugin.cfg`, `slab.gdextension`, icons, and compiled library work together.
+   On Windows, run these commands from the MinGW-w64 shell:
 
-This copy workflow has been verified in a fresh Godot project: a box created through the Slab panel remained editable with the same dimensions and collision after saving, closing the editor, and reopening the project.
+   ```bash
+   scons platform=windows arch=x86_64 use_mingw=yes target=template_debug -j4
+   scons platform=windows arch=x86_64 use_mingw=yes target=template_release -j4
+   ```
+
+4. Open `project/` in Godot 4.7 and enable Slab under **Plugins**, or copy the complete `project/addons/slab/` directory into another project's `addons/` directory.
+5. To explore the bundled demo, open `demo/demo.tscn` in the source project.
+
+For an existing checkout, run `git submodule update --init --recursive` before building. Compiled libraries go under `project/addons/slab/bin/`. Do not rename them; their paths must match `slab.gdextension`.
+
+If you change Slab itself, run `scripts/slab-verify` on the macOS development path. It rebuilds the extension and kernel tests, then runs the kernel and Godot checks. Installation from the ZIP does not require this step.
 
 ## Fix a failed installation
 
-| Symptom | Check |
-| --- | --- |
-| `godot-cpp is missing` | Run `git submodule update --init --recursive` from the repository root. |
-| `scons: command not found` | Install SCons with `python -m pip install scons`, then open a new terminal and run `scons --version`. See the [SCons installation guide](https://scons.org/doc/4.9.0/HTML/scons-user/ch01s02.html). |
-| The compiler is missing | Install the platform toolchain linked under **What you need**, then run the build again. |
-| Godot cannot load the dynamic library | Confirm that the current operating system and architecture have a matching entry in `slab.gdextension` and a matching file under `addons/slab/bin/`. |
-| Godot reports that `SlabSolid` is missing | Read the editor's GDExtension load error, fix the missing or incompatible library, restart Godot, and reopen the project. |
-| Slab is absent from **Plugins** | Confirm that `<your-project>/addons/slab/plugin.cfg` exists and that the whole addon directory was copied. |
-
-Do not use a library built for another operating system or architecture. Build on the target system unless you have configured and tested a cross-compiler.
+- **Slab is absent from Plugins:** check for `<your-project>/addons/slab/plugin.cfg`. If you have an extra `slab-addon/` folder around `addons/`, move `addons/` beside `project.godot`.
+- **The ZIP contains another ZIP:** you downloaded the Actions artifact wrapper. Extract the enclosed `slab-addon.zip` into your project.
+- **Godot cannot load the library or find SlabSolid:** confirm that you downloaded the addon asset, not GitHub's source archive. Check that `addons/slab/bin/` contains the library for your operating system and architecture, then restart Godot. Read the GDExtension load error if it still fails.
+- **The addon stops loading after an update:** replace the complete addon directory from one ZIP, then restart Godot.
+- **A source build reports `godot-cpp is missing`:** run `git submodule update --init --recursive` from the repository root.
+- **A source build cannot find SCons:** install it with `python -m pip install scons`, or use your MinGW-w64 package manager on Windows, then check `scons --version` in the build shell.
