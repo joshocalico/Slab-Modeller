@@ -61,7 +61,7 @@ jobs:
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-scons
+            mingw-w64-x86_64-scons
       - name: Build and test editor and export libraries
         run: |
           set -euo pipefail
