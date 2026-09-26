@@ -10,6 +10,8 @@ Slab is a Godot 4.7 editor plugin for modelling closed solids, editing UVs, and 
 
 ## How to use it
 
+For a prebuilt download, extract `slab-addon.zip` from a [GitHub release](https://github.com/joshocalico/slab-modeller/releases) into your Godot project's root. It contains `addons/slab/`, including Windows x64, Linux x64, and macOS Intel/Apple Silicon libraries. Restart Godot, then enable **Slab** in **Project Settings → Plugins**. Prebuilt downloads appear after the release workflow completes and the draft release is published.
+
 For a source checkout, [build the extension](#build) before opening `project/` in Godot 4.7. The Slab bottom panel contains the modelling tools. The full manual is the Next.js app in `website/`:
 
 ```bash
@@ -31,7 +33,9 @@ npm run dev
 | B | Bevel selected edges |
 | L | Insert edge loop |
 
-Shift-drag a face to extrude. Shift-drag an edge to bevel.
+To extrude, enter **Face** mode, select a face, then press **E** or click **Extrude**. Drag the Slab operation handle or edit its amount, then press **Enter** to apply. Press **Escape** to cancel. Positive amounts extend outward. For a recessed room, inset first, then extrude inward without passing through the opposite wall.
+
+Shift-drag directly on a face to extrude, or directly on an edge to bevel. Start on the geometry, away from Godot's move/rotate/scale gizmo. Shift-dragging that gizmo is not the Slab extrusion gesture.
 
 **Soft Select.** In element modes, enable Soft Select to apply falloff influence to neighboring geometry during transforms. Set radius and falloff curve in the panel.
 
@@ -60,6 +64,8 @@ Short silent clips of the editor. Files live in `website/public/videos/v1/` (als
 The same list is on the [guide](website/app/guide/page.mdx) under Learn by making.
 
 ## Build
+
+The [build workflow](.github/workflows/build-addon.yml) builds and tests debug and release libraries on all three desktop platforms. Each successful run produces a `slab-addon` artifact containing the installable ZIP and its SHA-256 checksum. See [Publish an addon build](docs/publish-addon.md) for release steps.
 
 ```bash
 git submodule update --init --recursive
