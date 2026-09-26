@@ -1,0 +1,17 @@
+{
+  "enabled_classes": [
+    "ArrayMesh",
+    "CollisionShape3D",
+    "ConcavePolygonShape3D",
+    "Material",
+    "Mesh",
+    "MeshInstance3D",
+    "Node3D",
+    "OS",
+    "Mutex",
+    "Shape3D",
+    "Skin",
+    "StandardMaterial3D",
+    "StaticBody3D"
+  ]
+}
