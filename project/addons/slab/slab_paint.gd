@@ -4,6 +4,7 @@ extends RefCounted
 const SlabPaintUv := preload("res://addons/slab/slab_paint_uv.gd")
 const SlabPaintMask := preload("res://addons/slab/slab_paint_mask.gd")
 const SlabPaintChannels := preload("res://addons/slab/slab_paint_channels.gd")
+const Brushes := preload("res://addons/slab/slab_paint_brushes.gd")
 const SlabPaintRaster := preload("res://addons/slab/slab_paint_raster.gd")
 const SlabPick := preload("res://addons/slab/slab_pick.gd")
 
@@ -15,7 +16,7 @@ signal layers_changed
 
 enum Tool { MATERIAL_UV, PIXEL }
 enum Channel { ALBEDO, ROUGHNESS, EMISSION, METALLIC, NORMAL, HEIGHT }
-enum BrushMode { PAINT, ERASE }
+enum BrushMode { PAINT, ERASE, AIRBRUSH, BLUR, SMUDGE, CLONE, STAMP, FILL, GRADIENT, EYEDROPPER }
 enum MaskMode { TEXTURE, FACES, ISLANDS }
 
 const PNG_META := "slab_paint_png"
@@ -61,7 +62,30 @@ var brush_color := Color(0.86, 0.18, 0.16)
 var brush_radius: float = 8.0
 var brush_opacity: float = 1.0
 var brush_hardness: float = 0.0
-var brush_mode: int = BrushMode.PAINT
+var brush_mode: int = BrushMode.PAINT:
+	set(value):
+		if brush_mode == value:
+			return
+		cancel_stroke()
+		brush_mode = value
+		clone_source_pending = false
+		changed.emit()
+var brush_flow: float = 0.2
+var brush_spacing: float = 0.25
+var fill_tolerance: float = 0.05
+var gradient_color := Color.WHITE
+var stamp_shape: int = 0
+var stamp_image: Image
+var _brush_source: Image
+var _stroke_overlay_start: Image
+var _stroke_origin := Vector2(-1, -1)
+var clone_source_pending: bool = false
+var _clone_source := Vector2(-1, -1)
+var _clone_material: Material
+var _clone_channel: int = -1
+var _clone_offset := Vector2.ZERO
+var _airbrush_elapsed: float = 0.0
+var _airbrush_inside: bool = false
 var mask_mode: int = MaskMode.TEXTURE:
 	set(value):
 		if mask_mode == value:
@@ -259,7 +283,10 @@ func enter() -> void:
 	_left_gesture_owned = false
 	active = true
 	if _selection != null:
+		var whole_object: bool = _selection.mode == 0 and _selection.objects.size() == 1 and is_instance_valid(_selection.solid) and _selection.solid.is_class("SlabSolid")
 		_selection.mode = 3
+		if whole_object:
+			_selection.set_ids(PackedInt64Array(_selection.solid.call("get_faces")))
 	_lock_transform_gizmo()
 	_adopt_selection_material()
 	if tool == Tool.PIXEL:
@@ -857,6 +884,11 @@ func cancel_uv_drag() -> void:
 
 
 func begin_stroke() -> bool:
+	if brush_mode == BrushMode.EYEDROPPER:
+		return false
+	if brush_mode == BrushMode.CLONE and (_clone_material != _material or _clone_channel != channel):
+		_report("Alt-click the image or model to set a clone source first.")
+		return false
 	if not _ensure_editable():
 		return false
 	_stroke_faces = mask_face_ids()
@@ -872,6 +904,11 @@ func begin_stroke() -> bool:
 	_ensure_overlay()
 	_stroke_before = _overlay_image.save_png_to_buffer() if _overlay_image != null and not _overlay_image.is_empty() else PackedByteArray()
 	_stroke_material = _material
+	_brush_source = SlabPaintRaster.clone_rgba(_texture.get_image())
+	_stroke_overlay_start = _overlay_image.duplicate()
+	_stroke_origin = Vector2(-1, -1)
+	_airbrush_elapsed = 0.0
+	_airbrush_inside = false
 	_last_pixel = Vector2(-1, -1)
 	changed.emit()
 	return true
@@ -1427,9 +1464,18 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 			_selection.set_ids(PackedInt64Array([face]))
 		_actions.material_slot = int(target["slot"])
 		_bind_from_selection()
+		var uv := SlabPaintUv.point_uv(solid, face, hit["local"])
+		var pixel := Vector2(SlabPaintUv.uv_to_pixel(uv, _image.get_width(), _image.get_height())) + Vector2(0.5, 0.5)
+		if event.alt_pressed or clone_source_pending or brush_mode == BrushMode.EYEDROPPER:
+			if brush_mode == BrushMode.CLONE:
+				set_clone_source(pixel)
+			else:
+				sample_pixel(pixel)
+			_left_gesture_owned = true
+			return VERDICT_STOP
 		if not begin_stroke():
 			return VERDICT_STOP
-		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
+		dab_uv(uv)
 		return VERDICT_STOP
 	if event is InputEventMouseButton and not event.pressed:
 		if stroke_active:
@@ -1444,15 +1490,18 @@ func handle_3d(camera: Camera3D, event: InputEvent, world_root: Node) -> int:
 	if event is InputEventMouseMotion and stroke_active:
 		if hit.is_empty():
 			_last_pixel = Vector2(-1, -1)
+			suspend_airbrush()
 			return VERDICT_STOP
 		var solid: Node3D = hit.get("solid")
 		var face: int = int(hit.get("id", 0))
 		if not SlabPaintUv.faces_camera(solid, face, camera, hit["world"]):
 			_last_pixel = Vector2(-1, -1)
+			suspend_airbrush()
 			return VERDICT_STOP
 		var target: Dictionary = _face_paint_target(solid, face)
 		if target.is_empty() or target["material"] != _stroke_material or (mask_mode != MaskMode.TEXTURE and (solid != _solid or not _stroke_faces.has(face))):
 			_last_pixel = Vector2(-1, -1)
+			suspend_airbrush()
 			return VERDICT_STOP
 		dab_uv(SlabPaintUv.point_uv(solid, face, hit["local"]))
 		return VERDICT_STOP
@@ -1498,19 +1547,122 @@ func _face_paint_target(solid: Node3D, face: int) -> Dictionary:
 	return {"slot": slot, "material": mats[slot]}
 
 
+func sample_pixel(pixel: Vector2) -> void:
+	if _texture == null:
+		return
+	var visible := _texture.get_image()
+	brush_color = visible.get_pixel(posmod(int(pixel.x), visible.get_width()), posmod(int(pixel.y), visible.get_height()))
+	changed.emit()
+	_report("Sampled %s colour." % channel_name(channel))
+
+
+func request_clone_source() -> void:
+	cancel_stroke()
+	clone_source_pending = true
+	changed.emit()
+	_report("Click the image or model to choose the Clone source.")
+
+
+func set_clone_source(pixel: Vector2) -> void:
+	clone_source_pending = false
+	_clone_source = pixel
+	_clone_material = _material
+	_clone_channel = channel
+	changed.emit()
+	_report("Clone source set. Drag to copy from this point.")
+
+
+func set_stamp_image(tip: Image) -> bool:
+	if tip == null or tip.is_empty():
+		_report("Stamp image could not be read.")
+		return false
+	stamp_image = SlabPaintRaster.clone_rgba(tip)
+	if stamp_image.get_width() > 512 or stamp_image.get_height() > 512:
+		var scale := 512.0 / maxf(stamp_image.get_width(), stamp_image.get_height())
+		stamp_image.resize(maxi(1, int(stamp_image.get_width() * scale)), maxi(1, int(stamp_image.get_height() * scale)))
+	_report("Stamp loaded. Its alpha controls the brush shape.")
+	return true
+
+
+func _stamp_tip() -> Image:
+	if stamp_image != null:
+		return stamp_image
+	var tip := Image.create(32, 32, false, Image.FORMAT_RGBA8)
+	for y in 32:
+		for x in 32:
+			var point := (Vector2(x, y) + Vector2(0.5, 0.5) - Vector2(16, 16)) / 16.0
+			var inside := point.length() <= 1.0
+			if stamp_shape == 1:
+				inside = true
+			elif stamp_shape == 2:
+				inside = point.length() <= 0.65 + 0.3 * cos(point.angle() * 5.0)
+			tip.set_pixel(x, y, Color.WHITE if inside else Color.TRANSPARENT)
+	return tip
+
+
+func suspend_airbrush() -> void:
+	_airbrush_inside = false
+
+
+func tick_airbrush(delta: float) -> void:
+	if not active or not stroke_active or brush_mode != BrushMode.AIRBRUSH or not _airbrush_inside:
+		return
+	_airbrush_elapsed += minf(delta, 0.1)
+	while _airbrush_elapsed >= 0.05:
+		_airbrush_elapsed -= 0.05
+		var color := SlabPaintChannels.paint_color(channel, brush_color)
+		if SlabPaintRaster.stamp(_overlay_image, _last_pixel, brush_radius, color, brush_opacity * brush_flow, brush_hardness, false, _stroke_mask):
+			_overlay_dirty = true
+			_composite_overlay()
+
+
 func _dab_at(pixel: Vector2) -> void:
 	_ensure_overlay()
 	if _overlay_image == null or _overlay_image.is_empty():
 		return
+	var first := _stroke_origin.x < 0.0
+	if first:
+		_stroke_origin = pixel
+		_clone_offset = _clone_source - pixel
 	var color := SlabPaintChannels.paint_color(channel, brush_color)
-	var erase := brush_mode == BrushMode.ERASE
-	var edited: bool
-	if _last_pixel.x < 0.0:
-		edited = SlabPaintRaster.stamp(_overlay_image, pixel, brush_radius, color, brush_opacity, brush_hardness, erase, _stroke_mask)
-	else:
-		edited = SlabPaintRaster.stroke(_overlay_image, _last_pixel, pixel, brush_radius, color, brush_opacity, brush_hardness, erase, _stroke_mask)
+	var edited := false
+	var start := pixel if _last_pixel.x < 0.0 else _last_pixel
+	match brush_mode:
+		BrushMode.GRADIENT:
+			_overlay_image = _stroke_overlay_start.duplicate()
+			edited = Brushes.gradient(_overlay_image, _stroke_overlay_start, _stroke_origin, pixel, color, SlabPaintChannels.paint_color(channel, gradient_color), brush_opacity, _stroke_mask)
+		BrushMode.FILL:
+			if first:
+				edited = Brushes.contiguous_fill(_overlay_image, _brush_source, pixel, color, brush_opacity, fill_tolerance, _stroke_mask)
+		BrushMode.STAMP:
+			var tip := _stamp_tip()
+			for dab in SlabPaintRaster.interpolate(start, pixel, maxf(0.5, brush_radius * 2.0 * brush_spacing)):
+				edited = Brushes.stamp(_overlay_image, tip, dab, brush_radius, color, brush_opacity, brush_hardness, 0.0, _stroke_mask) or edited
+		BrushMode.AIRBRUSH:
+			_airbrush_inside = true
+			if first:
+				edited = SlabPaintRaster.stamp(_overlay_image, pixel, brush_radius, color, brush_opacity * brush_flow, brush_hardness, false, _stroke_mask)
+		BrushMode.SMUDGE:
+			if not first:
+				var carried := SlabPaintRaster.clone_rgba(_texture.get_image())
+				var previous := start
+				var dabs := SlabPaintRaster.interpolate(start, pixel, maxf(0.5, brush_radius * 0.25))
+				for index in range(1, dabs.size()):
+					var source: Image = carried.duplicate()
+					edited = Brushes.smudge(_overlay_image, source, previous, dabs[index], brush_radius, brush_opacity, brush_hardness, _stroke_mask) or edited
+					Brushes.smudge(carried, source, previous, dabs[index], brush_radius, brush_opacity, brush_hardness, _stroke_mask)
+					previous = dabs[index]
+		_:
+			for dab in SlabPaintRaster.interpolate(start, pixel, maxf(0.5, brush_radius * 2.0 * brush_spacing)):
+				match brush_mode:
+					BrushMode.BLUR:
+						edited = Brushes.blur(_overlay_image, _brush_source, dab, brush_radius, brush_opacity, brush_hardness, _stroke_mask) or edited
+					BrushMode.CLONE:
+						edited = Brushes.clone(_overlay_image, _brush_source, dab, _clone_offset, brush_radius, brush_opacity, brush_hardness, _stroke_mask) or edited
+					_:
+						edited = SlabPaintRaster.stamp(_overlay_image, dab, brush_radius, color, brush_opacity, brush_hardness, brush_mode == BrushMode.ERASE, _stroke_mask) or edited
 	_last_pixel = pixel
-	if edited:
+	if edited or brush_mode == BrushMode.GRADIENT:
 		_overlay_dirty = true
 		_composite_overlay()
 

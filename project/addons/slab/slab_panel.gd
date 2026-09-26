@@ -120,6 +120,16 @@ var _layer_lower: Button
 var _brush_value_row: Control
 var _brush_value: SpinBox
 var _brush_mode_picker: OptionButton
+var _clone_source_button: Button
+var _brush_flow_row: Control
+var _brush_spacing_row: Control
+var _fill_tolerance_row: Control
+var _gradient_color_row: Control
+var _gradient_color: ColorPickerButton
+var _stamp_row: Control
+var _stamp_shape_picker: OptionButton
+var _stamp_dialog: FileDialog
+var _paint_auto_unwrap: Button
 var _paint_mask_picker: OptionButton
 var _layer_list: VBoxContainer
 var _add_layer_button: Button
@@ -1706,6 +1716,15 @@ func _paint_mapping_section() -> Control:
 	_paint_pack = pack
 	pack.name = "PaintPack"
 	mapping_actions.add_child(pack)
+	_paint_auto_unwrap = _named_action("Auto Unwrap Object", "AutoUnwrap", "Unwrap and pack every face of this solid. Existing seams and pins remain constraints.", func() -> void:
+		_commit_paint_mapping_inputs()
+		_actions.run("uv_auto_unwrap")
+		if _paint != null:
+			_paint.refresh_uv_mapping()
+			_paint_canvas.frame_uv.call_deferred()
+	)
+	_paint_auto_unwrap.name = "PaintAutoUnwrap"
+	mapping_actions.add_child(_paint_auto_unwrap)
 	section.add_child(mapping_actions)
 	return section
 
@@ -1989,15 +2008,29 @@ func _brush_column() -> Control:
 	var mode_picker := _brush_mode_picker
 	mode_picker.name = "BrushMode"
 	mode_picker.add_theme_font_size_override("font_size", _font(13))
-	mode_picker.add_item("Paint", SlabPaint.BrushMode.PAINT)
-	mode_picker.add_item("Erase", SlabPaint.BrushMode.ERASE)
-	mode_picker.tooltip_text = "Erase removes pixels from the active layer, revealing layers below."
+	for brush_name in ["Paint", "Erase", "Airbrush", "Blur", "Smudge", "Clone", "Stamp", "Fill", "Gradient", "Eyedropper"]:
+		mode_picker.add_item(brush_name)
+	mode_picker.tooltip_text = "Choose a texture brush. Alt-click samples color, or sets the Clone source."
 	mode_picker.item_selected.connect(func(index: int) -> void:
 		if _paint:
 			_paint.brush_mode = index
 			_paint_canvas.queue_redraw()
+			_refresh_brush_controls()
+			_refresh_paint_chrome()
 	)
 	col.add_child(mode_picker)
+	_clone_source_button = Button.new()
+	_clone_source_button.name = "PickCloneSource"
+	_clone_source_button.text = "Pick source"
+	_clone_source_button.add_theme_font_size_override("font_size", _font(13))
+	_clone_source_button.tooltip_text = "Click here, then click the image or model to choose where Clone copies from."
+	_clone_source_button.pressed.connect(func() -> void:
+		if _paint:
+			_paint.request_clone_source()
+			_refresh_brush_controls()
+			_refresh_paint_chrome()
+	)
+	col.add_child(_clone_source_button)
 	_paint_mask_picker = OptionButton.new()
 	var scope_picker := _paint_mask_picker
 	scope_picker.name = "PaintMask"
@@ -2040,6 +2073,58 @@ func _brush_column() -> Control:
 			_paint.brush_opacity = v
 	, "Brush opacity.", &"brush_opacity"))
 	
+
+	_brush_flow_row = _compact_spin("Flow", 0.01, 1.0, 0.01, 0.2, func(value: float) -> void:
+		if _paint: _paint.brush_flow = value
+	, "Paint deposited by each airbrush dab.", &"brush_flow")
+	col.add_child(_brush_flow_row)
+	_brush_spacing_row = _compact_spin("Spacing", 0.05, 2.0, 0.05, 0.25, func(value: float) -> void:
+		if _paint: _paint.brush_spacing = value
+	, "Distance between brush stamps as a fraction of brush diameter.", &"brush_spacing")
+	col.add_child(_brush_spacing_row)
+	_fill_tolerance_row = _compact_spin("Tolerance", 0.0, 1.0, 0.01, 0.05, func(value: float) -> void:
+		if _paint: _paint.fill_tolerance = value
+	, "Color difference allowed when filling connected pixels.", &"fill_tolerance")
+	col.add_child(_fill_tolerance_row)
+	_gradient_color_row = HBoxContainer.new()
+	var gradient_label := Label.new()
+	gradient_label.text = "End color"
+	gradient_label.add_theme_font_size_override("font_size", _font(13))
+	_gradient_color_row.add_child(gradient_label)
+	_gradient_color = ColorPickerButton.new()
+	_gradient_color.name = "GradientColor"
+	_gradient_color.add_theme_font_size_override("font_size", _font(13))
+	_gradient_color.color = Color.WHITE
+	_gradient_color.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_gradient_color.custom_minimum_size.y = _scaled(PAINT_ROW_HEIGHT)
+	_gradient_color.color_changed.connect(func(value: Color) -> void:
+		if _paint: _paint.gradient_color = value
+	)
+	_gradient_color_row.add_child(_gradient_color)
+	col.add_child(_gradient_color_row)
+	_stamp_row = HFlowContainer.new()
+	_stamp_shape_picker = OptionButton.new()
+	_stamp_shape_picker.name = "StampShape"
+	_stamp_shape_picker.add_theme_font_size_override("font_size", _font(13))
+	for shape_name in ["Round", "Square", "Star"]:
+		_stamp_shape_picker.add_item(shape_name)
+	_stamp_shape_picker.item_selected.connect(func(index: int) -> void:
+		if _paint and index < 3:
+			_paint.cancel_stroke()
+			_paint.stamp_image = null
+			_paint.stamp_shape = index
+			_refresh_brush_controls()
+	)
+	_stamp_row.add_child(_stamp_shape_picker)
+	var load_stamp := Button.new()
+	load_stamp.name = "LoadStamp"
+	load_stamp.text = "Load Stamp…"
+	load_stamp.add_theme_font_size_override("font_size", _font(13))
+	load_stamp.tooltip_text = "Load a PNG brush stamp. Transparent pixels leave the layer unchanged."
+	load_stamp.pressed.connect(_choose_stamp)
+	_stamp_row.add_child(load_stamp)
+	col.add_child(_stamp_row)
+
 	var overlay := CheckBox.new()
 	overlay.name = "PaintUvOverlay"
 	overlay.text = "Show UV"
@@ -2240,6 +2325,7 @@ func _on_paint_changed() -> void:
 		if _brush_value_row != null:
 			_brush_value_row.visible = scalar
 			_brush_value.set_value_no_signal(_paint.brush_color.r)
+	_refresh_brush_controls()
 	update_minimum_size()
 	_refresh_paint_chrome()
 
@@ -2331,6 +2417,11 @@ func _refresh_paint_chrome() -> void:
 		_paint_unwrap.visible = is_uv_workspace
 	if _paint_pack != null:
 		_paint_pack.visible = is_uv_workspace
+	if _paint_auto_unwrap != null:
+		_paint_auto_unwrap.visible = is_uv_workspace
+		var reason: String = _actions.disabled_reason(_actions.find("uv_auto_unwrap"))
+		_paint_auto_unwrap.disabled = not reason.is_empty()
+		_paint_auto_unwrap.tooltip_text = reason if not reason.is_empty() else "Unwrap and pack every face of this solid, respecting seams and pins."
 	var pixel_has_artwork := false
 	if is_paint_workspace and _paint != null:
 		var pixel_material: Variant = _paint.material()
@@ -2401,6 +2492,54 @@ func _paint_mapping_summary() -> String:
 	return "Mixed mapping"
 
 
+func _refresh_brush_controls() -> void:
+	if _paint == null or _brush_flow_row == null:
+		return
+	var mode: int = _paint.brush_mode
+	_clone_source_button.visible = mode == SlabPaint.BrushMode.CLONE
+	_clone_source_button.text = "Click a source…" if _paint.clone_source_pending else "Pick source"
+	_brush_flow_row.visible = mode == SlabPaint.BrushMode.AIRBRUSH
+	_brush_spacing_row.visible = mode in [SlabPaint.BrushMode.PAINT, SlabPaint.BrushMode.ERASE, SlabPaint.BrushMode.CLONE, SlabPaint.BrushMode.STAMP]
+	_fill_tolerance_row.visible = mode == SlabPaint.BrushMode.FILL
+	_gradient_color_row.visible = mode == SlabPaint.BrushMode.GRADIENT
+	_stamp_row.visible = mode == SlabPaint.BrushMode.STAMP
+	_gradient_color.color = _paint.gradient_color
+	_set_spin(&"brush_flow", _paint.brush_flow)
+	_set_spin(&"brush_spacing", _paint.brush_spacing)
+	_set_spin(&"fill_tolerance", _paint.fill_tolerance)
+	if _paint.stamp_image != null:
+		if _stamp_shape_picker.item_count == 3:
+			_stamp_shape_picker.add_item("Custom PNG")
+		_stamp_shape_picker.select(3)
+	else:
+		if _stamp_shape_picker.item_count > 3:
+			_stamp_shape_picker.remove_item(3)
+		_stamp_shape_picker.select(_paint.stamp_shape)
+
+
+func _choose_stamp() -> void:
+	if _paint == null:
+		return
+	_paint.cancel_stroke()
+	if _stamp_dialog == null:
+		_stamp_dialog = FileDialog.new()
+		_stamp_dialog.title = "Load brush stamp"
+		_stamp_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_stamp_dialog.access = FileDialog.ACCESS_FILESYSTEM
+		_stamp_dialog.use_native_dialog = true
+		_stamp_dialog.add_filter("*.png", "PNG brush stamp")
+		_stamp_dialog.file_selected.connect(func(path: String) -> void:
+			var image := Image.load_from_file(path)
+			if image == null or image.is_empty() or not _paint.set_stamp_image(image):
+				_actions.reported.emit("Could not load that PNG brush stamp.")
+			else:
+				_refresh_brush_controls()
+				_actions.reported.emit("Loaded brush stamp: " + path.get_file())
+		)
+		add_child(_stamp_dialog)
+	_stamp_dialog.popup_centered_ratio(0.6)
+
+
 func _pixel_help_text() -> String:
 	if _selection == null or _selection.objects.size() != 1 or _selection.ids.is_empty():
 		return "Select a face in Face mode to paint."
@@ -2410,7 +2549,18 @@ func _pixel_help_text() -> String:
 		return "Make Unique creates an image for these faces." if _paint.can_make_unique() else "Select faces that share one material."
 	if not _paint.is_owned(_paint.material()):
 		return "Make Unique before painting this shared texture."
-	return "Paint on the image or model. Save Paint, then save the scene."
+	var tool_help := "Drag on the image or model. Alt-click samples color."
+	match _paint.brush_mode:
+		SlabPaint.BrushMode.ERASE: tool_help = "Drag to erase the active layer and reveal layers below."
+		SlabPaint.BrushMode.AIRBRUSH: tool_help = "Hold to build up color. Flow controls each dab."
+		SlabPaint.BrushMode.BLUR: tool_help = "Drag to soften visible pixels onto the active layer."
+		SlabPaint.BrushMode.SMUDGE: tool_help = "Drag to pull color along the stroke."
+		SlabPaint.BrushMode.CLONE: tool_help = "Click the source on the image or model." if _paint.clone_source_pending else "Pick source or Alt-click a source, then drag to clone."
+		SlabPaint.BrushMode.STAMP: tool_help = "Click or drag to stamp. Load a PNG or choose a shape."
+		SlabPaint.BrushMode.FILL: tool_help = "Click to fill a connected color region within the mask."
+		SlabPaint.BrushMode.GRADIENT: tool_help = "Drag from Brush Color to End color. Escape cancels."
+		SlabPaint.BrushMode.EYEDROPPER: tool_help = "Click to sample this channel's visible color."
+	return tool_help + " Save Paint, then save the scene."
 
 
 static func paint_target_text(selection: Variant) -> String:

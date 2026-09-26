@@ -315,6 +315,10 @@ func command_sections_for(mode: int) -> Array[Dictionary]:
 
 static func section_of(row: Dictionary) -> String:
 	var id: String = str(row.get("id", ""))
+	# Whole-object atlas preparation also belongs in the modelling commands.
+	# SECTION_UV is rendered only by the dedicated UV workspace.
+	if id == "uv_auto_unwrap":
+		return "Object"
 	if id.begins_with("uv_") or id == "set_face_material":
 		return SECTION_UV
 	if id == "import_mesh":
@@ -360,6 +364,10 @@ func disabled_reason(row: Dictionary) -> String:
 		return ""
 	if _selection.has_any_external_mesh() and not _is_external_mesh_allowed(row):
 		return PROMOTE_FIRST_TOOLTIP
+	if str(row.get("id", "")) == "uv_auto_unwrap":
+		if _selection.objects.size() != 1 or not is_instance_valid(_selection.solid):
+			return "Auto Unwrap needs exactly one selected solid."
+		return ""
 	var exact: int = row.get("exact_count", 0)
 	if exact > 0 and _selection.count() != exact:
 		return "%s needs exactly %s." % [row["label"], _element_count(_selection.mode, exact)]
@@ -604,6 +612,10 @@ func _shading_op(method: String, enabled: bool) -> Dictionary:
 
 func _seam_op(marked: bool) -> Dictionary:
 	return { "method": "mark_uv_seams", "args": [_selection.ids, marked] }
+
+
+func _auto_unwrap_op() -> Dictionary:
+	return { "run": _auto_unwrap_target }
 
 
 func _unwrap_op() -> Dictionary:
@@ -983,6 +995,48 @@ func _pick_ring(target: Node3D) -> String:
 	return _selection.describe()
 
 
+func _auto_unwrap_target(target: Node3D) -> String:
+	if not target.is_class("SlabSolid"):
+		return PROMOTE_FIRST_TOOLTIP
+	var faces := PackedInt64Array(target.call("get_faces"))
+	if faces.is_empty():
+		return "Auto Unwrap needs a solid with faces. The solid was unchanged."
+	var before: PackedByteArray = target.get("data")
+	var handles := {"mode": _selection.mode, "ids": PackedInt64Array(_selection.ids),
+		"uv_mode": _selection.uv_mode, "uv_ids": PackedInt64Array(_selection.get_uv_selection())}
+	# Native unwrap already packs the unfolded islands into the requested atlas.
+	# A second Pack would add another transaction without improving this result.
+	var result: Dictionary = target.call("unwrap_uv", faces, uv_pixels_per_meter, uv_texture_resolution)
+	if bool(result.get("pinned_conflict", false)):
+		return "Auto Unwrap: " + str(result.get("refuse_reason", "Pinned UV constraints cannot be satisfied."))
+	if bool(result.get("atlas_overflow", false)):
+		var suggested: int = int(result.get("suggested_texture_resolution", uv_texture_resolution * 2))
+		return "Auto Unwrap atlas is too small. Lower Pixels / metre or raise Texture px to at least %d. The solid was unchanged." % suggested
+	var error: int = int(result.get("error", ERR_INVALID_SELECTION))
+	if error != OK:
+		return "Auto Unwrap failed. %s" % describe_error(error, "uv_auto_unwrap")
+	var after: PackedByteArray = target.get("data")
+	uv_scale = Vector2.ONE
+	uv_offset = Vector2.ZERO
+	uv_rotation_degrees = 0.0
+	if _undo != null and after != before:
+		_undo.create_action("Slab Auto Unwrap", UndoRedo.MERGE_DISABLE, target)
+		_undo.add_do_method(self, "_restore_auto_unwrap", target, after, handles)
+		_undo.add_undo_method(self, "_restore_auto_unwrap", target, before, handles)
+		_undo.commit_action(false)
+	return "Auto Unwrapped %d faces into %d packed island(s), ready to paint. Preserved marked seams and pins." % [faces.size(), int(result.get("islands", 0))]
+
+
+func _restore_auto_unwrap(target: Node3D, data: PackedByteArray, handles: Dictionary) -> void:
+	target.set("data", data)
+	# History for a previous object must not steal the current selection.
+	if _selection.solid != target or _selection.mode != handles.mode:
+		return
+	_selection.set_ids(handles.ids)
+	_selection.set_uv_mode(handles.uv_mode)
+	_selection.set_uv_selection(handles.uv_ids)
+
+
 func _unwrap_target(target: Node3D) -> String:
 	var before: PackedByteArray = target.get("data")
 	var result: Dictionary = target.call("unwrap_uv", _selection.ids, uv_pixels_per_meter, uv_texture_resolution)
@@ -1102,6 +1156,7 @@ func _build() -> Array[Dictionary]:
 		_row("uv_scale_down", "Repeat ÷2", "ZoomLess", face, 1, "Halves the UV scale and applies it.", 0, _uv_scaled.bind(0.5)),
 		_row("uv_rotate", "UV Rotate", "ToolRotate", face, 1, "Turns the UV by ninety degrees.", 0, _uv_turned.bind(90.0)),
 		_row("uv_reset", "UV Reset", "Reload", face, 1, "Returns the UV to scale one and no rotation.", 0, _uv_cleared),
+		_row("uv_auto_unwrap", "Auto Unwrap Object", "AutoUnwrap", [SlabSelection.Mode.OBJECT, SlabSelection.Mode.FACE], 0, "Unwraps and packs every face of the selected solid into a paint-ready atlas, respecting seams and pins.", 0, _auto_unwrap_op),
 		_row("uv_unwrap", "Unwrap", "ArrayMesh", face, 1, "Unfolds the selected face region into scaled UV islands using marked and automatic seams.", 0, _unwrap_op),
 		_row("uv_pack", "Pack", "GridLayout", face, 1, "Repack islands without re-unwrapping.", 0, _pack_op),
 

@@ -31,7 +31,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Create": ["make_box", "make_plane", "make_stair", "make_cylinder", "make_arch", "make_poly_shape", "make_sweep"],
 		"Object": [
 			"boolean_union", "boolean_subtract", "boolean_intersect", "plane_cut", "array", "mirror_x", "mirror_y", "mirror_z",
-			"center_pivot", "snap_to_grid", "export_solids", "import_mesh",
+			"center_pivot", "snap_to_grid", "export_solids", "import_mesh", "uv_auto_unwrap",
 		],
 	},
 	SlabSelection.Mode.VERTEX: {
@@ -43,6 +43,7 @@ const SECTIONS_BY_MODE: Dictionary = {
 		"Selection": SELECTION_IDS,
 	},
 	SlabSelection.Mode.FACE: {
+		"Object": ["uv_auto_unwrap"],
 		"Edge": ["bevel_edges"],
 		"Face": [
 			"extrude_faces", "inset_faces", "subdivide_faces", "merge_faces", "select_coplanar", "select_boundary", "shade_smooth", "shade_flat", "align_face",

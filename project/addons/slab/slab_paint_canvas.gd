@@ -62,6 +62,8 @@ func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted 
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	custom_minimum_size = Vector2(_metrics.px(160.0), _metrics.px(100.0))
 	focus_mode = Control.FOCUS_CLICK
+	if not mouse_exited.is_connected(_mouse_left_canvas):
+		mouse_exited.connect(_mouse_left_canvas)
 	if _paint != null and _paint.has_signal("image_changed"):
 		if not _paint.image_changed.is_connected(queue_redraw):
 			_paint.image_changed.connect(queue_redraw)
@@ -74,6 +76,22 @@ func setup(paint: RefCounted, metrics: RefCounted = null, selection: RefCounted 
 	if _selection != null and _selection.has_signal("uv_selection_changed"):
 		if not _selection.uv_selection_changed.is_connected(queue_redraw):
 			_selection.uv_selection_changed.connect(queue_redraw)
+
+
+func _process(delta: float) -> void:
+	# One clock services canvas and viewport strokes while the Paint workspace is visible.
+	if _paint != null and _paint.active and _paint.is_pixel() and is_visible_in_tree():
+		if _panning:
+			_paint.suspend_airbrush()
+		else:
+			_paint.tick_airbrush(delta)
+
+
+func _mouse_left_canvas() -> void:
+	_brush = Vector2(-1, -1)
+	if _dragging and _paint != null and _paint.is_pixel():
+		_paint.suspend_airbrush()
+	queue_redraw()
 
 
 func bind_selection(selection: RefCounted) -> void:
@@ -201,6 +219,8 @@ func _gui_input(event: InputEvent) -> void:
 		if _dragging and _paint.is_pixel():
 			if hits_image(event.position):
 				painted_pixel.emit(_canvas_to_pixel(event.position))
+			else:
+				_paint.suspend_airbrush()
 			accept_event()
 		elif _dragging and not _paint.is_pixel():
 			if hits_image(event.position):
@@ -235,6 +255,14 @@ func _gui_input(event: InputEvent) -> void:
 					_uv_from = _canvas_to_uv(event.position)
 					_uv_drag_from = event.position
 					_dragging = uv_edit.begin(_selection, _uv_undo)
+			accept_event()
+			return
+		if _paint.is_pixel() and (event.alt_pressed or _paint.clone_source_pending or _paint.brush_mode == _paint.BrushMode.EYEDROPPER):
+			var pixel := _canvas_to_pixel(event.position)
+			if (event.alt_pressed or _paint.clone_source_pending) and _paint.brush_mode == _paint.BrushMode.CLONE:
+				_paint.set_clone_source(pixel)
+			else:
+				_paint.sample_pixel(pixel)
 			accept_event()
 			return
 		_dragging = true

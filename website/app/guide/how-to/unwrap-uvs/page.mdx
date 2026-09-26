@@ -6,6 +6,19 @@ Use this when adjoining faces should paint continuously and keep texture pixels 
 
 <video controls preload="metadata" width="100%" src="/videos/v1/v1-04-uv-unwrap-fit.mp4"></video>
 
+## Unwrap a whole object
+
+1. Select one `SlabSolid` in Object mode.
+2. Click **Auto Unwrap**.
+3. Open **UV** and click **Fit UV** to inspect the packed atlas.
+4. Save the scene.
+
+To set the atlas size and density first, open **UV** and set **Texture px** and **Pixels/metre** in **Mapping**. Then click **Auto Unwrap Object** there. The command unwraps every face of the selected solid, including faces outside the current face selection. It preserves the selection and mode.
+
+Keep existing seams to control island boundaries. If pins prevent the layout, unpin the affected UV elements before retrying. If the islands exceed the atlas, increase **Texture px** or lower **Pixels/metre**. A refused unwrap leaves the solid unchanged; a successful unwrap and pack is one undoable change.
+
+## Unwrap selected faces
+
 1. In Edge mode, select the edges where the texture may split and click **Mark Seam**. Use **Clear Seam** to remove a mark.
 2. Switch to Face mode and select the faces to unwrap.
 3. Click **UV** in the Slab header. In **Mapping**, set **Pixels/metre** to the detail you need.
