@@ -22,6 +22,8 @@ The project must contain `addons/slab/plugin.cfg`. Do not put the artifact wrapp
 
 Native kernel tests run for both configurations on each runner. The packaging tests check archive layout and reject missing or unexpected binaries. These checks do not replace opening the addon in Godot on each supported platform.
 
+CI uses `ci/build_profile.json` to compile the Godot C++ classes used by Slab and their base classes. When adding a C++ dependency on another Godot class, add it to that profile. The profile does not restrict classes available to GDScript.
+
 ## Package binaries locally
 
 1. Collect the six built runtime files in a staging directory. Preserve the macOS framework directories. The filenames must match `project/addons/slab/slab.gdextension`.

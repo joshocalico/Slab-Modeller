@@ -72,7 +72,7 @@ jobs:
             extra+=(macos_deployment_target=11.0)
           fi
           for target in template_debug template_release; do
-            scons platform="$SLAB_PLATFORM" arch="$SLAB_ARCH" target="$target" "${extra[@]}" -j4
+            scons platform="$SLAB_PLATFORM" arch="$SLAB_ARCH" target="$target" build_profile=ci/build_profile.json "${extra[@]}" -j4
             if [[ "$SLAB_PLATFORM" == windows ]]; then
               ./bin/slab_kernel_test.exe
             else
@@ -88,7 +88,7 @@ jobs:
             case "$SLAB_PLATFORM" in
               macos)
                 framework="project/addons/slab/bin/$base.framework"
-                lipo -verify_arch x86_64 arm64 "$framework/$base"
+                lipo "$framework/$base" -verify_arch x86_64 arm64
                 codesign --force --sign - "$framework/$base"
                 cp -R "$framework" staged/
                 ;;
