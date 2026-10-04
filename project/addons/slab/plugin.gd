@@ -582,6 +582,8 @@ func _on_export_file_selected(path: String) -> void:
 	if _export_solids.is_empty():
 		_actions.reported.emit("No solids to export.")
 		return
+	if path.get_extension() == "":
+		path += ".glb"
 	var ext: String = path.get_extension().to_lower()
 	if ext not in ["glb", "gltf", "obj", "stl", "fbx"]:
 		_actions.reported.emit("Choose a .glb, .gltf, .obj, .stl or .fbx filename.")

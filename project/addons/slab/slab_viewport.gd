@@ -967,6 +967,9 @@ func _confirm_operation() -> void:
 		if not _operation.active:
 			_cancel_operation_with_reason("exit")
 			_actions.reported.emit("Preview cancelled because the solid changed. Start the tool again.")
+		else:
+			var action_id := "extrude_faces" if _operation.kind == 0 else ("bevel_edges" if _operation.kind == 2 else "")
+			_actions.reported.emit("%s cannot be applied yet. %s" % [operation_name, _actions.describe_error(_operation.error, action_id)])
 		return
 	_cancel_operation_with_reason("apply")
 	var after_ids: PackedInt64Array = result["result_ids"]
