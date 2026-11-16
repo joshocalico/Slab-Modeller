@@ -4,6 +4,8 @@
 
 # Slab
 
+> Warning! This is still _very_, _very_ early. I made it to make greyboxing easier, but it's still very rough around the edges.
+
 In-engine modelling software for Godot. Half-edge solids, direct manipulation, real geometry.
 
 Slab is a Godot 4.7 editor plugin for modelling closed solids, editing UVs, and painting textures. Geometry lives in a GDExtension (`SlabSolid`, `SlabSocket`, `SlabModule`). The editor tools use GDScript.
